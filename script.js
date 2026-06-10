@@ -329,7 +329,10 @@ window.selectVapeFlavor = function (name, el) {
 };
 
 window.closeVapePopup = function () {
-    document.getElementById("productPopup").classList.remove("active");
+    const popup = document.getElementById("productPopup");
+    popup.classList.remove("active");
+    const drawer = popup.querySelector(".drawer");
+    if (drawer) drawer.style.transform = "";
     window.hideBackButton();
 };
 
@@ -507,7 +510,10 @@ window.changeQty = function (idx, delta) {
 };
 
 window.closeVapeCart = function () {
-    document.getElementById("cartPopup").classList.remove("active");
+    const popup = document.getElementById("cartPopup");
+    popup.classList.remove("active");
+    const drawer = popup.querySelector(".drawer");
+    if (drawer) drawer.style.transform = "";
     window.hideBackButton();
 };
 
@@ -792,7 +798,10 @@ window.openOrderHistory = function () {
 };
 
 window.closeOrderHistory = function () {
-    document.getElementById("historyPopup").classList.remove("active");
+    const popup = document.getElementById("historyPopup");
+    popup.classList.remove("active");
+    const drawer = popup.querySelector(".drawer");
+    if (drawer) drawer.style.transform = "";
     window.hideBackButton();
 };
 
@@ -841,7 +850,10 @@ window.openReferral = function () {
 };
 
 window.closeReferral = function () {
-    document.getElementById("referralPopup").classList.remove("active");
+    const popup = document.getElementById("referralPopup");
+    popup.classList.remove("active");
+    const drawer = popup.querySelector(".drawer");
+    if (drawer) drawer.style.transform = "";
     window.hideBackButton();
 };
 
@@ -901,7 +913,10 @@ window.openWishlist = function () {
 };
 
 window.closeWishlist = function () {
-    document.getElementById("wishlistPopup").classList.remove("active");
+    const popup = document.getElementById("wishlistPopup");
+    popup.classList.remove("active");
+    const drawer = popup.querySelector(".drawer");
+    if (drawer) drawer.style.transform = "";
     window.hideBackButton();
 };
 
