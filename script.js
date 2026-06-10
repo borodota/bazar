@@ -417,6 +417,10 @@ window.calcOrderTotals = function () {
 
 // ── КОРЗИНА ──
 window.openVapeCart = function () {
+    if (window._swipeCloseTimer) { clearTimeout(window._swipeCloseTimer); window._swipeCloseTimer = null; }
+    const _popup = document.getElementById("cartPopup");
+    const _drawer = _popup && _popup.querySelector(".drawer");
+    if (_drawer) _drawer.style.transform = "";
     haptic("light");
     const listEl = document.getElementById("cartItemsList");
     const form = document.getElementById("orderFormBlock");
@@ -996,7 +1000,13 @@ window.initSwipeToClose = function () {
             drawer.style.transition = "";
             if (lastY - startY > 100) {
                 const fn = closeMap[overlay.id];
-                if (fn) { drawer.style.transform = "translateY(100%)"; setTimeout(fn, 200); }
+                if (fn) {
+                    drawer.style.transform = "translateY(100%)";
+                    window._swipeCloseTimer = setTimeout(() => {
+                        window._swipeCloseTimer = null;
+                        fn();
+                    }, 200);
+                }
             } else {
                 drawer.style.transform = "";
             }
