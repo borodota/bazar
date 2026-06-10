@@ -35,10 +35,6 @@ body {
     background: var(--bg); color: var(--text-primary);
     padding-bottom: 120px; overflow-x: hidden;
     -webkit-font-smoothing: antialiased; -moz-osx-font-smoothing: grayscale;
-    background-image:
-        radial-gradient(ellipse 80% 40% at 90% -10%, rgba(0,240,124,0.07) 0%, transparent 70%),
-        radial-gradient(ellipse 60% 30% at 10% 100%, rgba(0,140,255,0.05) 0%, transparent 70%);
-    background-attachment: fixed;
 }
 
 /* ── ШАПКА ── */
@@ -53,14 +49,12 @@ header.scrolled { border-bottom-color: var(--border); }
 
 .brand-title {
     font-size: 20px; font-weight: 900; letter-spacing: -0.2px;
-    background: linear-gradient(135deg, #ffffff 30%, #00f07c 100%);
-    -webkit-background-clip: text; -webkit-text-fill-color: transparent; background-clip: text;
+    color: #ffffff;
 }
 .brand-subtitle {
     font-size: 8px; font-weight: 800; letter-spacing: 4px;
     text-transform: uppercase; margin-top: 3px;
-    background: linear-gradient(90deg,#00f07c,#00c9ff);
-    -webkit-background-clip: text; -webkit-text-fill-color: transparent; background-clip: text;
+    color: var(--neon-green);
     opacity: 0.9;
 }
 
@@ -149,7 +143,7 @@ header.scrolled { border-bottom-color: var(--border); }
 .fc-price { font-size: 14px; font-weight: 900; }
 .fc-add {
     width: 30px; height: 30px;
-    background: var(--accent); border-radius: 9px;
+    background: linear-gradient(135deg,#00f07c 0%,#00c9ff 100%); border-radius: 9px;
     display: flex; align-items: center; justify-content: center;
     color: #04050a; border: none; cursor: pointer; transition: all 0.15s;
     box-shadow: 0 4px 16px rgba(0,240,124,0.3); font-size: 16px;
@@ -344,7 +338,7 @@ header.scrolled { border-bottom-color: var(--border); }
 .footer-price-label { font-size: 22px; font-weight: 900; }
 
 .action-btn {
-    width: 100%; background: var(--accent); color: #04050a;
+    width: 100%; background: linear-gradient(135deg,#00f07c 0%,#00c9ff 100%); color: #04050a;
     border: none; outline: none; padding: 17px; border-radius: var(--r-md);
     font-size: 14px; font-weight: 800; text-transform: uppercase;
     cursor: pointer; transition: transform 0.12s, opacity 0.12s;
@@ -353,7 +347,7 @@ header.scrolled { border-bottom-color: var(--border); }
     box-shadow: 0 6px 32px rgba(0,240,124,0.35), 0 2px 8px rgba(0,0,0,0.3);
 }
 .action-btn:active { transform: scale(0.97); opacity: 0.88; }
-.action-btn.structural-success-btn { background: var(--accent); box-shadow: 0 6px 32px rgba(0,240,124,0.35); }
+.action-btn.structural-success-btn { background: linear-gradient(135deg,#00f07c 0%,#00c9ff 100%); box-shadow: 0 6px 32px rgba(0,240,124,0.35); }
 .popup-add-btn { flex: 1; }
 
 /* ── ТОСТ ── */
@@ -414,7 +408,7 @@ header.scrolled { border-bottom-color: var(--border); }
 .dp-text { font-size: 11px; font-weight: 700; color: var(--text-secondary); transition: color 0.3s; }
 .dp-remain { font-size: 11px; font-weight: 900; color: var(--text-secondary); }
 .dp-track { height: 5px; background: rgba(255,255,255,0.07); border-radius: 3px; overflow: hidden; }
-.dp-fill { height: 100%; background: var(--accent); border-radius: 3px; transition: width 0.45s cubic-bezier(0.4,0,0.2,1); width: 0%; box-shadow: 0 0 10px rgba(0,240,124,0.5); }
+.dp-fill { height: 100%; background: linear-gradient(135deg,#00f07c 0%,#00c9ff 100%); border-radius: 3px; transition: width 0.45s cubic-bezier(0.4,0,0.2,1); width: 0%; box-shadow: 0 0 10px rgba(0,240,124,0.5); }
 
 /* ── NEWSLETTER BANNER ── */
 .newsletter-banner { display: flex; align-items: center; gap: 12px; background: rgba(0,240,124,0.05); border: 1px solid rgba(0,240,124,0.14); border-radius: var(--r-md); padding: 12px 14px; margin-bottom: 12px; }
