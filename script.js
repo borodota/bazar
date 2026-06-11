@@ -99,7 +99,49 @@ document.addEventListener("DOMContentLoaded", () => {
         if (h) h.classList.toggle("scrolled", window.scrollY > 10);
     });
     window.initSwipeToClose();
+    window.initCardTilt();
 });
+
+// ── 3D TILT НА КАРТОЧКАХ ──
+window.initCardTilt = function () {
+    const TILT_SELECTOR = ".product-card, .featured-card";
+    function applyTilt(card, x, y) {
+        const rect = card.getBoundingClientRect();
+        const px = x - rect.left;
+        const py = y - rect.top;
+        const cx = rect.width / 2;
+        const cy = rect.height / 2;
+        const rotateX = ((py - cy) / cy) * -7;
+        const rotateY = ((px - cx) / cx) * 7;
+        if (!card._tilting) {
+            card.style.transition = "transform 0.12s ease-out";
+            card._tilting = true;
+        }
+        card.style.transform = `perspective(900px) rotateX(${rotateX}deg) rotateY(${rotateY}deg) scale(0.98)`;
+    }
+    function resetTilt() {
+        document.querySelectorAll(TILT_SELECTOR).forEach(card => {
+            if (!card._tilting) return;
+            card.style.transition = "transform 0.45s cubic-bezier(0.34,1.56,0.64,1)";
+            card.style.transform = "";
+            card._tilting = false;
+        });
+    }
+    document.addEventListener("touchstart", e => {
+        const card = e.target.closest(TILT_SELECTOR);
+        if (!card) return;
+        const t = e.touches[0];
+        applyTilt(card, t.clientX, t.clientY);
+    }, { passive: true });
+    document.addEventListener("touchmove", e => {
+        const card = e.target.closest(TILT_SELECTOR);
+        if (!card || !card._tilting) return;
+        const t = e.touches[0];
+        applyTilt(card, t.clientX, t.clientY);
+    }, { passive: true });
+    document.addEventListener("touchend", resetTilt, { passive: true });
+    document.addEventListener("touchcancel", resetTilt, { passive: true });
+};
 
 // ── ТАБЫ ──
 window.switchTab = function (target) {
