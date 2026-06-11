@@ -531,6 +531,171 @@ body { overscroll-behavior-y: none; -webkit-text-size-adjust: 100%; }
 button, a, .cat-btn, .filter-chip, .product-card, .featured-card,
 .header-btn, .header-cart, .cart-bar, .fc-add, .add-btn,
 .action-btn, .flavor-badge, .related-card, .referral-cart-card,
-.support-cart-card, .wishlist-item, .delivery-tab, .promo-btn {
+.support-cart-card, .wishlist-item, .delivery-tab, .promo-btn,
+.tab-btn, .profile-card, .hero-banner {
     touch-action: manipulation;
 }
+
+/* ==========================================================================
+   TABS / HERO BANNER / PROFILE
+   ========================================================================== */
+
+/* ── СЕКЦИИ ── */
+.tab-section { display: none; }
+.tab-section.active { display: block; animation: tabFade 0.25s ease; }
+@keyframes tabFade { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: translateY(0); } }
+
+body {
+    padding-bottom: 180px;
+}
+@supports (padding: env(safe-area-inset-bottom)) {
+    body { padding-bottom: calc(180px + env(safe-area-inset-bottom)); }
+}
+
+/* ── BOTTOM TABS ── */
+.bottom-tabs {
+    position: fixed; bottom: 0; left: 0; right: 0;
+    background: rgba(8,10,17,0.94);
+    backdrop-filter: blur(22px); -webkit-backdrop-filter: blur(22px);
+    border-top: 1px solid var(--border);
+    display: flex; align-items: center; justify-content: space-around;
+    padding: 9px 4px 8px; z-index: 100;
+    padding-bottom: calc(8px + env(safe-area-inset-bottom));
+}
+.tab-btn {
+    flex: 1; display: flex; flex-direction: column; align-items: center; gap: 3px;
+    background: transparent; border: none; outline: none;
+    color: var(--text-secondary); cursor: pointer;
+    padding: 6px 4px; font-family: inherit;
+    transition: color 0.2s, transform 0.15s;
+}
+.tab-btn span { font-size: 10px; font-weight: 700; letter-spacing: 0.2px; }
+.tab-btn:active { transform: scale(0.92); }
+.tab-btn.active {
+    color: var(--neon-green);
+    filter: drop-shadow(0 0 6px rgba(0,240,124,0.45));
+}
+
+/* Cart bar выше табов */
+.cart-bar {
+    bottom: 78px !important;
+}
+@supports (padding: env(safe-area-inset-bottom)) {
+    .cart-bar { bottom: calc(78px + env(safe-area-inset-bottom)) !important; }
+}
+.toast-notification { bottom: 160px; }
+@supports (padding: env(safe-area-inset-bottom)) {
+    .toast-notification { bottom: calc(160px + env(safe-area-inset-bottom)); }
+}
+
+/* На не-каталоговых табах прячем cart-bar */
+body.tab-active-wishlist .cart-bar,
+body.tab-active-history .cart-bar,
+body.tab-active-profile .cart-bar {
+    display: none;
+}
+
+/* ── HERO BANNER ── */
+.hero-banner {
+    position: relative; margin: 14px 18px 4px; padding: 22px 22px 24px;
+    border-radius: 20px;
+    background: linear-gradient(135deg, rgba(0,240,124,0.10) 0%, rgba(0,201,255,0.10) 100%), #0a0d16;
+    border: 1px solid rgba(0,240,124,0.20);
+    overflow: hidden; cursor: pointer;
+    box-shadow: 0 10px 40px rgba(0,240,124,0.10), 0 0 60px rgba(0,201,255,0.06);
+    transition: transform 0.18s;
+}
+.hero-banner:active { transform: scale(0.985); }
+.hero-orb {
+    position: absolute; top: -50px; right: -50px;
+    width: 180px; height: 180px; border-radius: 50%;
+    background: radial-gradient(circle, rgba(0,240,124,0.40) 0%, rgba(0,240,124,0) 70%);
+    filter: blur(20px);
+    animation: orbFloat 6s ease-in-out infinite;
+}
+@keyframes orbFloat {
+    0%,100% { transform: translate(0,0) scale(1); }
+    50% { transform: translate(-20px,20px) scale(1.1); }
+}
+.hero-content { position: relative; z-index: 1; }
+.hero-tag {
+    display: inline-block; font-size: 10px; font-weight: 800;
+    text-transform: uppercase; letter-spacing: 1.5px;
+    color: var(--neon-green); margin-bottom: 8px;
+}
+.hero-title {
+    font-size: 30px; font-weight: 900; letter-spacing: 1.5px;
+    color: #ffffff; margin-bottom: 4px;
+    text-shadow: 0 0 28px rgba(0,240,124,0.4);
+}
+.hero-sub { font-size: 13px; color: var(--text-secondary); font-weight: 600; }
+
+/* ── PAGE (для табов wishlist/history) ── */
+.page-title {
+    font-size: 22px; font-weight: 900;
+    padding: 16px 18px 8px;
+    text-transform: uppercase; letter-spacing: 0.5px;
+}
+.page-content { padding: 8px 18px 20px; }
+
+/* ── PROFILE ── */
+.profile-hero {
+    text-align: center; padding: 30px 20px 20px;
+}
+.profile-avatar-wrap {
+    position: relative; width: 100px; height: 100px;
+    margin: 0 auto 16px;
+}
+.profile-avatar-ring {
+    position: absolute; inset: -6px;
+    border-radius: 50%;
+    background: conic-gradient(from 0deg, #00f07c, #00c9ff, #00f07c);
+    animation: ringSpin 4s linear infinite;
+    filter: blur(2px);
+    opacity: 0.7;
+}
+@keyframes ringSpin { to { transform: rotate(360deg); } }
+.profile-avatar {
+    position: relative; width: 100%; height: 100%;
+    border-radius: 50%;
+    background: linear-gradient(135deg, #0d1020 0%, #161d2b 100%);
+    border: 3px solid #04050a;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 38px; font-weight: 900; color: var(--neon-green);
+    overflow: hidden;
+    box-shadow: 0 8px 32px rgba(0,0,0,0.5), inset 0 1px 0 rgba(255,255,255,0.06);
+}
+.profile-avatar img {
+    width: 100%; height: 100%; object-fit: cover;
+}
+.profile-name {
+    font-size: 20px; font-weight: 900;
+    color: var(--text-primary); margin-bottom: 4px;
+    letter-spacing: 0.3px;
+}
+.profile-handle {
+    font-size: 12px; color: var(--text-secondary); font-weight: 600;
+}
+
+.profile-actions {
+    padding: 16px 18px 24px;
+    display: flex; flex-direction: column; gap: 10px;
+}
+.profile-card {
+    display: flex; align-items: center; gap: 14px;
+    background: rgba(255,255,255,0.03);
+    border: 1px solid var(--border);
+    border-radius: var(--r-md); padding: 14px 14px;
+    cursor: pointer; transition: all 0.18s;
+    color: var(--text-primary);
+}
+.profile-card:active { transform: scale(0.98); border-color: var(--border-hover); }
+.pc-icon {
+    width: 42px; height: 42px; border-radius: 12px;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 20px; flex-shrink: 0;
+}
+.pc-text { flex: 1; min-width: 0; }
+.pc-title { font-size: 14px; font-weight: 800; line-height: 1.2; }
+.pc-sub { font-size: 11px; color: var(--text-secondary); margin-top: 3px; line-height: 1.3; }
+.profile-card svg { color: var(--text-secondary); flex-shrink: 0; }

@@ -90,18 +90,69 @@ document.addEventListener("DOMContentLoaded", () => {
                 const f = document.getElementById("customerTelegram");
                 if (f) f.value = "@" + u.username;
             }
-            if (u.first_name) {
-                const sub = document.querySelector(".brand-subtitle");
-                if (sub) sub.innerText = `Привет, ${u.first_name} 👋`;
-            }
         }
     }
+    window.setupProfile();
+    window.switchTab("catalog");
     window.addEventListener("scroll", () => {
         const h = document.getElementById("appHeader");
         if (h) h.classList.toggle("scrolled", window.scrollY > 10);
     });
     window.initSwipeToClose();
 });
+
+// ── ТАБЫ ──
+window.switchTab = function (target) {
+    document.querySelectorAll(".tab-section").forEach(s => {
+        s.classList.toggle("active", s.dataset.tab === target);
+    });
+    document.querySelectorAll(".tab-btn").forEach(b => {
+        b.classList.toggle("active", b.dataset.target === target);
+    });
+    document.body.classList.remove("tab-active-catalog","tab-active-wishlist","tab-active-history","tab-active-profile");
+    document.body.classList.add("tab-active-" + target);
+    if (target === "wishlist") window.renderWishlistPage();
+    if (target === "history") window.renderHistoryPage();
+    window.scrollTo({ top: 0, behavior: "instant" });
+    if (window.tg && window.tg.HapticFeedback) {
+        try { window.tg.HapticFeedback.selectionChanged(); } catch(e) {}
+    }
+};
+
+// ── ПРОФИЛЬ ──
+window.setupProfile = function () {
+    const u = (window.tg && window.tg.initDataUnsafe && window.tg.initDataUnsafe.user) || null;
+    const nameEl = document.getElementById("profileName");
+    const handleEl = document.getElementById("profileHandle");
+    const fallbackEl = document.getElementById("profileAvatarFallback");
+    const imgEl = document.getElementById("profileAvatarImg");
+    if (u) {
+        const fullName = [u.first_name, u.last_name].filter(Boolean).join(" ") || "Пользователь";
+        if (nameEl) nameEl.innerText = fullName;
+        if (handleEl) handleEl.innerText = u.username ? "@" + u.username : "VAPEBAZAR Premium";
+        if (fallbackEl) fallbackEl.innerText = (u.first_name || "V").charAt(0).toUpperCase();
+        if (u.photo_url && imgEl) {
+            imgEl.src = u.photo_url;
+            imgEl.onload = () => {
+                imgEl.style.display = "block";
+                if (fallbackEl) fallbackEl.style.display = "none";
+            };
+        }
+    } else {
+        if (nameEl) nameEl.innerText = "Гость";
+        if (handleEl) handleEl.innerText = "VAPEBAZAR Premium";
+    }
+    if (localStorage.getItem("vapeNewsletterSub") === "1") {
+        const pSub = document.getElementById("profileNewsletterSub");
+        if (pSub) pSub.innerText = "✓ Вы подписаны на акции";
+    }
+};
+
+window.showOnboardingPromo = function () {
+    if (window.tg && window.tg.HapticFeedback) { try { window.tg.HapticFeedback.impactOccurred("light"); } catch(e) {} }
+    const overlay = document.getElementById("onboardingOverlay");
+    if (overlay) overlay.classList.add("active");
+};
 
 // ── КАТЕГОРИИ ──
 window.renderCategories = function () {
@@ -746,10 +797,16 @@ window.updateNewsletterBanner = function () {
 };
 
 window.subscribeNewsletter = function () {
+    if (localStorage.getItem("vapeNewsletterSub") === "1") {
+        window.showToast("Вы уже подписаны ✓");
+        return;
+    }
     haptic("success");
     localStorage.setItem("vapeNewsletterSub", "1");
     const btn = document.getElementById("nlBtn");
     if (btn) { btn.innerText = "✓ Вы подписаны"; btn.classList.add("subscribed"); btn.disabled = true; }
+    const pSub = document.getElementById("profileNewsletterSub");
+    if (pSub) pSub.innerText = "✓ Вы подписаны на акции";
     window.showToast("Подписка оформлена! 🎉");
     if (window.tg && window.tg.sendData) {
         try {
@@ -773,41 +830,32 @@ window.saveOrderToHistory = function (orderData) {
     } catch (e) {}
 };
 
-window.openOrderHistory = function () {
-    haptic("light");
+window.renderHistoryPage = function () {
     const content = document.getElementById("historyContent");
-    if (content) {
-        const history = JSON.parse(localStorage.getItem("vapeOrders") || "[]");
-        if (history.length === 0) {
-            content.innerHTML = `<div class="order-history-empty"><div class="ohe-icon">🛍️</div><div class="ohe-text">Заказов пока нет</div></div>`;
-        } else {
-            content.innerHTML = "";
-            history.forEach(order => {
-                const item = document.createElement("div");
-                item.className = "history-item";
-                item.innerHTML = `
-                    <div class="hi-header">
-                        <span class="hi-order-id">Заказ #${order.order_id}</span>
-                        <span class="hi-date">${order.date}</span>
-                    </div>
-                    <div class="hi-total">${fmt(order.total)} ₽</div>
-                    <div class="hi-items">${order.products}</div>
-                    <div class="hi-delivery">${order.delivery} · ${order.address}</div>`;
-                content.appendChild(item);
-            });
-        }
+    if (!content) return;
+    const history = JSON.parse(localStorage.getItem("vapeOrders") || "[]");
+    if (history.length === 0) {
+        content.innerHTML = `<div class="order-history-empty"><div class="ohe-icon">🛍️</div><div class="ohe-text">Заказов пока нет</div></div>`;
+        return;
     }
-    document.getElementById("historyPopup").classList.add("active");
-    window.setupBackButton(window.closeOrderHistory);
+    content.innerHTML = "";
+    history.forEach(order => {
+        const item = document.createElement("div");
+        item.className = "history-item";
+        item.innerHTML = `
+            <div class="hi-header">
+                <span class="hi-order-id">Заказ #${order.order_id}</span>
+                <span class="hi-date">${order.date}</span>
+            </div>
+            <div class="hi-total">${fmt(order.total)} ₽</div>
+            <div class="hi-items">${order.products}</div>
+            <div class="hi-delivery">${order.delivery} · ${order.address}</div>`;
+        content.appendChild(item);
+    });
 };
 
-window.closeOrderHistory = function () {
-    const popup = document.getElementById("historyPopup");
-    popup.classList.remove("active");
-    const drawer = popup.querySelector(".drawer");
-    if (drawer) drawer.style.transform = "";
-    window.hideBackButton();
-};
+window.openOrderHistory = function () { window.switchTab("history"); };
+window.closeOrderHistory = function () { window.switchTab("catalog"); };
 
 // ── РЕФЕРАЛЬНАЯ СИСТЕМА ──
 window.initReferralCode = function () {
@@ -878,51 +926,42 @@ window.toggleWishlist = function (productId) {
         const onclick = btn.getAttribute("onclick") || "";
         if (onclick.includes(`'${productId}'`)) btn.classList.toggle("wished", window.wishlist.includes(productId));
     });
-    const wishBtn = document.getElementById("wishlistBtn");
-    if (wishBtn) wishBtn.style.color = window.wishlist.length > 0 ? "var(--neon-red)" : "";
+    const wishTab = document.querySelector('.tab-btn[data-target="wishlist"]');
+    if (wishTab) wishTab.style.color = window.wishlist.length > 0 && !wishTab.classList.contains("active") ? "var(--neon-red)" : "";
 };
 
-window.openWishlist = function () {
-    haptic("light");
+window.renderWishlistPage = function () {
     const content = document.getElementById("wishlistContent");
-    if (content) {
-        window.wishlist = window.wishlist || [];
-        if (window.wishlist.length === 0) {
-            content.innerHTML = `<div class="order-history-empty"><div class="ohe-icon">♡</div><div class="ohe-text">Список избранного пуст</div></div>`;
-        } else {
-            content.innerHTML = "";
-            window.wishlist.forEach(id => {
-                const p = window.products.find(x => x.id === id);
-                if (!p) return;
-                const row = document.createElement("div");
-                row.className = "wishlist-item";
-                const imgSrc = p.image ? `img/${p.image}` : "";
-                const letter = p.name.charAt(0).toUpperCase();
-                row.innerHTML = `
-                    <div class="wi-img">${imgSrc ? `<img src="${imgSrc}" alt="" loading="lazy" onerror="this.parentElement.innerText='${letter}'">` : letter}</div>
-                    <div class="wi-info">
-                        <div class="wi-name">${p.name}</div>
-                        <div class="wi-brand">${p.brand || ""}</div>
-                        <div class="wi-price">${fmt(p.price)} ₽</div>
-                    </div>
-                    <button class="fc-add" onclick="window.closeWishlist();setTimeout(()=>window.handleCardClick('${p.id}'),320)">
-                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg>
-                    </button>`;
-                content.appendChild(row);
-            });
-        }
+    if (!content) return;
+    window.wishlist = window.wishlist || [];
+    if (window.wishlist.length === 0) {
+        content.innerHTML = `<div class="order-history-empty"><div class="ohe-icon">♡</div><div class="ohe-text">Список избранного пуст</div></div>`;
+        return;
     }
-    document.getElementById("wishlistPopup").classList.add("active");
-    window.setupBackButton(window.closeWishlist);
+    content.innerHTML = "";
+    window.wishlist.forEach(id => {
+        const p = window.products.find(x => x.id === id);
+        if (!p) return;
+        const row = document.createElement("div");
+        row.className = "wishlist-item";
+        const imgSrc = p.image ? `img/${p.image}` : "";
+        const letter = p.name.charAt(0).toUpperCase();
+        row.innerHTML = `
+            <div class="wi-img">${imgSrc ? `<img src="${imgSrc}" alt="" loading="lazy" onerror="this.parentElement.innerText='${letter}'">` : letter}</div>
+            <div class="wi-info">
+                <div class="wi-name">${p.name}</div>
+                <div class="wi-brand">${p.brand || ""}</div>
+                <div class="wi-price">${fmt(p.price)} ₽</div>
+            </div>
+            <button class="fc-add" onclick="window.switchTab('catalog');setTimeout(()=>window.handleCardClick('${p.id}'),300)">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg>
+            </button>`;
+        content.appendChild(row);
+    });
 };
 
-window.closeWishlist = function () {
-    const popup = document.getElementById("wishlistPopup");
-    popup.classList.remove("active");
-    const drawer = popup.querySelector(".drawer");
-    if (drawer) drawer.style.transform = "";
-    window.hideBackButton();
-};
+window.openWishlist = function () { window.switchTab("wishlist"); };
+window.closeWishlist = function () { window.switchTab("catalog"); };
 
 // ── ФИЛЬТРЫ И СОРТИРОВКА ──
 window.selectFilterChip = function (el, type, value) {
@@ -977,9 +1016,7 @@ window.initSwipeToClose = function () {
     const closeMap = {
         "productPopup":  () => window.closeVapePopup(),
         "cartPopup":     () => window.closeVapeCart(),
-        "historyPopup":  () => window.closeOrderHistory(),
         "referralPopup": () => window.closeReferral(),
-        "wishlistPopup": () => window.closeWishlist(),
     };
     document.querySelectorAll(".overlay").forEach(overlay => {
         const drawer = overlay.querySelector(".drawer");
