@@ -57,6 +57,60 @@ async def handle_web_app_order(message: types.Message):
         except json.JSONDecodeError:
             is_json = False
 
+        # Обработка спецтипов запросов
+        if is_json and raw_data.get("type") == "special_order":
+            username_text = f"@{message.from_user.username}" if message.from_user.username else "Скрыт"
+            so_name = raw_data.get("product_name", "—")
+            so_link = raw_data.get("link") or "—"
+            so_details = raw_data.get("details") or "—"
+            so_qty = raw_data.get("quantity", 1)
+            so_tg = raw_data.get("telegram") or username_text
+            so_phone = raw_data.get("phone") or "—"
+
+            await message.answer(
+                "✅ <b>Заявка на спецзаказ принята!</b>\n\n"
+                "Менеджер свяжется в течение 1–2 часов чтобы согласовать сумму предоплаты и сроки.\n\n"
+                f"🧑‍💻 @{MANAGER_USERNAME}",
+                reply_markup=get_main_keyboard()
+            )
+            admin_text = (
+                f"📦 <b>СПЕЦЗАКАЗ ПОД ЗАКАЗ</b>\n"
+                f"━━━━━━━━━━━━━━━━━━━━━━━━\n\n"
+                f"👤 <b>Клиент:</b> {username_text}\n"
+                f"🆔 <b>ID:</b> <code>{message.from_user.id}</code>\n"
+                f"📞 <b>Телефон:</b> <code>{so_phone}</code>\n"
+                f"💬 <b>Telegram:</b> {so_tg}\n\n"
+                f"🏷️ <b>Товар:</b> {so_name}\n"
+                f"🎨 <b>Детали:</b> {so_details}\n"
+                f"🔗 <b>Ссылка:</b> {so_link}\n"
+                f"#️⃣ <b>Кол-во:</b> {so_qty} шт.\n\n"
+                f"⚠️ Клиент согласен на предоплату."
+            )
+            kb_so = InlineKeyboardMarkup(inline_keyboard=[[
+                InlineKeyboardButton(text="📞 Связаться", url=f"tg://user?id={message.from_user.id}")
+            ]])
+            for chat_id in set([ADMIN_ID] + DEPUTY_ADMIN_IDS):
+                try: await bot.send_message(chat_id=chat_id, text=admin_text, reply_markup=kb_so)
+                except Exception as e: logger.error(f"special_order notify failed {chat_id}: {e}")
+            return
+
+        if is_json and raw_data.get("type") == "notify_request":
+            username_text = f"@{message.from_user.username}" if message.from_user.username else "Скрыт"
+            prod_name = raw_data.get("product_name", "—")
+            await message.answer(f"🔔 Мы сообщим как только <b>{prod_name}</b> появится в наличии!", reply_markup=get_main_keyboard())
+            for chat_id in set([ADMIN_ID] + DEPUTY_ADMIN_IDS):
+                try: await bot.send_message(chat_id=chat_id, text=f"🔔 <b>Запрос наличия</b>\nКлиент: {username_text}\nТовар: {prod_name}\nID: <code>{message.from_user.id}</code>")
+                except: pass
+            return
+
+        if is_json and raw_data.get("type") == "newsletter_subscribe":
+            username_text = f"@{message.from_user.username}" if message.from_user.username else "Скрыт"
+            await message.answer("📣 Вы подписаны на акции и новинки!", reply_markup=get_main_keyboard())
+            for chat_id in set([ADMIN_ID] + DEPUTY_ADMIN_IDS):
+                try: await bot.send_message(chat_id=chat_id, text=f"📣 Новая подписка на рассылку: {username_text} (<code>{message.from_user.id}</code>)")
+                except: pass
+            return
+
         if is_json:
             order_id = raw_data.get("order_id") or raw_data.get("Order ID") or raw_data.get("id") or datetime.now().strftime("%M%S")
             date_str = raw_data.get("date") or raw_data.get("Date") or datetime.now().strftime("%d.%m.%Y %H:%M")

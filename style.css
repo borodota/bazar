@@ -529,9 +529,64 @@ button, a, .cat-btn, .filter-chip, .product-card, .featured-card,
 .header-btn, .header-cart, .cart-bar, .fc-add, .add-btn,
 .action-btn, .flavor-badge, .related-card, .referral-cart-card,
 .support-cart-card, .wishlist-item, .delivery-tab, .promo-btn,
-.tab-btn, .profile-card, .hero-banner {
+.tab-btn, .profile-card, .hero-banner, .prepay-check {
     touch-action: manipulation;
 }
+
+/* ── СПЕЦЗАКАЗ ── */
+.prepay-warning {
+    display: flex; align-items: flex-start; gap: 12px;
+    background: rgba(255,45,85,0.06);
+    border: 1px solid rgba(255,45,85,0.22);
+    border-radius: var(--r-md);
+    padding: 14px;
+    margin: 16px 0 8px;
+}
+.pw-icon { font-size: 22px; line-height: 1; flex-shrink: 0; }
+.pw-text { flex: 1; min-width: 0; }
+.pw-title { font-size: 13px; font-weight: 800; color: var(--neon-red); margin-bottom: 4px; }
+.pw-sub { font-size: 11px; color: var(--text-secondary); line-height: 1.5; }
+
+.prepay-check {
+    display: flex; align-items: center; gap: 11px;
+    background: rgba(255,255,255,0.03); border: 1px solid var(--border);
+    border-radius: var(--r-md); padding: 14px;
+    margin: 18px 0 6px;
+    cursor: pointer; user-select: none;
+    font-size: 12px; font-weight: 600; color: var(--text-primary);
+    line-height: 1.35;
+    transition: border-color 0.2s, background 0.2s;
+}
+.prepay-check.checked {
+    background: rgba(0,240,124,0.05);
+    border-color: var(--border-green);
+}
+.pc-box {
+    width: 22px; height: 22px; border-radius: 7px;
+    background: rgba(255,255,255,0.06); border: 1.5px solid var(--border-hover);
+    display: flex; align-items: center; justify-content: center; flex-shrink: 0;
+    transition: all 0.18s;
+}
+.prepay-check.checked .pc-box {
+    background: var(--neon-green); border-color: var(--neon-green);
+}
+.prepay-check.checked .pc-box::after {
+    content: "✓"; color: #04050a; font-weight: 900; font-size: 14px; line-height: 1;
+}
+
+/* CTA когда поиск ничего не нашёл */
+.no-results-cta {
+    grid-column: 1 / -1;
+    display: flex; align-items: center; gap: 14px;
+    background: rgba(255,45,85,0.05); border: 1px solid rgba(255,45,85,0.18);
+    border-radius: var(--r-md); padding: 16px; margin: 10px 0;
+    cursor: pointer; transition: transform 0.15s;
+}
+.no-results-cta:active { transform: scale(0.98); }
+.nrc-icon { font-size: 26px; flex-shrink: 0; }
+.nrc-text { flex: 1; min-width: 0; }
+.nrc-title { font-size: 14px; font-weight: 800; }
+.nrc-sub { font-size: 11px; color: var(--text-secondary); margin-top: 3px; line-height: 1.35; }
 
 /* ==========================================================================
    TABS / HERO BANNER / PROFILE

@@ -98,6 +98,14 @@
             <div class="profile-handle" id="profileHandle">@vapebazar</div>
         </div>
         <div class="profile-actions">
+            <div class="profile-card" onclick="window.openSpecialOrder()">
+                <div class="pc-icon" style="background:rgba(255,45,85,0.10);color:#ff2d55;">📦</div>
+                <div class="pc-text">
+                    <div class="pc-title">Заказать под заказ</div>
+                    <div class="pc-sub">Не нашли товар? Привезём из Москвы</div>
+                </div>
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="m9 18 6-6-6-6"/></svg>
+            </div>
             <div class="profile-card" onclick="window.openReferral()">
                 <div class="pc-icon" style="background:rgba(255,171,0,0.10);color:#ffab00;">🎁</div>
                 <div class="pc-text">
@@ -326,6 +334,70 @@
                 <button class="action-btn structural-success-btn" onclick="window.shareReferral()">
                     Поделиться реферальной ссылкой
                 </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- СПЕЦЗАКАЗ -->
+    <div id="specialOrderPopup" class="overlay" onclick="if(event.target===this) window.closeSpecialOrder()">
+        <div class="drawer">
+            <div class="drawer-handle"></div>
+            <div class="drawer-header">
+                <div class="drawer-title">Заказать под заказ</div>
+                <div class="close-drawer-btn" onclick="window.closeSpecialOrder()">✕</div>
+            </div>
+            <div class="popup-scroll-content">
+                <div style="text-align:center;padding:14px 0 8px;">
+                    <div style="font-size:48px;margin-bottom:10px;">📦</div>
+                    <div class="ref-big-title">Не нашли товар?</div>
+                    <div class="ref-desc">Закажем что угодно из Москвы. Срок — 7–14 дней. Подходит для редких устройств, жидкостей и расходников.</div>
+                </div>
+
+                <div class="prepay-warning">
+                    <div class="pw-icon">⚠️</div>
+                    <div class="pw-text">
+                        <div class="pw-title">Обязательная предоплата</div>
+                        <div class="pw-sub">Полная или частичная — иначе товар не заказываем. Деньги возвращаются если не сможем привезти.</div>
+                    </div>
+                </div>
+
+                <div class="section-label">Что заказать</div>
+                <div class="input-icon-group">
+                    <span class="input-icon">🏷️</span>
+                    <input type="text" id="soName" class="form-input" placeholder="Название товара">
+                </div>
+                <div class="input-icon-group">
+                    <span class="input-icon">🔗</span>
+                    <input type="text" id="soLink" class="form-input" placeholder="Ссылка / магазин (опционально)">
+                </div>
+
+                <div class="section-label">Подробности</div>
+                <div class="input-icon-group">
+                    <span class="input-icon">🎨</span>
+                    <input type="text" id="soDetails" class="form-input" placeholder="Вкус / цвет / объём">
+                </div>
+                <div class="input-icon-group">
+                    <span class="input-icon">#</span>
+                    <input type="number" id="soQty" class="form-input" placeholder="Количество штук" min="1" value="1">
+                </div>
+
+                <div class="section-label">Контакты</div>
+                <div class="input-icon-group">
+                    <span class="input-icon">@</span>
+                    <input type="text" id="soTelegram" class="form-input" placeholder="Юзернейм Telegram">
+                </div>
+                <div class="input-icon-group">
+                    <span class="input-icon">📞</span>
+                    <input type="tel" id="soPhone" class="form-input" placeholder="+7 (9XX) XXX-XX-XX">
+                </div>
+
+                <label class="prepay-check" id="prepayCheck" onclick="window.toggleSpecialPrepay()">
+                    <span class="pc-box" id="prepayBox"></span>
+                    <span>Я согласен(на) внести предоплату до начала заказа</span>
+                </label>
+            </div>
+            <div class="drawer-footer">
+                <button class="action-btn structural-success-btn" id="soSubmitBtn" onclick="window.submitSpecialOrder()">Оставить заявку</button>
             </div>
         </div>
     </div>

@@ -219,6 +219,70 @@ window.showOnboardingPromo = function () {
     if (overlay) overlay.classList.add("active");
 };
 
+// ── СПЕЦЗАКАЗ ──
+window._prepayAccepted = false;
+window.openSpecialOrder = function () {
+    haptic("light");
+    const u = window.tg && window.tg.initDataUnsafe && window.tg.initDataUnsafe.user;
+    if (u && u.username) {
+        const tg = document.getElementById("soTelegram");
+        if (tg && !tg.value) tg.value = "@" + u.username;
+    }
+    document.getElementById("specialOrderPopup").classList.add("active");
+    window.setupBackButton(window.closeSpecialOrder);
+};
+window.closeSpecialOrder = function () {
+    const popup = document.getElementById("specialOrderPopup");
+    popup.classList.remove("active");
+    const drawer = popup.querySelector(".drawer");
+    if (drawer) drawer.style.transform = "";
+    window.hideBackButton();
+};
+window.toggleSpecialPrepay = function () {
+    window._prepayAccepted = !window._prepayAccepted;
+    const el = document.getElementById("prepayCheck");
+    if (el) el.classList.toggle("checked", window._prepayAccepted);
+    haptic("select");
+};
+window.submitSpecialOrder = function () {
+    const name = (document.getElementById("soName").value || "").trim();
+    const link = (document.getElementById("soLink").value || "").trim();
+    const details = (document.getElementById("soDetails").value || "").trim();
+    const qty = parseInt(document.getElementById("soQty").value || "1");
+    const tgUser = (document.getElementById("soTelegram").value || "").trim();
+    const phone = (document.getElementById("soPhone").value || "").trim();
+
+    if (!name) { haptic("error"); window.showToast("Укажи название товара"); return; }
+    if (!tgUser && !phone) { haptic("error"); window.showToast("Укажи Telegram или телефон"); return; }
+    if (!window._prepayAccepted) { haptic("error"); window.showToast("Подтверди согласие на предоплату"); return; }
+
+    haptic("success");
+    const payload = {
+        type: "special_order",
+        product_name: name,
+        link: link,
+        details: details,
+        quantity: qty,
+        telegram: tgUser,
+        phone: phone,
+        prepay_accepted: true
+    };
+    if (window.tg && window.tg.sendData) {
+        try { window.tg.sendData(JSON.stringify(payload)); } catch(e) {}
+    }
+    window.showToast("Заявка отправлена ✓");
+    setTimeout(() => {
+        window.closeSpecialOrder();
+        document.getElementById("soName").value = "";
+        document.getElementById("soLink").value = "";
+        document.getElementById("soDetails").value = "";
+        document.getElementById("soQty").value = "1";
+        document.getElementById("soPhone").value = "";
+        window._prepayAccepted = false;
+        document.getElementById("prepayCheck").classList.remove("checked");
+    }, 800);
+};
+
 // ── КАТЕГОРИИ ──
 window.renderCategories = function () {
     const container = document.getElementById("categories");
@@ -285,7 +349,16 @@ window.renderProducts = function (list) {
     if (!grid) return;
     grid.innerHTML = "";
     if (!list || list.length === 0) {
-        grid.innerHTML = `<div style="grid-column:span 2;text-align:center;color:var(--text-secondary);margin-top:50px;font-size:14px;font-weight:600;">😕 Ничего не найдено</div>`;
+        grid.innerHTML = `
+            <div style="grid-column:span 2;text-align:center;color:var(--text-secondary);margin:30px 0 10px;font-size:14px;font-weight:600;">😕 Ничего не найдено</div>
+            <div class="no-results-cta" onclick="window.openSpecialOrder()">
+                <div class="nrc-icon">📦</div>
+                <div class="nrc-text">
+                    <div class="nrc-title">Закажи под заказ</div>
+                    <div class="nrc-sub">Привезём из Москвы за 7–14 дней. Нужна предоплата.</div>
+                </div>
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="m9 18 6-6-6-6"/></svg>
+            </div>`;
         return;
     }
     list.forEach(p => {
@@ -1082,6 +1155,7 @@ window.initSwipeToClose = function () {
         "productPopup":  () => window.closeVapePopup(),
         "cartPopup":     () => window.closeVapeCart(),
         "referralPopup": () => window.closeReferral(),
+        "specialOrderPopup": () => window.closeSpecialOrder(),
     };
     document.querySelectorAll(".overlay").forEach(overlay => {
         const drawer = overlay.querySelector(".drawer");
