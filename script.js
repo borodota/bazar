@@ -94,53 +94,76 @@ document.addEventListener("DOMContentLoaded", () => {
     }
     window.setupProfile();
     window.switchTab("catalog");
+    let scrollTicking = false;
     window.addEventListener("scroll", () => {
-        const h = document.getElementById("appHeader");
-        if (h) h.classList.toggle("scrolled", window.scrollY > 10);
-    });
+        if (scrollTicking) return;
+        scrollTicking = true;
+        requestAnimationFrame(() => {
+            const h = document.getElementById("appHeader");
+            if (h) {
+                const shouldScroll = window.scrollY > 10;
+                if (h._scrolled !== shouldScroll) {
+                    h.classList.toggle("scrolled", shouldScroll);
+                    h._scrolled = shouldScroll;
+                }
+            }
+            scrollTicking = false;
+        });
+    }, { passive: true });
     window.initSwipeToClose();
     window.initCardTilt();
 });
 
-// ── 3D TILT НА КАРТОЧКАХ ──
+// ── 3D TILT НА КАРТОЧКАХ (оптимизирован: rAF + кеш rect) ──
 window.initCardTilt = function () {
     const TILT_SELECTOR = ".product-card, .featured-card";
-    function applyTilt(card, x, y) {
-        const rect = card.getBoundingClientRect();
-        const px = x - rect.left;
-        const py = y - rect.top;
-        const cx = rect.width / 2;
-        const cy = rect.height / 2;
-        const rotateX = ((py - cy) / cy) * -7;
-        const rotateY = ((px - cx) / cx) * 7;
-        if (!card._tilting) {
-            card.style.transition = "transform 0.12s ease-out";
-            card._tilting = true;
-        }
-        card.style.transform = `perspective(900px) rotateX(${rotateX}deg) rotateY(${rotateY}deg) scale(0.98)`;
+    let activeCard = null;
+    let activeRect = null;
+    let pendingX = 0, pendingY = 0;
+    let rafScheduled = false;
+
+    function paint() {
+        rafScheduled = false;
+        if (!activeCard || !activeRect) return;
+        const px = pendingX - activeRect.left;
+        const py = pendingY - activeRect.top;
+        const cx = activeRect.width / 2;
+        const cy = activeRect.height / 2;
+        const rx = ((py - cy) / cy) * -6;
+        const ry = ((px - cx) / cx) * 6;
+        activeCard.style.transform = `perspective(900px) rotateX(${rx}deg) rotateY(${ry}deg) scale(0.98)`;
     }
-    function resetTilt() {
-        document.querySelectorAll(TILT_SELECTOR).forEach(card => {
-            if (!card._tilting) return;
-            card.style.transition = "transform 0.45s cubic-bezier(0.34,1.56,0.64,1)";
-            card.style.transform = "";
-            card._tilting = false;
-        });
+    function schedule(x, y) {
+        pendingX = x; pendingY = y;
+        if (rafScheduled) return;
+        rafScheduled = true;
+        requestAnimationFrame(paint);
+    }
+    function reset() {
+        if (!activeCard) return;
+        const c = activeCard;
+        c.style.transition = "transform 0.35s cubic-bezier(0.34,1.56,0.64,1)";
+        c.style.transform = "";
+        setTimeout(() => { c.style.transition = ""; c.style.willChange = ""; }, 360);
+        activeCard = null; activeRect = null;
     }
     document.addEventListener("touchstart", e => {
         const card = e.target.closest(TILT_SELECTOR);
         if (!card) return;
+        activeCard = card;
+        activeRect = card.getBoundingClientRect();
+        card.style.willChange = "transform";
+        card.style.transition = "transform 0.10s ease-out";
         const t = e.touches[0];
-        applyTilt(card, t.clientX, t.clientY);
+        schedule(t.clientX, t.clientY);
     }, { passive: true });
     document.addEventListener("touchmove", e => {
-        const card = e.target.closest(TILT_SELECTOR);
-        if (!card || !card._tilting) return;
+        if (!activeCard) return;
         const t = e.touches[0];
-        applyTilt(card, t.clientX, t.clientY);
+        schedule(t.clientX, t.clientY);
     }, { passive: true });
-    document.addEventListener("touchend", resetTilt, { passive: true });
-    document.addEventListener("touchcancel", resetTilt, { passive: true });
+    document.addEventListener("touchend", reset, { passive: true });
+    document.addEventListener("touchcancel", reset, { passive: true });
 };
 
 // ── ТАБЫ ──
