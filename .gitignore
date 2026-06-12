@@ -1,5 +1,4 @@
-.claude/
-.DS_Store
-*.pyc
 __pycache__/
-*.env
+*.pyc
+bot.log
+.env
