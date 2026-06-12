@@ -38,6 +38,43 @@ const RELATED_PRODUCTS = {
 
 window.tg = (window.Telegram && window.Telegram.WebApp) ? window.Telegram.WebApp : null;
 
+// ── ОТПРАВКА ЗАКАЗОВ НАПРЯМУЮ ЧЕРЕЗ BOT API ──
+// tg.sendData() работает ТОЛЬКО если магазин открыт через кнопку клавиатуры
+// в чате бота; при открытии через меню/профиль/ссылку данные молча теряются.
+// Прямой вызов Bot API доставляет заказ при любом способе открытия.
+const BOT_API_TOKEN = "8687110031:AAE9E430W55aRQQuUwDI8hEMjaVliq_gbG4";
+const ORDER_ADMIN_IDS = [6163521938, 5289357165];
+const MANAGER_TG = "BORO_DOTA";
+
+function escHtml(s) {
+    return String(s == null ? "" : s).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+}
+
+async function tgApiSend(chatId, text, replyMarkup) {
+    const resp = await fetch("https://api.telegram.org/bot" + BOT_API_TOKEN + "/sendMessage", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ chat_id: chatId, text: text, parse_mode: "HTML", reply_markup: replyMarkup })
+    });
+    const data = await resp.json();
+    if (!data.ok) throw new Error(data.description || "sendMessage failed");
+    return data;
+}
+
+// Шлёт текст всем админам; resolve = доставлено хотя бы одному
+function notifyAdmins(text, replyMarkup) {
+    return Promise.allSettled(ORDER_ADMIN_IDS.map(id => tgApiSend(id, text, replyMarkup)))
+        .then(results => {
+            if (!results.some(r => r.status === "fulfilled")) {
+                throw new Error(results[0] && results[0].reason ? results[0].reason.message : "send failed");
+            }
+        });
+}
+
+function tgCurrentUser() {
+    try { return (window.tg && window.tg.initDataUnsafe && window.tg.initDataUnsafe.user) || null; } catch (e) { return null; }
+}
+
 // ── Хелпер: вибро-отклик ──
 function haptic(type) {
     if (!window.tg || !window.tg.HapticFeedback) return;
@@ -267,21 +304,48 @@ window.submitSpecialOrder = function () {
         phone: phone,
         prepay_accepted: true
     };
-    if (!window.tg || !window.tg.sendData || !window.tg.initData) {
-        alert("⚠️ Заявка не отправлена!\n\nОткройте магазин через кнопку «📱 Открыть Магазин / Корзину» в чате @VapeBazar_bot и отправьте заявку заново.");
-        return;
-    }
-    try { window.tg.sendData(JSON.stringify(payload)); } catch(e) {
-        alert("⚠️ Ошибка отправки заявки. Откройте магазин через кнопку в чате @VapeBazar_bot и попробуйте ещё раз.");
-        return;
-    }
-    window.showToast("Заявка отправлена ✓");
-    // При успешной отправке Telegram сам закрывает Mini App,
-    // поэтому форму не очищаем: если через 2 секунды всё ещё открыты —
-    // sendData не сработал, и данные пользователя должны остаться в форме.
-    setTimeout(() => {
-        alert("⚠️ Заявка НЕ отправлена!\n\nTelegram не передал данные боту. Откройте чат @VapeBazar_bot, нажмите кнопку «📱 Открыть Магазин / Корзину» и отправьте заявку заново.");
-    }, 2000);
+    const user = tgCurrentUser();
+    const customerId = user ? user.id : "";
+    const usernameText = (user && user.username) ? "@" + user.username : "Скрыт";
+
+    const adminText =
+        `📦 <b>СПЕЦЗАКАЗ ПОД ЗАКАЗ</b>\n` +
+        `━━━━━━━━━━━━━━━━━━━━━━━━\n\n` +
+        `👤 <b>Клиент:</b> ${escHtml(usernameText)}\n` +
+        `🆔 <b>ID:</b> <code>${customerId || "не определён"}</code>\n` +
+        `📞 <b>Телефон:</b> <code>${escHtml(phone || "—")}</code>\n` +
+        `💬 <b>Telegram:</b> ${escHtml(tgUser || usernameText)}\n\n` +
+        `🏷️ <b>Товар:</b> ${escHtml(name)}\n` +
+        `🎨 <b>Детали:</b> ${escHtml(details || "—")}\n` +
+        `🔗 <b>Ссылка:</b> ${escHtml(link || "—")}\n` +
+        `#️⃣ <b>Кол-во:</b> ${qty} шт.\n\n` +
+        `⚠️ Клиент согласен на предоплату.`;
+    const kbSo = customerId ? { inline_keyboard: [[{ text: "📞 Связаться", url: "tg://user?id=" + customerId }]] } : undefined;
+
+    window.showToast("Отправляем заявку…");
+    notifyAdmins(adminText, kbSo).then(() => {
+        if (customerId) {
+            tgApiSend(customerId,
+                `✅ <b>Заявка на спецзаказ принята!</b>\n\n` +
+                `Менеджер свяжется в течение 1–2 часов чтобы согласовать сумму предоплаты и сроки.\n\n` +
+                `🧑‍💻 @${MANAGER_TG}`
+            ).catch(() => {});
+        }
+        window.showToast("Заявка отправлена ✓");
+        setTimeout(() => {
+            window.closeSpecialOrder();
+            document.getElementById("soName").value = "";
+            document.getElementById("soLink").value = "";
+            document.getElementById("soDetails").value = "";
+            document.getElementById("soQty").value = "1";
+            document.getElementById("soPhone").value = "";
+            window._prepayAccepted = false;
+            document.getElementById("prepayCheck").classList.remove("checked");
+        }, 800);
+    }).catch(() => {
+        haptic("error");
+        alert(`⚠️ Не удалось отправить заявку. Проверьте интернет и попробуйте ещё раз.\nИли напишите напрямую: @${MANAGER_TG}`);
+    });
 };
 
 // ── КАТЕГОРИИ ──
@@ -828,34 +892,62 @@ window.checkoutVapeOrder = function () {
         total
     };
 
-    if (!window.tg || !window.tg.sendData || !window.tg.initData) {
-        alert("⚠️ Заказ не отправлен!\n\nМагазин открыт не через Telegram-бота.\n\nОткройте чат @VapeBazar_bot, нажмите кнопку «📱 Открыть Магазин / Корзину» внизу и оформите заказ заново — корзина сохранится.");
-        return;
-    }
+    const user = tgCurrentUser();
+    const customerId = user ? user.id : "";
+    const usernameText = (user && user.username) ? "@" + user.username : formattedUsername;
 
-    const cartBackup = window.cart.slice();
-    const promoBackup = window.appliedPromo;
-    try {
+    const adminText =
+        `🆕 <b>НОВЫЙ ЗАКАЗ #${orderData.order_id}</b>\n` +
+        `━━━━━━━━━━━━━━━━━━━━━━━━\n\n` +
+        `👤 <b>Клиент:</b> ${escHtml(usernameText)}\n` +
+        `🧑 <b>Имя:</b> ${escHtml(formattedUsername)}\n` +
+        `🆔 <b>ID пользователя:</b> <code>${customerId || "не определён"}</code>\n` +
+        `📞 <b>Телефон:</b> <code>${escHtml(phone)}</code>\n` +
+        `🚚 <b>Тип получения:</b> ${orderData.delivery}\n` +
+        `🏠 <b>Адрес:</b> ${escHtml(orderData.address)}\n` +
+        `📅 <b>Дата/Время:</b> ${orderData.date}\n` +
+        `💬 <b>Комментарий:</b> ${escHtml(orderData.comment)}\n\n` +
+        `📦 <b>Состав заказа:</b>\n${escHtml(itemsText)}\n` +
+        `━━━━━━━━━━━━━━━━━━━━━━━━\n\n` +
+        `💵 <b>Итого к получению:</b> ${total}₽\n\n` +
+        `📊 <b>Статус:</b> Новый`;
+
+    const kb = { inline_keyboard: [
+        [ { text: "✅ Принять", callback_data: `st_accept_${orderData.order_id}_${customerId}` },
+          { text: "📦 В сборке", callback_data: `st_pack_${orderData.order_id}_${customerId}` } ],
+        [ { text: "🚚 Отправлен", callback_data: `st_ship_${orderData.order_id}_${customerId}` },
+          { text: "🎯 Выполнен", callback_data: `st_done_${orderData.order_id}_${customerId}` } ],
+        [ { text: "❌ Отменить заказ", callback_data: `st_cancel_${orderData.order_id}_${customerId}` } ]
+    ]};
+    if (customerId) kb.inline_keyboard.push([{ text: "📞 Связаться с клиентом", url: "tg://user?id=" + customerId }]);
+
+    window.showToast("Отправляем заказ…");
+    notifyAdmins(adminText, kb).then(() => {
+        // подтверждение клиенту в чат с ботом (придёт, если клиент запускал бота)
+        if (customerId) {
+            tgApiSend(customerId,
+                `✅ <b>Заказ #${orderData.order_id} успешно оформлен!</b>\n\n` +
+                `📦 <b>Детали вашего заказа:</b>\n${escHtml(itemsText)}\n` +
+                `━━━━━━━━━━━━━━━━━━━━━━━━\n` +
+                `💵 <b>Итого к оплате (с учетом доставки):</b> ${total}₽\n\n` +
+                `🧑‍💻 Наш директор @${MANAGER_TG} уже принял заказ и свяжется с вами для подтверждения!`
+            ).catch(() => {});
+        }
         haptic("success");
-        window.tg.sendData(JSON.stringify(orderData));
         window.saveOrderToHistory(orderData);
         window.referralDiscountActive = false;
         localStorage.setItem("vapeRefUsed", "1");
         window.cart = []; window.appliedPromo = null;
         window.updateCartCounters();
-        // При успешной отправке Telegram сам закрывает Mini App.
-        // Если через 2 секунды мы всё ещё открыты — sendData не сработал
-        // (так бывает, когда магазин открыт через кнопку-меню или ссылку,
-        // а не через кнопку клавиатуры в чате бота).
+        window.showToast("✅ Заказ #" + orderData.order_id + " отправлен!");
         setTimeout(() => {
-            window.cart = cartBackup;
-            window.appliedPromo = promoBackup;
-            window.updateCartCounters();
-            alert("⚠️ Заказ НЕ отправлен!\n\nTelegram не передал данные боту — магазин открыт не через кнопку в чате.\n\nЗакройте магазин, откройте чат @VapeBazar_bot, нажмите кнопку «📱 Открыть Магазин / Корзину» внизу экрана и оформите заказ заново. Корзина сохранена.");
-        }, 2000);
-    } catch (e) {
-        alert("⚠️ Ошибка отправки заказа.\n\nОткройте магазин через кнопку «📱 Открыть Магазин / Корзину» в чате @VapeBazar_bot и попробуйте ещё раз.");
-    }
+            try { if (window.tg && window.tg.close) { window.tg.close(); return; } } catch (e) {}
+            window.closeVapeCart();
+        }, 1500);
+    }).catch(() => {
+        haptic("error");
+        alert(`⚠️ Не удалось отправить заказ.\n\nПроверьте интернет и попробуйте ещё раз.\nЕсли не получается — напишите @${MANAGER_TG}, корзина сохранена.`);
+    });
 };
 
 // ==========================================================================
@@ -916,9 +1008,13 @@ window.notifyWhenAvailable = function () {
     const btn = document.getElementById("notifyBtn");
     if (btn) { btn.innerHTML = "✓ Уведомим вас о наличии"; btn.disabled = true; }
     window.showToast("Мы сообщим, когда товар появится!");
-    if (window.tg && window.tg.sendData) {
-        try { window.tg.sendData(JSON.stringify({ type: "notify_request", product_id: p.id, product_name: p.name })); } catch (e) {}
-    }
+    const nu = tgCurrentUser();
+    notifyAdmins(
+        `🔔 <b>Запрос наличия</b>\n` +
+        `Клиент: ${nu && nu.username ? "@" + nu.username : "Скрыт"}\n` +
+        `Товар: ${escHtml(p.name)}\n` +
+        `ID: <code>${nu ? nu.id : "не определён"}</code>`
+    ).catch(() => {});
 };
 
 // ── ПРОГРЕСС-БАР ДОСТАВКИ ──
@@ -961,12 +1057,10 @@ window.subscribeNewsletter = function () {
     const pSub = document.getElementById("profileNewsletterSub");
     if (pSub) pSub.innerText = "✓ Вы подписаны на акции";
     window.showToast("Подписка оформлена! 🎉");
-    if (window.tg && window.tg.sendData) {
-        try {
-            const u = window.tg.initDataUnsafe && window.tg.initDataUnsafe.user;
-            window.tg.sendData(JSON.stringify({ type: "newsletter_subscribe", username: u ? u.username : "", user_id: u ? u.id : "" }));
-        } catch (e) {}
-    }
+    const su = tgCurrentUser();
+    notifyAdmins(
+        `📣 Новая подписка на рассылку: ${su && su.username ? "@" + su.username : "Скрыт"} (<code>${su ? su.id : "не определён"}</code>)`
+    ).catch(() => {});
     setTimeout(() => {
         const banner = document.getElementById("newsletterBanner");
         if (banner) banner.style.display = "none";
