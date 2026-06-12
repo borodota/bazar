@@ -1,5 +1,6 @@
 import logging
 from aiogram import Bot, Dispatcher, types, F
+from aiogram.client.default import DefaultBotProperties
 from aiogram.fsm.storage.memory import MemoryStorage
 from aiogram.types import InlineKeyboardMarkup, InlineKeyboardButton, ReplyKeyboardMarkup, KeyboardButton
 from aiogram.filters import Command
@@ -22,7 +23,8 @@ logging.basicConfig(
 logger = logging.getLogger(__name__)
 
 # ==================== КОНФИГУРАЦИЯ ====================
-SHOP_BOT_TOKEN = "8687110031:AAE9E430W55aRQQuUwDI8hEMjaVliq_gbG4"
+# Токен лучше хранить в переменной окружения BOT_TOKEN (см. README)
+SHOP_BOT_TOKEN = os.getenv("BOT_TOKEN", "8687110031:AAE9E430W55aRQQuUwDI8hEMjaVliq_gbG4")
 ADMIN_ID = 6163521938
 MANAGER_USERNAME = 'BORO_DOTA'
 DEPUTY_ADMIN_IDS = [5289357165, 6163521938]
@@ -30,7 +32,8 @@ DEPUTY_ADMIN_IDS = [5289357165, 6163521938]
 DELIVERY_BASE_COST = 250
 FREE_DELIVERY_THRESHOLD = 2000
 
-bot = Bot(token=SHOP_BOT_TOKEN, parse_mode=ParseMode.HTML)
+# В aiogram 3.7+ parse_mode передаётся только через DefaultBotProperties
+bot = Bot(token=SHOP_BOT_TOKEN, default=DefaultBotProperties(parse_mode=ParseMode.HTML))
 storage = MemoryStorage()
 dp = Dispatcher(storage=storage)
 
@@ -176,20 +179,21 @@ async def handle_web_app_order(message: types.Message):
             f"📊 <b>Статус:</b> Новый"
         )
 
+        customer_id = message.from_user.id
         kb = InlineKeyboardMarkup(inline_keyboard=[
             [
-                InlineKeyboardButton(text="✅ Принять", callback_data=f"st_accept_{order_id}"),
-                InlineKeyboardButton(text="📦 В сборке", callback_data=f"st_pack_{order_id}")
+                InlineKeyboardButton(text="✅ Принять", callback_data=f"st_accept_{order_id}_{customer_id}"),
+                InlineKeyboardButton(text="📦 В сборке", callback_data=f"st_pack_{order_id}_{customer_id}")
             ],
             [
-                InlineKeyboardButton(text="🚚 Отправлен", callback_data=f"st_ship_{order_id}"),
-                InlineKeyboardButton(text="🎯 Выполнен", callback_data=f"st_done_{order_id}")
+                InlineKeyboardButton(text="🚚 Отправлен", callback_data=f"st_ship_{order_id}_{customer_id}"),
+                InlineKeyboardButton(text="🎯 Выполнен", callback_data=f"st_done_{order_id}_{customer_id}")
             ],
             [
-                InlineKeyboardButton(text="❌ Отменить заказ", callback_data=f"st_cancel_{order_id}")
+                InlineKeyboardButton(text="❌ Отменить заказ", callback_data=f"st_cancel_{order_id}_{customer_id}")
             ],
             [
-                InlineKeyboardButton(text="📞 Связаться с клиентом", url=f"tg://user?id={message.from_user.id}")
+                InlineKeyboardButton(text="📞 Связаться с клиентом", url=f"tg://user?id={customer_id}")
             ]
         ])
 
@@ -206,7 +210,16 @@ async def handle_web_app_order(message: types.Message):
 
 @dp.callback_query(F.data.startswith("st_"))
 async def change_order_status(callback: types.CallbackQuery):
-    _, action, order_id = callback.data.split("_")
+    # Только админы могут менять статус заказа
+    if callback.from_user.id not in set([ADMIN_ID] + DEPUTY_ADMIN_IDS):
+        await callback.answer("⛔ Нет доступа", show_alert=True)
+        return
+
+    parts = callback.data.split("_")
+    action = parts[1] if len(parts) > 1 else ""
+    order_id = parts[2] if len(parts) > 2 else "?"
+    customer_id = parts[3] if len(parts) > 3 else None
+
     statuses = {
         "accept": "Принят в работу 🟡",
         "pack": "Собирается на складе 📦",
@@ -215,15 +228,28 @@ async def change_order_status(callback: types.CallbackQuery):
         "cancel": "Отменен администратором ❌"
     }
     new_status = statuses.get(action, "Изменен")
-    text = callback.message.text
+
+    # html_text сохраняет жирный шрифт и форматирование при редактировании
+    text = callback.message.html_text or callback.message.text or ""
     if "📊 Статус:" in text:
         clean_text = text.split("📊 Статус:")[0]
         updated_text = f"{clean_text}📊 Статус: <b>{new_status}</b>"
         try:
             await callback.message.edit_text(text=updated_text, reply_markup=callback.message.reply_markup)
-            await callback.answer(f"Статус изменен: {new_status}")
-        except:
-            await callback.answer("Успешно обновлено")
+        except Exception as e:
+            logger.error(f"Не удалось обновить сообщение заказа #{order_id}: {e}")
+
+    # Уведомляем клиента о смене статуса
+    if customer_id:
+        try:
+            await bot.send_message(
+                chat_id=int(customer_id),
+                text=f"📦 <b>Заказ #{order_id}</b>\nСтатус обновлён: <b>{new_status}</b>"
+            )
+        except Exception as e:
+            logger.error(f"Не удалось уведомить клиента {customer_id} о статусе заказа #{order_id}: {e}")
+
+    await callback.answer(f"Статус изменен: {new_status}")
 
 @dp.message(Command("start"))
 async def cmd_start(message: types.Message):
@@ -249,9 +275,27 @@ async def show_about(message: types.Message):
 async def show_partner_panel(message: types.Message):
     await message.answer("🤝 Раздел партнерской программы на техническом обслуживании.")
 
+@dp.message(F.text == "🛍️ Мои заказы")
+async def show_my_orders(message: types.Message):
+    await message.answer(
+        "🛍️ <b>Мои заказы</b>\n\n"
+        "История ваших заказов хранится в Mini App:\n"
+        "нажмите «📱 Открыть Магазин / Корзину» → вкладка <b>Профиль</b> → <b>История заказов</b>.\n\n"
+        f"По вопросам текущего заказа пишите: @{MANAGER_USERNAME}"
+    )
+
 async def main():
     logger.info("Запуск сервера бота VAPEBAZAR PREMIUM...")
+    # Webhook нужно снять, иначе polling не получит апдейты.
+    # Накопившиеся за время простоя заказы НЕ сбрасываем — они доставятся после старта.
+    await bot.delete_webhook(drop_pending_updates=False)
     await dp.start_polling(bot)
 
 if __name__ == "__main__":
-    asyncio.run(main())
+    try:
+        asyncio.run(main())
+    except (KeyboardInterrupt, SystemExit):
+        logger.info("Бот остановлен.")
+    except Exception as e:
+        logger.critical(f"Бот упал при запуске: {e}")
+        raise
