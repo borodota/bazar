@@ -1,4 +1,7 @@
-__pycache__/
+.claude/
+.DS_Store
 *.pyc
-bot.log
+__pycache__/
+*.env
 .env
+bot.log
