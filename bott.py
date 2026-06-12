@@ -151,32 +151,37 @@ async def handle_web_app_order(message: types.Message):
         final_total = total_items_cost + delivery_cost
         username_text = f"@{message.from_user.username}" if message.from_user.username else "Скрыт"
 
+        total_text = f"{final_total:,}".replace(",", " ") if final_total > 0 else "Посчитает директор"
+
         # 1. Текст покупателю в ЛС
         customer_text = (
-            f"✅ <b>Заказ #{order_id} успешно оформлен!</b>\n\n"
-            f"📦 <b>Детали вашего заказа:</b>\n{items}\n"
-            f"━━━━━━━━━━━━━━━━━━━━━━━━\n"
-            f"💵 <b>Итого к оплате (с учетом доставки):</b> {final_total if final_total > 0 else 'Посчитает директор'}₽\n\n"
-            f"🧑‍💻 Наш директор @{MANAGER_USERNAME} уже принял заказ и свяжется с вами для подтверждения!"
+            f"✅ <b>Заказ #{order_id} принят!</b>\n"
+            f"📅 {date_str}\n\n"
+            f"🛒 <b>Ваш заказ</b>\n<blockquote>{items}</blockquote>\n\n"
+            f"💰 <b>К оплате: {total_text} ₽</b>\n\n"
+            f"🧑‍💻 Наш директор @{MANAGER_USERNAME} свяжется с вами для подтверждения.\n"
+            f"🔔 Мы пришлём уведомление, когда статус заказа изменится!"
         )
         await message.answer(customer_text, reply_markup=get_main_keyboard())
 
         # 2. Текст директору в админку
         admin_caption = (
             f"🆕 <b>НОВЫЙ ЗАКАЗ #{order_id}</b>\n"
+            f"📅 {date_str}\n"
             f"━━━━━━━━━━━━━━━━━━━━━━━━\n\n"
-            f"👤 <b>Клиент:</b> {username_text}\n"
-            f"🧑 <b>Имя:</b> {name}\n"
-            f"🆔 <b>ID пользователя:</b> <code>{message.from_user.id}</code>\n"
-            f"📞 <b>Телефон:</b> <code>{phone}</code>\n"
-            f"🚚 <b>Тип получения:</b> {delivery_type}\n"
-            f"🏠 <b>Адрес:</b> {address}\n"
-            f"📅 <b>Дата/Время:</b> {date_str}\n"
-            f"💬 <b>Комментарий:</b> {comment}\n\n"
-            f"📦 <b>Состав заказа:</b>\n{items}\n"
-            f"━━━━━━━━━━━━━━━━━━━━━━━━\n\n"
-            f"💵 <b>Итого к получению:</b> {final_total if final_total > 0 else 'Проверь вручную'}₽\n\n"
-            f"📊 <b>Статус:</b> Новый"
+            f"👤 <b>КЛИЕНТ</b>\n"
+            f"├ Telegram: {username_text}\n"
+            f"├ Имя: {name}\n"
+            f"├ Телефон: <code>{phone}</code>\n"
+            f"└ ID: <code>{message.from_user.id}</code>\n\n"
+            f"🛒 <b>СОСТАВ ЗАКАЗА</b>\n<blockquote>{items}</blockquote>\n\n"
+            f"📍 <b>ПОЛУЧЕНИЕ</b>\n"
+            f"├ Способ: {delivery_type}\n"
+            f"└ Адрес: {address}\n\n"
+            f"💬 Комментарий: <i>{comment}</i>\n"
+            f"━━━━━━━━━━━━━━━━━━━━━━━━\n"
+            f"💰 <b>ИТОГО К ПОЛУЧЕНИЮ: {total_text if final_total > 0 else 'Проверь вручную'} ₽</b>\n\n"
+            f"📊 Статус: <b>🆕 Новый</b>"
         )
 
         customer_id = message.from_user.id
@@ -241,10 +246,22 @@ async def change_order_status(callback: types.CallbackQuery):
 
     # Уведомляем клиента о смене статуса
     if customer_id:
+        status_extra = {
+            "accept": "Мы уже начали обработку вашего заказа!",
+            "pack": "Собираем ваш заказ — скоро будет готов!",
+            "ship": "Заказ в пути! Курьер скоро будет у вас.",
+            "done": "Спасибо за покупку! Будем рады видеть вас снова 💚",
+            "cancel": f"Если возникли вопросы — напишите @{MANAGER_USERNAME}"
+        }
         try:
             await bot.send_message(
                 chat_id=int(customer_id),
-                text=f"📦 <b>Заказ #{order_id}</b>\nСтатус обновлён: <b>{new_status}</b>"
+                text=(
+                    f"📦 <b>Заказ #{order_id}</b>\n"
+                    f"━━━━━━━━━━━━━━━━━━━━━━━━\n"
+                    f"📊 Новый статус: <b>{new_status}</b>\n\n"
+                    f"{status_extra.get(action, '')}"
+                )
             )
         except Exception as e:
             logger.error(f"Не удалось уведомить клиента {customer_id} о статусе заказа #{order_id}: {e}")

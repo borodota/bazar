@@ -871,8 +871,12 @@ window.checkoutVapeOrder = function () {
     if (subtotal < MIN_ORDER_AMOUNT) { haptic("error"); window.showToast(`Минимум ${MIN_ORDER_AMOUNT} ₽ (сейчас ${subtotal} ₽)`); return; }
 
     const formattedUsername = username.startsWith("@") ? username : "@" + username;
-    let itemsText = "";
-    window.cart.forEach(i => { itemsText += `• ${i.name} [${i.flavor}] — ${i.quantity} шт. × ${i.price} ₽ = ${i.price * i.quantity} ₽\n`; });
+    // нарядный список товаров для сообщений в Telegram
+    const itemsList = window.cart.map(i =>
+        `▪️ ${i.name} · ${i.flavor}\n      ${i.quantity} шт × ${fmt(i.price)} ₽  =  ${fmt(i.price * i.quantity)} ₽`
+    ).join("\n");
+    // плоский текст для локальной истории заказов
+    let itemsText = window.cart.map(i => `• ${i.name} [${i.flavor}] — ${i.quantity} шт. × ${i.price} ₽ = ${i.price * i.quantity} ₽`).join("\n");
     if (discount > 0) itemsText += `\n🎁 Промокод (${window.appliedPromo.label}): −${discount} ₽`;
     if (deliveryCost > 0) itemsText += `\n🚚 Доставка: ${deliveryCost} ₽`;
 
@@ -896,21 +900,37 @@ window.checkoutVapeOrder = function () {
     const customerId = user ? user.id : "";
     const usernameText = (user && user.username) ? "@" + user.username : formattedUsername;
 
+    const isPickup = window.currentDeliveryMethod === "pickup";
+    const promoLabel = window.appliedPromo ? window.appliedPromo.label : "";
+    // итоговый блок: товары, скидка, доставка
+    const totalsBlock =
+        `🧾 Товары: ${fmt(subtotal)} ₽\n` +
+        (discount > 0 ? `🎁 Скидка (${escHtml(promoLabel)}): −${fmt(discount)} ₽\n` : "") +
+        (isPickup ? "" : `🚚 Доставка: ${deliveryCost > 0 ? fmt(deliveryCost) + " ₽" : "бесплатно 🎉"}\n`);
+
     const adminText =
         `🆕 <b>НОВЫЙ ЗАКАЗ #${orderData.order_id}</b>\n` +
+        `📅 ${orderData.date}\n` +
         `━━━━━━━━━━━━━━━━━━━━━━━━\n\n` +
-        `👤 <b>Клиент:</b> ${escHtml(usernameText)}\n` +
-        `🧑 <b>Имя:</b> ${escHtml(formattedUsername)}\n` +
-        `🆔 <b>ID пользователя:</b> <code>${customerId || "не определён"}</code>\n` +
-        `📞 <b>Телефон:</b> <code>${escHtml(phone)}</code>\n` +
-        `🚚 <b>Тип получения:</b> ${orderData.delivery}\n` +
-        `🏠 <b>Адрес:</b> ${escHtml(orderData.address)}\n` +
-        `📅 <b>Дата/Время:</b> ${orderData.date}\n` +
-        `💬 <b>Комментарий:</b> ${escHtml(orderData.comment)}\n\n` +
-        `📦 <b>Состав заказа:</b>\n${escHtml(itemsText)}\n` +
-        `━━━━━━━━━━━━━━━━━━━━━━━━\n\n` +
-        `💵 <b>Итого к получению:</b> ${total}₽\n\n` +
-        `📊 <b>Статус:</b> Новый`;
+
+        `👤 <b>КЛИЕНТ</b>\n` +
+        `├ Telegram: ${escHtml(usernameText)}\n` +
+        (usernameText !== formattedUsername ? `├ Указал в форме: ${escHtml(formattedUsername)}\n` : "") +
+        `├ Телефон: <code>${escHtml(phone)}</code>\n` +
+        `└ ID: <code>${customerId || "не определён"}</code>\n\n` +
+
+        `🛒 <b>СОСТАВ ЗАКАЗА</b>\n` +
+        `<blockquote>${escHtml(itemsList)}</blockquote>\n\n` +
+
+        `📍 <b>ПОЛУЧЕНИЕ</b>\n` +
+        `├ Способ: ${isPickup ? "🏃 Самовывоз" : "🚚 Доставка курьером"}\n` +
+        `└ Адрес: ${escHtml(orderData.address)}\n\n` +
+
+        `💬 Комментарий: <i>${escHtml(orderData.comment)}</i>\n` +
+        `━━━━━━━━━━━━━━━━━━━━━━━━\n` +
+        totalsBlock +
+        `\n💰 <b>ИТОГО К ПОЛУЧЕНИЮ: ${fmt(total)} ₽</b>\n\n` +
+        `📊 Статус: <b>🆕 Новый</b>`;
 
     const kb = { inline_keyboard: [
         [ { text: "✅ Принять", callback_data: `st_accept_${orderData.order_id}_${customerId}` },
@@ -926,11 +946,15 @@ window.checkoutVapeOrder = function () {
         // подтверждение клиенту в чат с ботом (придёт, если клиент запускал бота)
         if (customerId) {
             tgApiSend(customerId,
-                `✅ <b>Заказ #${orderData.order_id} успешно оформлен!</b>\n\n` +
-                `📦 <b>Детали вашего заказа:</b>\n${escHtml(itemsText)}\n` +
-                `━━━━━━━━━━━━━━━━━━━━━━━━\n` +
-                `💵 <b>Итого к оплате (с учетом доставки):</b> ${total}₽\n\n` +
-                `🧑‍💻 Наш директор @${MANAGER_TG} уже принял заказ и свяжется с вами для подтверждения!`
+                `✅ <b>Заказ #${orderData.order_id} принят!</b>\n` +
+                `📅 ${orderData.date}\n\n` +
+                `🛒 <b>Ваш заказ</b>\n` +
+                `<blockquote>${escHtml(itemsList)}</blockquote>\n\n` +
+                totalsBlock +
+                `\n💰 <b>К оплате: ${fmt(total)} ₽</b>\n\n` +
+                `📍 ${isPickup ? "Самовывоз: " : "Доставка: "}${escHtml(orderData.address)}\n\n` +
+                `🧑‍💻 Наш директор @${MANAGER_TG} свяжется с вами для подтверждения.\n` +
+                `🔔 Мы пришлём уведомление, когда статус заказа изменится!`
             ).catch(() => {});
         }
         haptic("success");
