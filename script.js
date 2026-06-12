@@ -267,20 +267,21 @@ window.submitSpecialOrder = function () {
         phone: phone,
         prepay_accepted: true
     };
-    if (window.tg && window.tg.sendData) {
-        try { window.tg.sendData(JSON.stringify(payload)); } catch(e) {}
+    if (!window.tg || !window.tg.sendData || !window.tg.initData) {
+        alert("⚠️ Заявка не отправлена!\n\nОткройте магазин через кнопку «📱 Открыть Магазин / Корзину» в чате @VapeBazar_bot и отправьте заявку заново.");
+        return;
+    }
+    try { window.tg.sendData(JSON.stringify(payload)); } catch(e) {
+        alert("⚠️ Ошибка отправки заявки. Откройте магазин через кнопку в чате @VapeBazar_bot и попробуйте ещё раз.");
+        return;
     }
     window.showToast("Заявка отправлена ✓");
+    // При успешной отправке Telegram сам закрывает Mini App,
+    // поэтому форму не очищаем: если через 2 секунды всё ещё открыты —
+    // sendData не сработал, и данные пользователя должны остаться в форме.
     setTimeout(() => {
-        window.closeSpecialOrder();
-        document.getElementById("soName").value = "";
-        document.getElementById("soLink").value = "";
-        document.getElementById("soDetails").value = "";
-        document.getElementById("soQty").value = "1";
-        document.getElementById("soPhone").value = "";
-        window._prepayAccepted = false;
-        document.getElementById("prepayCheck").classList.remove("checked");
-    }, 800);
+        alert("⚠️ Заявка НЕ отправлена!\n\nTelegram не передал данные боту. Откройте чат @VapeBazar_bot, нажмите кнопку «📱 Открыть Магазин / Корзину» и отправьте заявку заново.");
+    }, 2000);
 };
 
 // ── КАТЕГОРИИ ──
@@ -827,19 +828,33 @@ window.checkoutVapeOrder = function () {
         total
     };
 
-    if (window.tg && window.tg.sendData) {
-        try {
-            haptic("success");
-            window.tg.sendData(JSON.stringify(orderData));
-            window.saveOrderToHistory(orderData);
-            window.referralDiscountActive = false;
-            localStorage.setItem("vapeRefUsed", "1");
-            window.cart = []; window.appliedPromo = null;
-            window.updateCartCounters();
-        } catch (e) { window.showToast("Ошибка отправки. Открой через бота"); }
-    } else {
+    if (!window.tg || !window.tg.sendData || !window.tg.initData) {
+        alert("⚠️ Заказ не отправлен!\n\nМагазин открыт не через Telegram-бота.\n\nОткройте чат @VapeBazar_bot, нажмите кнопку «📱 Открыть Магазин / Корзину» внизу и оформите заказ заново — корзина сохранится.");
+        return;
+    }
+
+    const cartBackup = window.cart.slice();
+    const promoBackup = window.appliedPromo;
+    try {
+        haptic("success");
+        window.tg.sendData(JSON.stringify(orderData));
         window.saveOrderToHistory(orderData);
-        alert("⚠️ Открой магазин через Telegram-бота.\n\n" + JSON.stringify(orderData, null, 2));
+        window.referralDiscountActive = false;
+        localStorage.setItem("vapeRefUsed", "1");
+        window.cart = []; window.appliedPromo = null;
+        window.updateCartCounters();
+        // При успешной отправке Telegram сам закрывает Mini App.
+        // Если через 2 секунды мы всё ещё открыты — sendData не сработал
+        // (так бывает, когда магазин открыт через кнопку-меню или ссылку,
+        // а не через кнопку клавиатуры в чате бота).
+        setTimeout(() => {
+            window.cart = cartBackup;
+            window.appliedPromo = promoBackup;
+            window.updateCartCounters();
+            alert("⚠️ Заказ НЕ отправлен!\n\nTelegram не передал данные боту — магазин открыт не через кнопку в чате.\n\nЗакройте магазин, откройте чат @VapeBazar_bot, нажмите кнопку «📱 Открыть Магазин / Корзину» внизу экрана и оформите заказ заново. Корзина сохранена.");
+        }, 2000);
+    } catch (e) {
+        alert("⚠️ Ошибка отправки заказа.\n\nОткройте магазин через кнопку «📱 Открыть Магазин / Корзину» в чате @VapeBazar_bot и попробуйте ещё раз.");
     }
 };
 

@@ -284,6 +284,17 @@ async def show_my_orders(message: types.Message):
         f"По вопросам текущего заказа пишите: @{MANAGER_USERNAME}"
     )
 
+# Ловит всё остальное — регистрируется последним, чтобы не перехватывать другие хэндлеры.
+# Гарантирует, что бот отвечает на ЛЮБОЕ сообщение (удобно для проверки, что бот жив).
+@dp.message()
+async def fallback_any_message(message: types.Message):
+    logger.info(f"Сообщение без обработчика от {message.from_user.id} (@{message.from_user.username}): {message.text!r}")
+    await message.answer(
+        "Я понимаю только кнопки меню 👇\n"
+        f"По любым вопросам: @{MANAGER_USERNAME}",
+        reply_markup=get_main_keyboard()
+    )
+
 async def main():
     logger.info("Запуск сервера бота VAPEBAZAR PREMIUM...")
     # Webhook нужно снять, иначе polling не получит апдейты.
