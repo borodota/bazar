@@ -51,12 +51,28 @@ function escHtml(s) {
 }
 
 async function tgApiSend(chatId, text, replyMarkup) {
-    const resp = await fetch("https://api.telegram.org/bot" + BOT_API_TOKEN + "/sendMessage", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ chat_id: chatId, text: text, parse_mode: "HTML", reply_markup: replyMarkup })
-    });
-    const data = await resp.json();
+    const doSend = async (body) => {
+        const resp = await fetch("https://api.telegram.org/bot" + BOT_API_TOKEN + "/sendMessage", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify(body)
+        });
+        return resp.json();
+    };
+
+    const body = { chat_id: chatId, text, parse_mode: "HTML" };
+    if (replyMarkup) body.reply_markup = replyMarkup;
+
+    let data = await doSend(body);
+
+    // если HTML не распарсился — шлём без разметки
+    if (!data.ok) {
+        console.warn("tgApiSend HTML failed:", data.description, "— retrying plain");
+        const plainBody = { chat_id: chatId, text: text.replace(/<[^>]+>/g, "") };
+        if (replyMarkup) plainBody.reply_markup = replyMarkup;
+        data = await doSend(plainBody);
+    }
+
     if (!data.ok) throw new Error(data.description || "sendMessage failed");
     return data;
 }
@@ -66,7 +82,8 @@ function notifyAdmins(text, replyMarkup) {
     return Promise.allSettled(ORDER_ADMIN_IDS.map(id => tgApiSend(id, text, replyMarkup)))
         .then(results => {
             if (!results.some(r => r.status === "fulfilled")) {
-                throw new Error(results[0] && results[0].reason ? results[0].reason.message : "send failed");
+                const errs = results.map(r => r.reason?.message || "unknown error").join(" | ");
+                throw new Error(errs);
             }
         });
 }
@@ -345,9 +362,10 @@ window.submitSpecialOrder = function () {
             window._prepayAccepted = false;
             document.getElementById("prepayCheck").classList.remove("checked");
         }, 800);
-    }).catch(() => {
+    }).catch((err) => {
         haptic("error");
-        alert(`⚠️ Не удалось отправить заявку. Проверьте интернет и попробуйте ещё раз.\nИли напишите напрямую: @${MANAGER_TG}`);
+        console.error("Special order send error:", err);
+        alert(`⚠️ Не удалось отправить заявку.\n\nОшибка: ${err.message}\n\nНапишите напрямую: @${MANAGER_TG}`);
     });
 };
 
@@ -1062,9 +1080,10 @@ window.checkoutVapeOrder = function () {
             try { if (window.tg && window.tg.close) { window.tg.close(); return; } } catch (e) {}
             window.closeVapeCart();
         }, 2000);
-    }).catch(() => {
+    }).catch((err) => {
         haptic("error");
-        alert(`⚠️ Не удалось отправить заказ.\n\nПроверьте интернет и попробуйте ещё раз.\nЕсли не получается — напишите @${MANAGER_TG}, корзина сохранена.`);
+        console.error("Order send error:", err);
+        alert(`⚠️ Не удалось отправить заказ.\n\nОшибка: ${err.message}\n\nНапишите @${MANAGER_TG} — корзина сохранена.`);
     });
 };
 
