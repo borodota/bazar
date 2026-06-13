@@ -1510,14 +1510,18 @@ window.denyAge = function () {
 
 // ── ТАЙМЕР АКЦИИ НА HERO-БАННЕРЕ (отсчёт до конца дня) ──
 window.startHeroTimer = function () {
-    const clock = document.getElementById("heroTimerClock");
-    if (!clock) return;
+    const elH = document.getElementById("htH");
+    const elM = document.getElementById("htM");
+    const elS = document.getElementById("htS");
+    if (!elH || !elM || !elS) return;
     const pad = (n) => String(n).padStart(2, "0");
     function tick() {
         const now = new Date();
         const end = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 23, 59, 59);
         const diff = Math.max(0, Math.floor((end - now) / 1000));
-        clock.textContent = `${pad(Math.floor(diff / 3600))}:${pad(Math.floor((diff % 3600) / 60))}:${pad(diff % 60)}`;
+        elH.textContent = pad(Math.floor(diff / 3600));
+        elM.textContent = pad(Math.floor((diff % 3600) / 60));
+        elS.textContent = pad(diff % 60);
     }
     tick();
     if (window._heroTimerInt) clearInterval(window._heroTimerInt);
