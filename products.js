@@ -275,7 +275,7 @@ window.VAPE_PRODUCTS = [
         flavors: ["1 комплект"],
         tags: ["🔥 ВЫГОДНО"],
         isNew: false,
-        inStock: true
+        inStock: false
     },
     {
         id: "cart_pasito2",
@@ -288,7 +288,7 @@ window.VAPE_PRODUCTS = [
         flavors: ["1 шт"],
         tags: [],
         isNew: false,
-        inStock: true
+        inStock: false
     },
     {
         id: "cart_xros_all",
