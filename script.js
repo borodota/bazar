@@ -46,6 +46,12 @@ const BOT_API_TOKEN = "8687110031:AAE9E430W55aRQQuUwDI8hEMjaVliq_gbG4";
 const ORDER_ADMIN_IDS = [6163521938, 5289357165];
 const MANAGER_TG = "BORO_DOTA";
 
+// ── БОНУСНАЯ ПРОГРАММА ──
+const BONUS_RATE = 0.05;        // 5% от потраченного начисляется баллами
+const BONUS_MAX_REDEEM = 0.30;  // баллами можно оплатить не больше 30% заказа
+const BONUS_KEY = "vapeBonus";
+window.bonusApplied = false;    // списывает ли клиент баллы в текущем заказе
+
 function escHtml(s) {
     return String(s == null ? "" : s).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
 }
@@ -106,6 +112,38 @@ function haptic(type) {
 
 function fmt(n) { return n.toLocaleString("ru-RU"); }
 
+// ── БОНУСЫ: localStorage как быстрый кэш + зеркало в Telegram CloudStorage ──
+function bonusGet() {
+    const v = parseInt(localStorage.getItem(BONUS_KEY) || "0", 10);
+    return (isNaN(v) || v < 0) ? 0 : v;
+}
+function bonusSet(v) {
+    v = Math.max(0, Math.round(v || 0));
+    localStorage.setItem(BONUS_KEY, String(v));
+    try {
+        if (window.tg && window.tg.CloudStorage && window.tg.CloudStorage.setItem) {
+            window.tg.CloudStorage.setItem(BONUS_KEY, String(v), function () {});
+        }
+    } catch (e) {}
+    return v;
+}
+// При старте подтягиваем баланс из облака (синхрон между устройствами клиента)
+function bonusSyncFromCloud(cb) {
+    try {
+        if (window.tg && window.tg.CloudStorage && window.tg.CloudStorage.getItem) {
+            window.tg.CloudStorage.getItem(BONUS_KEY, function (err, val) {
+                if (!err && val != null && val !== "") {
+                    const cloud = parseInt(val, 10);
+                    if (!isNaN(cloud) && cloud > bonusGet()) localStorage.setItem(BONUS_KEY, String(cloud));
+                }
+                if (cb) cb();
+            });
+            return;
+        }
+    } catch (e) {}
+    if (cb) cb();
+}
+
 // ── ИНИЦИАЛИЗАЦИЯ ──
 window.initVapeApp = function () {
     let raw = window.VAPE_PRODUCTS || window.products;
@@ -150,6 +188,7 @@ document.addEventListener("DOMContentLoaded", () => {
         }
     }
     window.setupProfile();
+    bonusSyncFromCloud(() => window.updateBonusUI());
     window.switchTab("catalog");
     let scrollTicking = false;
     window.addEventListener("scroll", () => {
@@ -235,6 +274,7 @@ window.switchTab = function (target) {
     document.body.classList.add("tab-active-" + target);
     if (target === "wishlist") window.renderWishlistPage();
     if (target === "history") window.renderHistoryPage();
+    if (target === "profile") window.updateBonusUI();
     window.scrollTo({ top: 0, behavior: "instant" });
     if (window.tg && window.tg.HapticFeedback) {
         try { window.tg.HapticFeedback.selectionChanged(); } catch(e) {}
@@ -707,7 +747,11 @@ window.calcOrderTotals = function () {
     }
     const afterDiscount = subtotal - discount;
     const deliveryCost = (window.currentDeliveryMethod === "delivery" && afterDiscount < FREE_DELIVERY_THRESHOLD) ? DELIVERY_COST : 0;
-    return { subtotal, discount, deliveryCost, total: afterDiscount + deliveryCost };
+    // баллы лояльности: списать можно не больше 30% от суммы товаров и не больше баланса
+    const maxRedeem = Math.max(0, Math.min(bonusGet(), Math.floor(afterDiscount * BONUS_MAX_REDEEM)));
+    const bonusUsed = window.bonusApplied ? maxRedeem : 0;
+    const total = Math.max(0, afterDiscount - bonusUsed + deliveryCost);
+    return { subtotal, discount, deliveryCost, maxRedeem, bonusUsed, total };
 };
 
 // ── КОРЗИНА ──
@@ -757,13 +801,16 @@ window.openVapeCart = function () {
 };
 
 window.updateCartTotalDisplay = function () {
-    const { subtotal, discount, deliveryCost, total } = window.calcOrderTotals();
+    const { subtotal, discount, deliveryCost, bonusUsed, total } = window.calcOrderTotals();
     const set = (id, val) => { const e = document.getElementById(id); if (e) e.innerText = val; };
     set("cartTotalPrice", `${fmt(total)} ₽`);
     set("sumSubtotal", `${fmt(subtotal)} ₽`);
 
     const dRow = document.getElementById("sumDiscountRow");
     if (dRow) { dRow.style.display = discount > 0 ? "flex" : "none"; set("sumDiscount", `−${fmt(discount)} ₽`); }
+
+    const bRow = document.getElementById("sumBonusRow");
+    if (bRow) { bRow.style.display = bonusUsed > 0 ? "flex" : "none"; set("sumBonus", `−${fmt(bonusUsed)} ₽`); }
 
     const delRow = document.getElementById("sumDeliveryRow");
     if (delRow) {
@@ -795,7 +842,43 @@ window.updateCartTotalDisplay = function () {
         }
     }
 
+    window.updateBonusUI();
     window.updateCartCounters();
+};
+
+// ── БОНУСНЫЙ ТОГГЛ В КОРЗИНЕ + БАЛАНС В ПРОФИЛЕ ──
+window.updateBonusUI = function () {
+    const bal = bonusGet();
+    const pb = document.getElementById("profileBonusBalance");
+    if (pb) pb.innerText = fmt(bal);
+
+    const row = document.getElementById("bonusRow");
+    if (!row) return;
+    const { maxRedeem } = window.calcOrderTotals();
+    if (bal > 0 && maxRedeem > 0 && window.cart.length > 0) {
+        row.style.display = "flex";
+        const sub = document.getElementById("bonusRowSub");
+        if (sub) sub.innerText = window.bonusApplied
+            ? `Списываем ${fmt(maxRedeem)} ₽`
+            : `Доступно ${fmt(maxRedeem)} ₽ из ${fmt(bal)}`;
+        const tog = document.getElementById("bonusToggle");
+        if (tog) tog.classList.toggle("on", !!window.bonusApplied);
+    } else {
+        row.style.display = "none";
+    }
+};
+
+window.toggleBonusRedeem = function () {
+    haptic("select");
+    window.bonusApplied = !window.bonusApplied;
+    window.updateCartTotalDisplay();
+};
+
+window.openBonusInfo = function () {
+    const bal = bonusGet();
+    window.showToast(bal > 0
+        ? `💎 У вас ${fmt(bal)} баллов. Списывайте до 30% заказа прямо в корзине. За каждый заказ +5% баллами.`
+        : `💎 Бонусы копятся с заказов: +5% баллами. 1 балл = 1 ₽, можно оплатить до 30% заказа.`, 4500);
 };
 
 window.changeQty = function (idx, delta) {
@@ -978,7 +1061,7 @@ window.checkoutVapeOrder = function () {
     if (window.currentDeliveryMethod === "delivery" && !address) {
         haptic("error"); shakeField("deliveryAddress"); window.showToast("Укажите адрес доставки"); return;
     }
-    const { subtotal, discount, deliveryCost, total } = window.calcOrderTotals();
+    const { subtotal, discount, deliveryCost, bonusUsed, total } = window.calcOrderTotals();
     if (subtotal < MIN_ORDER_AMOUNT) { haptic("error"); window.showToast(`Минимум ${MIN_ORDER_AMOUNT} ₽ (сейчас ${subtotal} ₽)`); return; }
 
     const formattedUsername = username.startsWith("@") ? username : "@" + username;
@@ -1017,6 +1100,7 @@ window.checkoutVapeOrder = function () {
     const totalsBlock =
         `🧾 Товары: ${fmt(subtotal)} ₽\n` +
         (discount > 0 ? `🎁 Скидка (${escHtml(promoLabel)}): −${fmt(discount)} ₽\n` : "") +
+        (bonusUsed > 0 ? `💎 Баллами: −${fmt(bonusUsed)} ₽\n` : "") +
         (isPickup ? "" : `🚚 Доставка: ${deliveryCost > 0 ? fmt(deliveryCost) + " ₽" : "бесплатно 🎉"}\n`);
 
     const adminText =
@@ -1044,13 +1128,16 @@ window.checkoutVapeOrder = function () {
         `📊 Статус: <b>🆕 Новый</b>`;
 
     const kb = { inline_keyboard: [
-        [ { text: "✅ Принять", callback_data: `st_accept_${orderData.order_id}_${customerId}` },
-          { text: "📦 В сборке", callback_data: `st_pack_${orderData.order_id}_${customerId}` } ],
-        [ { text: "🚚 Отправлен", callback_data: `st_ship_${orderData.order_id}_${customerId}` },
-          { text: "🎯 Выполнен", callback_data: `st_done_${orderData.order_id}_${customerId}` } ],
-        [ { text: "❌ Отменить заказ", callback_data: `st_cancel_${orderData.order_id}_${customerId}` } ]
+        [ { text: "✅ Принять", callback_data: `st_accept_${orderData.order_id}_${customerId}_${total}` },
+          { text: "📦 В сборке", callback_data: `st_pack_${orderData.order_id}_${customerId}_${total}` } ],
+        [ { text: "🚚 Отправлен", callback_data: `st_ship_${orderData.order_id}_${customerId}_${total}` },
+          { text: "🎯 Выполнен", callback_data: `st_done_${orderData.order_id}_${customerId}_${total}` } ],
+        [ { text: "❌ Отменить заказ", callback_data: `st_cancel_${orderData.order_id}_${customerId}_${total}` } ]
     ]};
     if (customerId) kb.inline_keyboard.push([{ text: "📞 Связаться с клиентом", url: "tg://user?id=" + customerId }]);
+
+    // баллы: начисляем 5% от реально потраченных на товары денег
+    const bonusEarned = Math.max(0, Math.round((subtotal - discount - bonusUsed) * BONUS_RATE));
 
     window.showToast("Отправляем заказ…");
     notifyAdmins(adminText, kb).then(() => {
@@ -1062,20 +1149,27 @@ window.checkoutVapeOrder = function () {
                 `🛒 <b>Ваш заказ</b>\n` +
                 `<blockquote>${escHtml(itemsList)}</blockquote>\n\n` +
                 totalsBlock +
-                `\n💰 <b>К оплате: ${fmt(total)} ₽</b>\n\n` +
-                `📍 ${isPickup ? "Самовывоз: " : "Доставка: "}${escHtml(orderData.address)}\n\n` +
+                `\n💰 <b>К оплате: ${fmt(total)} ₽</b>\n` +
+                (bonusEarned > 0 ? `💎 Начислено ${fmt(bonusEarned)} баллов\n` : "") +
+                `\n📍 ${isPickup ? "Самовывоз: " : "Доставка: "}${escHtml(orderData.address)}\n\n` +
                 `🧑‍💻 Наш директор @${MANAGER_TG} свяжется с вами для подтверждения.\n` +
                 `🔔 Мы пришлём уведомление, когда статус заказа изменится!`
             ).catch(() => {});
         }
         haptic("success");
+        // списываем потраченные баллы и начисляем новые
+        bonusSet(bonusGet() - bonusUsed + bonusEarned);
+        window.bonusApplied = false;
         window.saveOrderToHistory(orderData);
         window.referralDiscountActive = false;
         localStorage.setItem("vapeRefUsed", "1");
         window.cart = []; window.appliedPromo = null;
         window.updateCartCounters();
+        window.updateBonusUI();
         window.showConfetti();
-        window.showToast("✅ Заказ #" + orderData.order_id + " отправлен!");
+        window.showToast(bonusEarned > 0
+            ? `✅ Заказ #${orderData.order_id} отправлен! +${fmt(bonusEarned)} баллов 💎`
+            : `✅ Заказ #${orderData.order_id} отправлен!`);
         setTimeout(() => {
             try { if (window.tg && window.tg.close) { window.tg.close(); return; } } catch (e) {}
             window.closeVapeCart();

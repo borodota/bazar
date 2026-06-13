@@ -98,6 +98,14 @@
             <div class="profile-handle" id="profileHandle">@vapebazar</div>
         </div>
         <div class="profile-actions">
+            <div class="profile-card bonus-profile-card" onclick="window.openBonusInfo()">
+                <div class="pc-icon" style="background:rgba(160,107,255,0.12);color:#a06bff;">💎</div>
+                <div class="pc-text">
+                    <div class="pc-title">Бонусные баллы</div>
+                    <div class="pc-sub"><b id="profileBonusBalance">0</b> баллов · 1 балл = 1 ₽</div>
+                </div>
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="m9 18 6-6-6-6"/></svg>
+            </div>
             <div class="profile-card" onclick="window.openSpecialOrder()">
                 <div class="pc-icon" style="background:rgba(255,45,85,0.10);color:#ff2d55;">📦</div>
                 <div class="pc-text">
@@ -239,6 +247,17 @@
                     </div>
                     <div id="promoMessage" class="promo-message"></div>
 
+                    <div id="bonusRow" class="bonus-row" style="display:none;" onclick="window.toggleBonusRedeem()">
+                        <div class="bonus-row-left">
+                            <span class="bonus-row-icon">💎</span>
+                            <div>
+                                <div class="bonus-row-title">Списать баллы</div>
+                                <div class="bonus-row-sub" id="bonusRowSub">Доступно 0 ₽</div>
+                            </div>
+                        </div>
+                        <div class="bonus-toggle" id="bonusToggle"><div class="bonus-toggle-knob"></div></div>
+                    </div>
+
                     <div class="section-label">Контактные данные</div>
                     <div class="input-icon-group">
                         <span class="input-icon">@</span>
@@ -282,6 +301,7 @@
                     </div>
                     <div class="summary-row"><span>Товары</span><span id="sumSubtotal">0 ₽</span></div>
                     <div class="summary-row" id="sumDiscountRow" style="display:none;"><span style="color:var(--neon-green);">Скидка</span><span id="sumDiscount" style="color:var(--neon-green);">0 ₽</span></div>
+                    <div class="summary-row" id="sumBonusRow" style="display:none;"><span style="color:#a06bff;">Баллы</span><span id="sumBonus" style="color:#a06bff;">0 ₽</span></div>
                     <div class="summary-row" id="sumDeliveryRow" style="display:none;"><span>Доставка</span><span id="sumDelivery">0 ₽</span></div>
                 </div>
                 <div id="minOrderNote" class="min-order-note" style="display:none;"></div>

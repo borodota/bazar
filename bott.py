@@ -7,7 +7,7 @@ from aiogram.filters import Command
 from aiogram.enums import ParseMode
 import asyncio
 import json
-from datetime import datetime
+from datetime import datetime, timedelta
 import os
 import sys
 
@@ -37,6 +37,74 @@ bot = Bot(token=SHOP_BOT_TOKEN, default=DefaultBotProperties(parse_mode=ParseMod
 storage = MemoryStorage()
 dp = Dispatcher(storage=storage)
 
+# ==================== ХРАНИЛИЩЕ (JSON-файлы рядом с ботом) ====================
+DATA_DIR = os.path.dirname(os.path.abspath(__file__))
+SUBSCRIBERS_FILE = os.path.join(DATA_DIR, "subscribers.json")  # кому слать рассылку
+ORDERS_FILE = os.path.join(DATA_DIR, "orders_log.json")        # журнал заказов для /orders и /stats
+
+ADMINS = set([ADMIN_ID] + DEPUTY_ADMIN_IDS)
+
+def _load_json(path, default):
+    try:
+        with open(path, "r", encoding="utf-8") as f:
+            return json.load(f)
+    except (FileNotFoundError, json.JSONDecodeError):
+        return default
+    except Exception as e:
+        logger.error(f"Не удалось прочитать {path}: {e}")
+        return default
+
+def _save_json(path, data):
+    try:
+        with open(path, "w", encoding="utf-8") as f:
+            json.dump(data, f, ensure_ascii=False, indent=2)
+    except Exception as e:
+        logger.error(f"Не удалось сохранить {path}: {e}")
+
+def remember_user(user):
+    """Запоминает любого, кто взаимодействовал с ботом, — это база для рассылки."""
+    if not user:
+        return
+    subs = _load_json(SUBSCRIBERS_FILE, {})
+    subs[str(user.id)] = {
+        "name": user.first_name or "",
+        "username": user.username or "",
+        "ts": datetime.now().isoformat(timespec="seconds"),
+    }
+    _save_json(SUBSCRIBERS_FILE, subs)
+
+def log_order(order_id, customer_id, total, action, status_label):
+    """Создаёт/обновляет запись заказа в журнале. Вызывается при создании заказа
+    (путь sendData) и при каждой смене статуса кнопкой (путь Bot API из браузера)."""
+    orders = _load_json(ORDERS_FILE, [])
+    now = datetime.now().isoformat(timespec="seconds")
+    rec = next((o for o in orders if str(o.get("order_id")) == str(order_id)), None)
+    if rec is None:
+        rec = {
+            "order_id": str(order_id),
+            "customer_id": str(customer_id or ""),
+            "total": int(total or 0),
+            "created_at": now,
+        }
+        orders.append(rec)
+    if total and not rec.get("total"):
+        rec["total"] = int(total)
+    if customer_id and not rec.get("customer_id"):
+        rec["customer_id"] = str(customer_id)
+    rec["status"] = action
+    rec["status_label"] = status_label
+    rec["updated_at"] = now
+    # держим журнал компактным
+    if len(orders) > 500:
+        orders = orders[-500:]
+    _save_json(ORDERS_FILE, orders)
+
+def _fmt_money(n):
+    try:
+        return f"{int(n):,}".replace(",", " ")
+    except (TypeError, ValueError):
+        return "0"
+
 def get_main_keyboard():
     web_app_url = "https://borodota.github.io/bazar/"  
     return ReplyKeyboardMarkup(
@@ -51,6 +119,7 @@ def get_main_keyboard():
 @dp.message(F.web_app_data)
 async def handle_web_app_order(message: types.Message):
     logger.info(f"Получены данные из WebApp: {message.web_app_data.data}")
+    remember_user(message.from_user)
     try:
         raw_string = message.web_app_data.data
         
@@ -187,20 +256,23 @@ async def handle_web_app_order(message: types.Message):
         customer_id = message.from_user.id
         kb = InlineKeyboardMarkup(inline_keyboard=[
             [
-                InlineKeyboardButton(text="✅ Принять", callback_data=f"st_accept_{order_id}_{customer_id}"),
-                InlineKeyboardButton(text="📦 В сборке", callback_data=f"st_pack_{order_id}_{customer_id}")
+                InlineKeyboardButton(text="✅ Принять", callback_data=f"st_accept_{order_id}_{customer_id}_{final_total}"),
+                InlineKeyboardButton(text="📦 В сборке", callback_data=f"st_pack_{order_id}_{customer_id}_{final_total}")
             ],
             [
-                InlineKeyboardButton(text="🚚 Отправлен", callback_data=f"st_ship_{order_id}_{customer_id}"),
-                InlineKeyboardButton(text="🎯 Выполнен", callback_data=f"st_done_{order_id}_{customer_id}")
+                InlineKeyboardButton(text="🚚 Отправлен", callback_data=f"st_ship_{order_id}_{customer_id}_{final_total}"),
+                InlineKeyboardButton(text="🎯 Выполнен", callback_data=f"st_done_{order_id}_{customer_id}_{final_total}")
             ],
             [
-                InlineKeyboardButton(text="❌ Отменить заказ", callback_data=f"st_cancel_{order_id}_{customer_id}")
+                InlineKeyboardButton(text="❌ Отменить заказ", callback_data=f"st_cancel_{order_id}_{customer_id}_{final_total}")
             ],
             [
                 InlineKeyboardButton(text="📞 Связаться с клиентом", url=f"tg://user?id={customer_id}")
             ]
         ])
+
+        # Заказ из sendData приходит с полными данными — сразу пишем его в журнал
+        log_order(order_id, customer_id, final_total, "new", "🆕 Новый")
 
         all_chats = set([ADMIN_ID] + DEPUTY_ADMIN_IDS)
         for chat_id in all_chats:
@@ -224,6 +296,7 @@ async def change_order_status(callback: types.CallbackQuery):
     action = parts[1] if len(parts) > 1 else ""
     order_id = parts[2] if len(parts) > 2 else "?"
     customer_id = parts[3] if len(parts) > 3 else None
+    total = parts[4] if len(parts) > 4 else 0
 
     statuses = {
         "accept": "Принят в работу 🟡",
@@ -233,6 +306,10 @@ async def change_order_status(callback: types.CallbackQuery):
         "cancel": "Отменен администратором ❌"
     }
     new_status = statuses.get(action, "Изменен")
+
+    # Фиксируем заказ в журнале (для заказов из браузера это первый момент,
+    # когда бот узнаёт о заказе — данные берём из callback_data).
+    log_order(order_id, customer_id, total, action, new_status)
 
     # html_text сохраняет жирный шрифт и форматирование при редактировании
     text = callback.message.html_text or callback.message.text or ""
@@ -270,10 +347,116 @@ async def change_order_status(callback: types.CallbackQuery):
 
 @dp.message(Command("start"))
 async def cmd_start(message: types.Message):
+    remember_user(message.from_user)
     await message.answer(
         f"Привет, {message.from_user.first_name}! Добро пожаловать в магазин <b>VAPEBAZAR PREMIUM</b>.\n"
         f"Нажми кнопку ниже, чтобы войти в каталог.",
         reply_markup=get_main_keyboard()
+    )
+    if message.from_user.id in ADMINS:
+        await message.answer(
+            "🛠 <b>Команды администратора</b>\n"
+            "├ /stats — статистика и выручка\n"
+            "├ /orders — последние заказы\n"
+            "└ /broadcast <i>текст</i> — рассылка всем подписчикам"
+        )
+
+
+@dp.message(Command("broadcast"))
+async def cmd_broadcast(message: types.Message):
+    if message.from_user.id not in ADMINS:
+        return  # для не-админов команда просто не существует
+    text = message.text.partition(" ")[2].strip()
+    if not text:
+        await message.answer(
+            "📣 <b>Рассылка</b>\n\n"
+            "Использование: <code>/broadcast текст сообщения</code>\n"
+            "Можно с HTML: <code>&lt;b&gt;жирный&lt;/b&gt;</code>, <code>&lt;i&gt;курсив&lt;/i&gt;</code>.\n\n"
+            "Получат все, кто хоть раз запускал бота."
+        )
+        return
+    subs = _load_json(SUBSCRIBERS_FILE, {})
+    ids = []
+    for uid in subs.keys():
+        try:
+            ids.append(int(uid))
+        except (TypeError, ValueError):
+            continue
+    if not ids:
+        await message.answer("📭 Пока нет ни одного подписчика для рассылки.")
+        return
+    await message.answer(f"📤 Рассылаю {len(ids)} получателям…")
+    sent = failed = 0
+    for uid in ids:
+        try:
+            await bot.send_message(chat_id=uid, text=text, reply_markup=get_main_keyboard())
+            sent += 1
+        except Exception as e:
+            failed += 1
+            logger.warning(f"Рассылка → {uid} не доставлена: {e}")
+        await asyncio.sleep(0.05)  # ~20 сообщений/сек — в пределах лимитов Telegram
+    await message.answer(
+        f"✅ <b>Рассылка завершена</b>\n"
+        f"├ Доставлено: <b>{sent}</b>\n"
+        f"└ Не доставлено: <b>{failed}</b>"
+    )
+
+
+@dp.message(Command("orders"))
+async def cmd_orders(message: types.Message):
+    if message.from_user.id not in ADMINS:
+        return
+    orders = _load_json(ORDERS_FILE, [])
+    if not orders:
+        await message.answer(
+            "📭 Журнал заказов пуст.\n\n"
+            "<i>Заказ попадает в журнал, когда он приходит через кнопку «Открыть Магазин» "
+            "или когда вы жмёте кнопку статуса под уведомлением о заказе.</i>"
+        )
+        return
+    recent = sorted(orders, key=lambda o: o.get("updated_at", ""), reverse=True)[:15]
+    lines = ["🧾 <b>Последние заказы</b>", "━━━━━━━━━━━━━━━━━━━━━━━━"]
+    for o in recent:
+        total = o.get("total") or 0
+        total_txt = f"{_fmt_money(total)} ₽" if total else "—"
+        lines.append(f"<b>#{o.get('order_id')}</b> · {total_txt}\n     {o.get('status_label', '—')}")
+    await message.answer("\n".join(lines))
+
+
+@dp.message(Command("stats"))
+async def cmd_stats(message: types.Message):
+    if message.from_user.id not in ADMINS:
+        return
+    orders = _load_json(ORDERS_FILE, [])
+    subs = _load_json(SUBSCRIBERS_FILE, {})
+    now = datetime.now()
+    today = now.date()
+    week_ago = now - timedelta(days=7)
+
+    def _created(o):
+        try:
+            return datetime.fromisoformat(o.get("created_at"))
+        except (TypeError, ValueError):
+            return None
+
+    active = [o for o in orders if o.get("status") != "cancel"]  # отменённые не считаем в выручке
+
+    def _revenue(items):
+        return sum(int(o.get("total") or 0) for o in items)
+
+    today_orders = [o for o in active if (_created(o) and _created(o).date() == today)]
+    week_orders = [o for o in active if (_created(o) and _created(o) >= week_ago)]
+    cancelled = sum(1 for o in orders if o.get("status") == "cancel")
+
+    await message.answer(
+        "📊 <b>Статистика VAPEBAZAR</b>\n"
+        "━━━━━━━━━━━━━━━━━━━━━━━━\n\n"
+        f"📅 <b>Сегодня:</b> {len(today_orders)} зак. · {_fmt_money(_revenue(today_orders))} ₽\n"
+        f"🗓 <b>За 7 дней:</b> {len(week_orders)} зак. · {_fmt_money(_revenue(week_orders))} ₽\n"
+        f"📦 <b>Всего:</b> {len(orders)} зак. · {_fmt_money(_revenue(active))} ₽\n"
+        f"❌ <b>Отменено:</b> {cancelled}\n"
+        f"👥 <b>Подписчиков:</b> {len(subs)}\n\n"
+        "<i>В журнал попадают заказы из кнопки магазина и те, по которым вы нажимали статус.</i>"
     )
 
 @dp.message(F.text == "📞 Контакты")
@@ -305,6 +488,7 @@ async def show_my_orders(message: types.Message):
 # Гарантирует, что бот отвечает на ЛЮБОЕ сообщение (удобно для проверки, что бот жив).
 @dp.message()
 async def fallback_any_message(message: types.Message):
+    remember_user(message.from_user)
     logger.info(f"Сообщение без обработчика от {message.from_user.id} (@{message.from_user.username}): {message.text!r}")
     await message.answer(
         "Я понимаю только кнопки меню 👇\n"

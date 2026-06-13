@@ -811,3 +811,43 @@ body:not(.tab-active-profile) .profile-avatar-ring { animation: none; }
 /* ── TOAST — диссмис по тапу ── */
 .toast-notification { cursor: pointer; user-select: none; }
 .profile-card svg { color: var(--text-secondary); flex-shrink: 0; }
+
+/* ── БОНУСНАЯ ПРОГРАММА ── */
+.bonus-profile-card {
+    background: linear-gradient(135deg, rgba(160,107,255,0.10), rgba(160,107,255,0.02));
+    border-color: rgba(160,107,255,0.22);
+}
+.bonus-profile-card #profileBonusBalance { color: #b58cff; }
+
+.bonus-row {
+    display: flex; align-items: center; justify-content: space-between;
+    gap: 12px; margin: 4px 0 14px;
+    padding: 12px 14px; border-radius: 14px;
+    background: linear-gradient(135deg, rgba(160,107,255,0.10), rgba(160,107,255,0.03));
+    border: 1px solid rgba(160,107,255,0.22);
+    cursor: pointer; user-select: none;
+    transition: border-color var(--t-fast) var(--ease-out), transform var(--t-fast) var(--ease-out);
+}
+.bonus-row:active { transform: scale(0.985); }
+.bonus-row-left { display: flex; align-items: center; gap: 11px; min-width: 0; }
+.bonus-row-icon { font-size: 20px; line-height: 1; }
+.bonus-row-title { font-size: 13.5px; font-weight: 700; color: #fff; }
+.bonus-row-sub { font-size: 11.5px; color: #b58cff; margin-top: 2px; }
+
+.bonus-toggle {
+    flex-shrink: 0; width: 46px; height: 27px; border-radius: 14px;
+    background: rgba(255,255,255,0.10); border: 1px solid var(--border);
+    position: relative; transition: background var(--t-mid) var(--ease-out), border-color var(--t-mid);
+}
+.bonus-toggle-knob {
+    position: absolute; top: 2px; left: 2px; width: 21px; height: 21px;
+    border-radius: 50%; background: #fff;
+    transition: transform var(--t-mid) var(--ease-spring);
+    box-shadow: 0 1px 4px rgba(0,0,0,0.4);
+}
+.bonus-toggle.on {
+    background: linear-gradient(135deg, #a06bff, #7d4fff);
+    border-color: rgba(160,107,255,0.5);
+    box-shadow: 0 0 12px rgba(160,107,255,0.35);
+}
+.bonus-toggle.on .bonus-toggle-knob { transform: translateX(19px); }
