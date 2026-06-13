@@ -171,7 +171,13 @@ document.addEventListener("DOMContentLoaded", () => {
     window.updateCartCounters();
     window.initReferralCode();
     window.checkIncomingReferral();
-    window.checkOnboarding();
+    window.startHeroTimer();
+    // сначала возрастной гейт, онбординг — только после подтверждения 18+
+    if (window.ageVerified()) {
+        window.checkOnboarding();
+    } else {
+        window.showAgeGate();
+    }
 
     if (window.tg) {
         window.tg.ready();
@@ -1470,6 +1476,52 @@ window.updateFilterChips = function () {
     } else {
         document.querySelectorAll(`.filter-chip[data-value="${window.currentSort}"], .filter-chip[data-value="${window.currentFilter}"]`).forEach(b => b.classList.add("active"));
     }
+};
+
+// ── ВОЗРАСТНОЙ ГЕЙТ 18+ ──
+window.ageVerified = function () { return localStorage.getItem("vapeAgeVerified") === "1"; };
+
+window.showAgeGate = function () {
+    const g = document.getElementById("ageGate");
+    if (!g) return;
+    g.style.display = "flex";
+    requestAnimationFrame(() => g.classList.add("active"));
+};
+
+window.confirmAge = function () {
+    haptic("success");
+    localStorage.setItem("vapeAgeVerified", "1");
+    const g = document.getElementById("ageGate");
+    if (g) {
+        g.classList.remove("active");
+        setTimeout(() => { g.style.display = "none"; }, 350);
+    }
+    window.checkOnboarding();  // онбординг — только после подтверждения возраста
+};
+
+window.denyAge = function () {
+    haptic("error");
+    const box = document.getElementById("ageGateBox");
+    if (box) box.innerHTML =
+        '<div class="ob-emoji">🚫</div>' +
+        '<div class="ob-title">Доступ запрещён</div>' +
+        '<div class="ob-sub">Магазин доступен только лицам старше 18 лет.<br>Возвращайтесь, когда вам исполнится 18.</div>';
+};
+
+// ── ТАЙМЕР АКЦИИ НА HERO-БАННЕРЕ (отсчёт до конца дня) ──
+window.startHeroTimer = function () {
+    const clock = document.getElementById("heroTimerClock");
+    if (!clock) return;
+    const pad = (n) => String(n).padStart(2, "0");
+    function tick() {
+        const now = new Date();
+        const end = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 23, 59, 59);
+        const diff = Math.max(0, Math.floor((end - now) / 1000));
+        clock.textContent = `${pad(Math.floor(diff / 3600))}:${pad(Math.floor((diff % 3600) / 60))}:${pad(diff % 60)}`;
+    }
+    tick();
+    if (window._heroTimerInt) clearInterval(window._heroTimerInt);
+    window._heroTimerInt = setInterval(tick, 1000);
 };
 
 // ── ОНБОРДИНГ ──

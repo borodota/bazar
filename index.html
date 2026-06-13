@@ -39,6 +39,10 @@
                 <div class="hero-tag">🎁 Промокод для новичков</div>
                 <div class="hero-title">НОВИЧОК10</div>
                 <div class="hero-sub">Скидка 10% на первый заказ</div>
+                <div class="hero-timer">
+                    <span class="ht-label">⏳ Сгорит через</span>
+                    <span class="ht-clock" id="heroTimerClock">00:00:00</span>
+                </div>
             </div>
         </div>
 
@@ -326,6 +330,18 @@
                 <div class="obp-hint">Скидка 10% на первый заказ</div>
             </div>
             <button class="action-btn structural-success-btn" onclick="window.closeOnboarding()">Начать покупки →</button>
+        </div>
+    </div>
+
+    <!-- ВОЗРАСТНОЙ ГЕЙТ 18+ -->
+    <div id="ageGate" class="onboarding-overlay age-gate" style="display:none;">
+        <div class="onboarding-box" id="ageGateBox">
+            <div class="ob-emoji">🔞</div>
+            <div class="ob-title">Вам есть 18 лет?</div>
+            <div class="ob-sub">Товары на этом сайте содержат никотин и предназначены только для совершеннолетних. Продажа лицам младше 18 лет запрещена.</div>
+            <button class="action-btn structural-success-btn" onclick="window.confirmAge()">Да, мне есть 18</button>
+            <button class="age-deny-btn" onclick="window.denyAge()">Мне нет 18</button>
+            <div class="age-warning">⚠️ Никотин — сильнодействующее вещество, вызывающее зависимость.</div>
         </div>
     </div>
 
