@@ -47,10 +47,23 @@ const ORDER_ADMIN_IDS = [6163521938, 5289357165];
 const MANAGER_TG = "BORO_DOTA";
 
 // ── БОНУСНАЯ ПРОГРАММА ──
-const BONUS_RATE = 0.05;        // 5% от потраченного начисляется баллами
+const BONUS_RATE = 0.05;        // базовый % (Бронза); реальный % зависит от уровня
 const BONUS_MAX_REDEEM = 0.30;  // баллами можно оплатить не больше 30% заказа
 const BONUS_KEY = "vapeBonus";
 window.bonusApplied = false;    // списывает ли клиент баллы в текущем заказе
+
+// ── УРОВНИ КЛИЕНТА (по сумме всех покупок) ──
+const SPENT_KEY = "vapeTotalSpent";
+const LEVELS = [
+    { key: "bronze",   name: "Бронза",   min: 0,     rate: 0.05, icon: "🥉", color: "#cd7f32" },
+    { key: "silver",   name: "Серебро",  min: 5000,  rate: 0.07, icon: "🥈", color: "#c7cdd6" },
+    { key: "gold",     name: "Золото",   min: 15000, rate: 0.10, icon: "🥇", color: "#ffd166" },
+    { key: "platinum", name: "Платина",  min: 40000, rate: 0.12, icon: "💠", color: "#7df9ff" }
+];
+
+// ── ВРЕМЯ РАБОТЫ МАГАЗИНА ──
+const SHOP_OPEN_HOUR = 10;   // открытие 10:00
+const SHOP_CLOSE_HOUR = 22;  // закрытие 22:00
 
 function escHtml(s) {
     return String(s == null ? "" : s).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
@@ -144,6 +157,54 @@ function bonusSyncFromCloud(cb) {
     if (cb) cb();
 }
 
+// ── УРОВНИ: сумма всех покупок ──
+function spentGet() {
+    const v = parseInt(localStorage.getItem(SPENT_KEY) || "0", 10);
+    return (isNaN(v) || v < 0) ? 0 : v;
+}
+function spentAdd(amount) {
+    const v = spentGet() + Math.max(0, Math.round(amount || 0));
+    localStorage.setItem(SPENT_KEY, String(v));
+    try {
+        if (window.tg && window.tg.CloudStorage && window.tg.CloudStorage.setItem) {
+            window.tg.CloudStorage.setItem(SPENT_KEY, String(v), function () {});
+        }
+    } catch (e) {}
+    return v;
+}
+function spentSyncFromCloud(cb) {
+    try {
+        if (window.tg && window.tg.CloudStorage && window.tg.CloudStorage.getItem) {
+            window.tg.CloudStorage.getItem(SPENT_KEY, function (err, val) {
+                if (!err && val != null && val !== "") {
+                    const cloud = parseInt(val, 10);
+                    if (!isNaN(cloud) && cloud > spentGet()) localStorage.setItem(SPENT_KEY, String(cloud));
+                }
+                if (cb) cb();
+            });
+            return;
+        }
+    } catch (e) {}
+    if (cb) cb();
+}
+function currentLevel() {
+    const s = spentGet();
+    let lvl = LEVELS[0];
+    for (const l of LEVELS) if (s >= l.min) lvl = l;
+    return lvl;
+}
+function nextLevel() {
+    const s = spentGet();
+    return LEVELS.find(l => l.min > s) || null;
+}
+function bonusRate() { return currentLevel().rate; }
+
+// ── СНАПШОТЫ ЦЕН ДЛЯ ИЗБРАННОГО (уведомление о снижении) ──
+function wishPricesGet() {
+    try { return JSON.parse(localStorage.getItem("vapeWishPrices") || "{}"); } catch (e) { return {}; }
+}
+function wishPricesSet(m) { localStorage.setItem("vapeWishPrices", JSON.stringify(m)); }
+
 // ── ИНИЦИАЛИЗАЦИЯ ──
 window.initVapeApp = function () {
     let raw = window.VAPE_PRODUCTS || window.products;
@@ -154,6 +215,7 @@ window.initVapeApp = function () {
             window.showSkeletons(6);
             window.renderCategories();
             window.renderFeatured();
+            window.renderCombos();
             requestAnimationFrame(() => window.renderProducts(window.products));
         }
     } else {
@@ -195,6 +257,11 @@ document.addEventListener("DOMContentLoaded", () => {
     }
     window.setupProfile();
     bonusSyncFromCloud(() => window.updateBonusUI());
+    spentSyncFromCloud(() => window.updateLevelUI());
+    window.renderShopStatus();
+    setInterval(window.renderShopStatus, 60000);
+    window.checkWishlistPriceDrops();
+    window.checkAbandonedCart();
     window.switchTab("catalog");
     let scrollTicking = false;
     window.addEventListener("scroll", () => {
@@ -280,7 +347,7 @@ window.switchTab = function (target) {
     document.body.classList.add("tab-active-" + target);
     if (target === "wishlist") window.renderWishlistPage();
     if (target === "history") window.renderHistoryPage();
-    if (target === "profile") window.updateBonusUI();
+    if (target === "profile") { window.updateBonusUI(); window.updateLevelUI(); }
     window.scrollTo({ top: 0, behavior: "instant" });
     if (window.tg && window.tg.HapticFeedback) {
         try { window.tg.HapticFeedback.selectionChanged(); } catch(e) {}
@@ -473,6 +540,107 @@ window.renderFeatured = function () {
         }
         list.appendChild(card);
     });
+};
+
+// ── ВЫГОДНЫЕ НАБОРЫ (КОМБО) ──
+window.renderCombos = function () {
+    const section = document.getElementById("combosSection");
+    const list = document.getElementById("combosList");
+    if (!section || !list) return;
+    const combos = window.VAPE_COMBOS || [];
+    if (!combos.length) { section.style.display = "none"; return; }
+    section.style.display = "block";
+    list.innerHTML = "";
+    combos.forEach(c => {
+        const save = (c.oldPrice || 0) - c.price;
+        const card = document.createElement("div");
+        card.className = "combo-card";
+        card.innerHTML = `
+            <div class="combo-top">
+                <span class="combo-emoji">${c.emoji || "🎁"}</span>
+                ${save > 0 ? `<span class="combo-save">выгода ${fmt(save)} ₽</span>` : ""}
+            </div>
+            <div class="combo-name">${c.name}</div>
+            <div class="combo-items">${(c.items || []).map(i => "• " + i).join("<br>")}</div>
+            <div class="combo-footer">
+                <div class="combo-prices">
+                    ${c.oldPrice ? `<span class="combo-old">${fmt(c.oldPrice)} ₽</span>` : ""}
+                    <span class="combo-price">${fmt(c.price)} ₽</span>
+                </div>
+                <button class="combo-add" onclick="window.addCombo('${c.id}')">В корзину</button>
+            </div>`;
+        list.appendChild(card);
+    });
+};
+
+window.addCombo = function (comboId) {
+    const c = (window.VAPE_COMBOS || []).find(x => x.id === comboId);
+    if (!c) return;
+    haptic("success");
+    const existing = window.cart.find(i => i.id === c.id);
+    if (existing) existing.quantity += 1;
+    else window.cart.push({
+        id: c.id,
+        name: (c.emoji ? c.emoji + " " : "") + c.name,
+        price: c.price,
+        flavor: "Набор: " + (c.items || []).join(", "),
+        quantity: 1
+    });
+    window.updateCartCounters();
+    window.animateFlyToCart();
+    window.showToast("Набор добавлен в корзину 🎁");
+};
+
+// ── СТАТУС МАГАЗИНА (открыто/закрыто по времени) ──
+window.getShopStatus = function () {
+    const h = new Date().getHours();
+    const open = h >= SHOP_OPEN_HOUR && h < SHOP_CLOSE_HOUR;
+    return {
+        open,
+        text: open ? "Открыто" : "Закрыто",
+        sub: open ? `до ${SHOP_CLOSE_HOUR}:00` : `с ${SHOP_OPEN_HOUR}:00`
+    };
+};
+window.renderShopStatus = function () {
+    const el = document.getElementById("shopStatus");
+    if (!el) return;
+    const s = window.getShopStatus();
+    el.className = "shop-status " + (s.open ? "open" : "closed");
+    el.innerHTML = `<span class="ss-dot"></span><span class="ss-text">${s.text}</span><span class="ss-sub">${s.sub}</span>`;
+};
+
+// ── ДОЖИМ БРОШЕННОЙ КОРЗИНЫ ──
+window.checkAbandonedCart = function () {
+    const banner = document.getElementById("cartReminder");
+    if (!banner) return;
+    const ts = parseInt(localStorage.getItem("vapeCartTs") || "0", 10);
+    // показываем, если корзина не пуста и заполнена больше 20 минут назад (значит уходил и вернулся)
+    if (window.cart.length > 0 && ts && (Date.now() - ts > 20 * 60 * 1000)) {
+        const { total } = window.calcOrderTotals();
+        const qty = window.cart.reduce((s, i) => s + i.quantity, 0);
+        const txt = document.getElementById("cartReminderText");
+        if (txt) txt.innerHTML = `🛒 В корзине <b>${qty} ${window.plural(qty, "товар", "товара", "товаров")}</b> на <b>${fmt(total)} ₽</b> — заверши заказ!`;
+        banner.style.display = "flex";
+    }
+};
+window.dismissCartReminder = function () {
+    const b = document.getElementById("cartReminder");
+    if (b) b.style.display = "none";
+};
+
+// ── УВЕДОМЛЕНИЕ О СНИЖЕНИИ ЦЕНЫ В ИЗБРАННОМ ──
+window.checkWishlistPriceDrops = function () {
+    const snaps = wishPricesGet();
+    let dropped = 0;
+    (window.wishlist || []).forEach(id => {
+        const p = window.products.find(x => x.id === id);
+        if (p && snaps[id] != null && p.price < snaps[id]) dropped++;
+    });
+    if (dropped > 0) {
+        setTimeout(() => window.showToast(`🔻 Цена снизилась на ${dropped} ${window.plural(dropped, "товаре", "товарах", "товарах")} из избранного!`, 4500), 1200);
+        const wishTab = document.querySelector('.tab-btn[data-target="wishlist"]');
+        if (wishTab && !wishTab.classList.contains("active")) wishTab.style.color = "var(--neon-green)";
+    }
 };
 
 // ── СКЕЛЕТОН-КАРТОЧКИ ──
@@ -733,6 +901,14 @@ window.updateCartCounters = function () {
     const bar = document.getElementById("cartBar");
     if (bar) bar.classList.toggle("hidden", qty === 0);
     try { localStorage.setItem("vapeCart", JSON.stringify(window.cart)); } catch(e) {}
+    // отметка времени для «дожима» брошенной корзины
+    try {
+        if (window.cart.length > 0) {
+            if (!localStorage.getItem("vapeCartTs")) localStorage.setItem("vapeCartTs", String(Date.now()));
+        } else {
+            localStorage.removeItem("vapeCartTs");
+        }
+    } catch (e) {}
 };
 
 window.plural = function (n, one, few, many) {
@@ -882,9 +1058,39 @@ window.toggleBonusRedeem = function () {
 
 window.openBonusInfo = function () {
     const bal = bonusGet();
+    const rate = Math.round(bonusRate() * 100);
     window.showToast(bal > 0
-        ? `💎 У вас ${fmt(bal)} баллов. Списывайте до 30% заказа прямо в корзине. За каждый заказ +5% баллами.`
-        : `💎 Бонусы копятся с заказов: +5% баллами. 1 балл = 1 ₽, можно оплатить до 30% заказа.`, 4500);
+        ? `💎 У вас ${fmt(bal)} баллов. Списывайте до 30% заказа в корзине. Ваш уровень даёт +${rate}% баллами с заказа.`
+        : `💎 Бонусы копятся с заказов: +${rate}% баллами. 1 балл = 1 ₽, можно оплатить до 30% заказа.`, 4500);
+};
+
+// ── УРОВЕНЬ КЛИЕНТА В ПРОФИЛЕ ──
+window.updateLevelUI = function () {
+    const lvl = currentLevel();
+    const next = nextLevel();
+    const spent = spentGet();
+    const card = document.getElementById("levelCard");
+    if (!card) return;
+
+    const iconEl = document.getElementById("levelIcon");
+    const nameEl = document.getElementById("levelName");
+    const rateEl = document.getElementById("levelRate");
+    const barEl = document.getElementById("levelProgress");
+    const hintEl = document.getElementById("levelHint");
+
+    if (iconEl) iconEl.innerText = lvl.icon;
+    if (nameEl) { nameEl.innerText = lvl.name; nameEl.style.color = lvl.color; }
+    if (rateEl) rateEl.innerText = `+${Math.round(lvl.rate * 100)}% баллами`;
+
+    if (next) {
+        const span = next.min - lvl.min;
+        const pct = Math.max(0, Math.min(100, Math.round((spent - lvl.min) / span * 100)));
+        if (barEl) { barEl.style.width = pct + "%"; barEl.style.background = lvl.color; }
+        if (hintEl) hintEl.innerText = `Ещё ${fmt(next.min - spent)} ₽ до уровня «${next.name}»`;
+    } else {
+        if (barEl) { barEl.style.width = "100%"; barEl.style.background = lvl.color; }
+        if (hintEl) hintEl.innerText = "Максимальный уровень — спасибо! 💚";
+    }
 };
 
 window.changeQty = function (idx, delta) {
@@ -1142,8 +1348,8 @@ window.checkoutVapeOrder = function () {
     ]};
     if (customerId) kb.inline_keyboard.push([{ text: "📞 Связаться с клиентом", url: "tg://user?id=" + customerId }]);
 
-    // баллы: начисляем 5% от реально потраченных на товары денег
-    const bonusEarned = Math.max(0, Math.round((subtotal - discount - bonusUsed) * BONUS_RATE));
+    // баллы: % зависит от уровня клиента, считаем от реально потраченных на товары денег
+    const bonusEarned = Math.max(0, Math.round((subtotal - discount - bonusUsed) * bonusRate()));
 
     window.showToast("Отправляем заказ…");
     notifyAdmins(adminText, kb).then(() => {
@@ -1166,6 +1372,9 @@ window.checkoutVapeOrder = function () {
         // списываем потраченные баллы и начисляем новые
         bonusSet(bonusGet() - bonusUsed + bonusEarned);
         window.bonusApplied = false;
+        // копим сумму покупок для уровня (реальные деньги за товары)
+        spentAdd(subtotal - discount);
+        window.updateLevelUI();
         window.saveOrderToHistory(orderData);
         window.referralDiscountActive = false;
         localStorage.setItem("vapeRefUsed", "1");
@@ -1398,13 +1607,18 @@ window.toggleWishlist = function (productId) {
     haptic("light");
     window.wishlist = window.wishlist || [];
     const idx = window.wishlist.indexOf(productId);
+    const snaps = wishPricesGet();
     if (idx === -1) {
         window.wishlist.push(productId);
+        const p = window.products.find(x => x.id === productId);
+        if (p) snaps[productId] = p.price;  // запоминаем цену для отслеживания снижения
         window.showToast("Добавлено в избранное ♥");
     } else {
         window.wishlist.splice(idx, 1);
+        delete snaps[productId];
         window.showToast("Удалено из избранного");
     }
+    wishPricesSet(snaps);
     localStorage.setItem("vapeWishlist", JSON.stringify(window.wishlist));
     document.querySelectorAll(`.wish-btn`).forEach(btn => {
         const onclick = btn.getAttribute("onclick") || "";
@@ -1423,6 +1637,7 @@ window.renderWishlistPage = function () {
         return;
     }
     content.innerHTML = "";
+    const snaps = wishPricesGet();
     window.wishlist.forEach(id => {
         const p = window.products.find(x => x.id === id);
         if (!p) return;
@@ -1430,18 +1645,28 @@ window.renderWishlistPage = function () {
         row.className = "wishlist-item";
         const imgSrc = p.image ? `img/${p.image}` : "";
         const letter = p.name.charAt(0).toUpperCase();
+        const dropped = (snaps[id] != null && p.price < snaps[id]);
+        const priceHtml = dropped
+            ? `<div class="wi-price"><span class="wi-old">${fmt(snaps[id])} ₽</span> <span class="wi-new">${fmt(p.price)} ₽</span> <span class="wi-drop">🔻 −${fmt(snaps[id] - p.price)}</span></div>`
+            : `<div class="wi-price">${fmt(p.price)} ₽</div>`;
         row.innerHTML = `
             <div class="wi-img">${imgSrc ? `<img src="${imgSrc}" alt="" loading="lazy" onerror="this.parentElement.innerText='${letter}'">` : letter}</div>
             <div class="wi-info">
                 <div class="wi-name">${p.name}</div>
                 <div class="wi-brand">${p.brand || ""}</div>
-                <div class="wi-price">${fmt(p.price)} ₽</div>
+                ${priceHtml}
             </div>
             <button class="fc-add" onclick="window.switchTab('catalog');setTimeout(()=>window.handleCardClick('${p.id}'),300)">
                 <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg>
             </button>`;
         content.appendChild(row);
     });
+    // клиент увидел изменения — обновляем снапшоты на текущие цены
+    window.wishlist.forEach(id => {
+        const p = window.products.find(x => x.id === id);
+        if (p) snaps[id] = p.price;
+    });
+    wishPricesSet(snaps);
 };
 
 window.openWishlist = function () { window.switchTab("wishlist"); };

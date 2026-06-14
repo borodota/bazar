@@ -358,7 +358,8 @@ async def cmd_start(message: types.Message):
             "🛠 <b>Команды администратора</b>\n"
             "├ /stats — статистика и выручка\n"
             "├ /orders — последние заказы\n"
-            "└ /broadcast <i>текст</i> — рассылка всем подписчикам"
+            "├ /broadcast <i>текст</i> — рассылка всем подписчикам\n"
+            "└ /broadcast_buyers <i>текст</i> — рассылка только покупателям"
         )
 
 
@@ -397,6 +398,50 @@ async def cmd_broadcast(message: types.Message):
         await asyncio.sleep(0.05)  # ~20 сообщений/сек — в пределах лимитов Telegram
     await message.answer(
         f"✅ <b>Рассылка завершена</b>\n"
+        f"├ Доставлено: <b>{sent}</b>\n"
+        f"└ Не доставлено: <b>{failed}</b>"
+    )
+
+
+@dp.message(Command("broadcast_buyers"))
+async def cmd_broadcast_buyers(message: types.Message):
+    if message.from_user.id not in ADMINS:
+        return
+    text = message.text.partition(" ")[2].strip()
+    if not text:
+        await message.answer(
+            "🎯 <b>Рассылка покупателям</b>\n\n"
+            "Использование: <code>/broadcast_buyers текст</code>\n"
+            "Получат только те, кто уже делал заказ (из журнала)."
+        )
+        return
+    orders = _load_json(ORDERS_FILE, [])
+    ids = []
+    for o in orders:
+        cid = o.get("customer_id")
+        if not cid:
+            continue
+        try:
+            cid = int(cid)
+        except (TypeError, ValueError):
+            continue
+        if cid not in ids:
+            ids.append(cid)
+    if not ids:
+        await message.answer("📭 В журнале пока нет покупателей с известным ID.")
+        return
+    await message.answer(f"🎯 Рассылаю {len(ids)} покупателям…")
+    sent = failed = 0
+    for uid in ids:
+        try:
+            await bot.send_message(chat_id=uid, text=text, reply_markup=get_main_keyboard())
+            sent += 1
+        except Exception as e:
+            failed += 1
+            logger.warning(f"Рассылка покупателям → {uid} не доставлена: {e}")
+        await asyncio.sleep(0.05)
+    await message.answer(
+        f"✅ <b>Рассылка покупателям завершена</b>\n"
         f"├ Доставлено: <b>{sent}</b>\n"
         f"└ Не доставлено: <b>{failed}</b>"
     )

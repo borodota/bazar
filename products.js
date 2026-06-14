@@ -57,7 +57,8 @@ window.VAPE_PRODUCTS = [
         flavors: ["Stealth Black", "Cyber Punk", "Gunmetal"],
         tags: ["⚔️ PREMIUM"],
         isNew: false,
-        inStock: false
+        lowStock: 1,
+        inStock: true
     },
     {
         id: "pod_pasito2_le",
@@ -382,5 +383,37 @@ window.VAPE_PRODUCTS = [
         tags: ["🔥 СНЮС"],
         isNew: false,
         inStock: true
+    }
+];
+
+/* ==========================================================================
+   ВЫГОДНЫЕ НАБОРЫ (КОМБО)
+   price — цена набора, oldPrice — сумма по отдельности (для зачёркивания).
+   items — что входит (для отображения и в составе заказа).
+   ========================================================================== */
+window.VAPE_COMBOS = [
+    {
+        id: "combo_starter_mini",
+        emoji: "🚀",
+        name: "Стартовый набор",
+        items: ["Vaporesso XROS 5 mini", "Анархия v2 ×2"],
+        price: 2600,
+        oldPrice: 3000
+    },
+    {
+        id: "combo_aegis_full",
+        emoji: "⚔️",
+        name: "Aegis под ключ",
+        items: ["Aegis Hero 5", "Жидкость Анархия", "Испаритель GeekVape B"],
+        price: 3990,
+        oldPrice: 4550
+    },
+    {
+        id: "combo_xros_pro",
+        emoji: "💨",
+        name: "XROS PRO",
+        items: ["Vaporesso XROS 5", "Картридж XROS", "Жидкость Narcos"],
+        price: 3400,
+        oldPrice: 3900
     }
 ];
