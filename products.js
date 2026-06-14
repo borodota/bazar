@@ -57,7 +57,7 @@ window.VAPE_PRODUCTS = [
         flavors: ["Stealth Black", "Cyber Punk", "Gunmetal"],
         tags: ["⚔️ PREMIUM"],
         isNew: false,
-        inStock: true
+        inStock: false
     },
     {
         id: "pod_pasito2_le",
