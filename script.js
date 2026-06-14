@@ -38,17 +38,27 @@ const RELATED_PRODUCTS = {
 
 window.tg = (window.Telegram && window.Telegram.WebApp) ? window.Telegram.WebApp : null;
 
-// ── ОТПРАВКА ЗАКАЗОВ НАПРЯМУЮ ЧЕРЕЗ BOT API ──
+// ── ОТПРАВКА ЗАКАЗОВ ──
 // tg.sendData() работает ТОЛЬКО если магазин открыт через кнопку клавиатуры
 // в чате бота; при открытии через меню/профиль/ссылку данные молча теряются.
-// Прямой вызов Bot API доставляет заказ при любом способе открытия.
+// Поэтому шлём через Bot API.
+//
+// ⚠️ БЕЗОПАСНОСТЬ: токен бота НЕЛЬЗЯ держать в этом файле — он раздаётся
+// публично через GitHub Pages. Правильный путь — релей на Cloudflare Worker
+// (см. relay/worker.js и relay/README.md): токен живёт там, в секрете.
+// После деплоя воркера вставь его адрес в RELAY_URL ниже — и удали BOT_API_TOKEN.
+const RELAY_URL = ""; // напр. "https://vapebazar-relay.ИМЯ.workers.dev"
+// Fallback на время, пока релей не настроен (RELAY_URL пуст). НЕ безопасно —
+// убрать сразу, как только заработает релей.
 const BOT_API_TOKEN = "8687110031:AAE9E430W55aRQQuUwDI8hEMjaVliq_gbG4";
 const ORDER_ADMIN_IDS = [6163521938, 5289357165];
 const MANAGER_TG = "BORO_DOTA";
 
 // ── БОНУСНАЯ ПРОГРАММА ──
 const BONUS_RATE = 0.05;        // базовый % (Бронза); реальный % зависит от уровня
-const BONUS_MAX_REDEEM = 0.30;  // баллами можно оплатить не больше 30% заказа
+const BONUS_MAX_REDEEM = 0.20;  // баллами можно оплатить не больше 20% заказа
+const REFERRAL_REWARD = 200;    // баллов пригласившему — начисляет БОТ после 1-го оплаченного заказа друга
+const REFERRAL_DISCOUNT = 0.05; // скидка приглашённому на первый заказ
 const BONUS_KEY = "vapeBonus";
 window.bonusApplied = false;    // списывает ли клиент баллы в текущем заказе
 
@@ -70,14 +80,32 @@ function escHtml(s) {
 }
 
 async function tgApiSend(chatId, text, replyMarkup) {
-    const doSend = async (body) => {
-        const resp = await fetch("https://api.telegram.org/bot" + BOT_API_TOKEN + "/sendMessage", {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify(body)
-        });
-        return resp.json();
-    };
+    // Безопасный путь: через релей (токен скрыт на сервере воркера)
+    const doSend = RELAY_URL
+        ? async (body) => {
+            const payload = {
+                initData: (window.tg && window.tg.initData) || "",
+                chatId: body.chat_id,
+                text: body.text,
+            };
+            if (body.parse_mode) payload.parse_mode = body.parse_mode;
+            if (body.reply_markup) payload.reply_markup = body.reply_markup;
+            const resp = await fetch(RELAY_URL, {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify(payload)
+            });
+            return resp.json();
+        }
+        // Fallback: прямой вызов Bot API (пока релей не настроен)
+        : async (body) => {
+            const resp = await fetch("https://api.telegram.org/bot" + BOT_API_TOKEN + "/sendMessage", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify(body)
+            });
+            return resp.json();
+        };
 
     const body = { chat_id: chatId, text, parse_mode: "HTML" };
     if (replyMarkup) body.reply_markup = replyMarkup;
@@ -925,11 +953,11 @@ window.calcOrderTotals = function () {
     if (window.appliedPromo) {
         discount = Math.round(subtotal * window.appliedPromo.discount);
     } else if (window.referralDiscountActive) {
-        discount = Math.round(subtotal * 0.05);
+        discount = Math.round(subtotal * REFERRAL_DISCOUNT);
     }
     const afterDiscount = subtotal - discount;
     const deliveryCost = (window.currentDeliveryMethod === "delivery" && afterDiscount < FREE_DELIVERY_THRESHOLD) ? DELIVERY_COST : 0;
-    // баллы лояльности: списать можно не больше 30% от суммы товаров и не больше баланса
+    // баллы лояльности: списать можно не больше 20% от суммы товаров и не больше баланса
     const maxRedeem = Math.max(0, Math.min(bonusGet(), Math.floor(afterDiscount * BONUS_MAX_REDEEM)));
     const bonusUsed = window.bonusApplied ? maxRedeem : 0;
     const total = Math.max(0, afterDiscount - bonusUsed + deliveryCost);
@@ -1060,8 +1088,8 @@ window.openBonusInfo = function () {
     const bal = bonusGet();
     const rate = Math.round(bonusRate() * 100);
     window.showToast(bal > 0
-        ? `💎 У вас ${fmt(bal)} баллов. Списывайте до 30% заказа в корзине. Ваш уровень даёт +${rate}% баллами с заказа.`
-        : `💎 Бонусы копятся с заказов: +${rate}% баллами. 1 балл = 1 ₽, можно оплатить до 30% заказа.`, 4500);
+        ? `💎 У вас ${fmt(bal)} баллов. Списывайте до 20% заказа в корзине. Ваш уровень даёт +${rate}% баллами с заказа.`
+        : `💎 Бонусы копятся с заказов: +${rate}% баллами. 1 балл = 1 ₽, можно оплатить до 20% заказа.`, 4500);
 };
 
 // ── УРОВЕНЬ КЛИЕНТА В ПРОФИЛЕ ──
@@ -1339,17 +1367,22 @@ window.checkoutVapeOrder = function () {
         `\n💰 <b>ИТОГО К ПОЛУЧЕНИЮ: ${fmt(total)} ₽</b>\n\n` +
         `📊 Статус: <b>🆕 Новый</b>`;
 
+    // баллы: % зависит от уровня клиента, считаем от реально потраченных на товары денег
+    const bonusEarned = Math.max(0, Math.round((subtotal - discount - bonusUsed) * bonusRate()));
+    // кто пригласил этого клиента (Telegram ID), либо 0 — нужно боту для реф-награды
+    const refId = (window.referralDiscountActive && /^\d+$/.test(localStorage.getItem("vapeReferredBy") || "")) ? localStorage.getItem("vapeReferredBy") : "0";
+
+    // В кнопку «Принять» зашиваем earn/redeem/ref — бот сверяет и начисляет баллы
+    // СВОИМ источником правды (bonuses.json), а не доверяет браузеру.
+    const acceptData = `st_accept_${orderData.order_id}_${customerId}_${total}_${bonusEarned}_${bonusUsed}_${refId}`;
     const kb = { inline_keyboard: [
-        [ { text: "✅ Принять", callback_data: `st_accept_${orderData.order_id}_${customerId}_${total}` },
+        [ { text: "✅ Принять", callback_data: acceptData },
           { text: "📦 В сборке", callback_data: `st_pack_${orderData.order_id}_${customerId}_${total}` } ],
         [ { text: "🚚 Отправлен", callback_data: `st_ship_${orderData.order_id}_${customerId}_${total}` },
           { text: "🎯 Выполнен", callback_data: `st_done_${orderData.order_id}_${customerId}_${total}` } ],
         [ { text: "❌ Отменить заказ", callback_data: `st_cancel_${orderData.order_id}_${customerId}_${total}` } ]
     ]};
     if (customerId) kb.inline_keyboard.push([{ text: "📞 Связаться с клиентом", url: "tg://user?id=" + customerId }]);
-
-    // баллы: % зависит от уровня клиента, считаем от реально потраченных на товары денег
-    const bonusEarned = Math.max(0, Math.round((subtotal - discount - bonusUsed) * bonusRate()));
 
     window.showToast("Отправляем заказ…");
     notifyAdmins(adminText, kb).then(() => {
@@ -1362,14 +1395,16 @@ window.checkoutVapeOrder = function () {
                 `<blockquote>${escHtml(itemsList)}</blockquote>\n\n` +
                 totalsBlock +
                 `\n💰 <b>К оплате: ${fmt(total)} ₽</b>\n` +
-                (bonusEarned > 0 ? `💎 Начислено ${fmt(bonusEarned)} баллов\n` : "") +
+                (bonusEarned > 0 ? `💎 +${fmt(bonusEarned)} баллов зачислим после подтверждения\n` : "") +
                 `\n📍 ${isPickup ? "Самовывоз: " : "Доставка: "}${escHtml(orderData.address)}\n\n` +
                 `🧑‍💻 Наш директор @${MANAGER_TG} свяжется с вами для подтверждения.\n` +
                 `🔔 Мы пришлём уведомление, когда статус заказа изменится!`
             ).catch(() => {});
         }
         haptic("success");
-        // списываем потраченные баллы и начисляем новые
+        // Оптимистично обновляем баланс в приложении ради приятного UX.
+        // ИСТОЧНИК ПРАВДЫ — бот (bonuses.json): он сверяет и фиксирует баллы,
+        // когда админ жмёт «Принять», и не даст списать больше реального баланса.
         bonusSet(bonusGet() - bonusUsed + bonusEarned);
         window.bonusApplied = false;
         // копим сумму покупок для уровня (реальные деньги за товары)
@@ -1551,27 +1586,42 @@ window.openOrderHistory = function () { window.switchTab("history"); };
 window.closeOrderHistory = function () { window.switchTab("catalog"); };
 
 // ── РЕФЕРАЛЬНАЯ СИСТЕМА ──
+// Реферальная «личность» = реальный Telegram ID. Именно по нему БОТ начисляет
+// награду пригласившему — код из localStorage для этого не годится (его легко
+// подделать/очистить). Для гостей без Telegram оставляем случайный код только
+// ради отображения.
 window.initReferralCode = function () {
-    let code = localStorage.getItem("vapeRefCode");
-    if (!code) {
-        const u = window.tg && window.tg.initDataUnsafe && window.tg.initDataUnsafe.user;
-        code = u ? ("VAPE" + u.id).slice(0, 12).toUpperCase() : "VAPE" + Math.random().toString(36).slice(2, 7).toUpperCase();
-        localStorage.setItem("vapeRefCode", code);
+    const u = window.tg && window.tg.initDataUnsafe && window.tg.initDataUnsafe.user;
+    if (u && u.id) {
+        window._myRefId = String(u.id);
+    } else {
+        let code = localStorage.getItem("vapeRefCode");
+        if (!code) {
+            code = "VAPE" + Math.random().toString(36).slice(2, 7).toUpperCase();
+            localStorage.setItem("vapeRefCode", code);
+        }
+        window._myRefId = code;
     }
-    window._myRefCode = code;
+    window._myRefCode = window._myRefId;
     const display = document.getElementById("refCodeDisplay");
-    if (display) display.innerText = code;
+    if (display) display.innerText = window._myRefCode;
 };
 
 window.checkIncomingReferral = function () {
+    const u = window.tg && window.tg.initDataUnsafe && window.tg.initDataUnsafe.user;
+    const myId = u && u.id ? String(u.id) : "";
     const startParam = (window.tg && window.tg.initDataUnsafe && window.tg.initDataUnsafe.start_param) || "";
     if (startParam.startsWith("ref_") && !localStorage.getItem("vapeReferredBy")) {
-        const refCode = startParam.slice(4);
-        localStorage.setItem("vapeReferredBy", refCode);
-        window.referralDiscountActive = true;
-        setTimeout(() => window.showToast("🎁 Реферальная скидка 5% применена!"), 800);
+        const refId = startParam.slice(4);
+        // защита от само-реферала: нельзя пригласить самого себя
+        if (refId && refId !== myId) {
+            localStorage.setItem("vapeReferredBy", refId);
+            window.referralDiscountActive = true;
+            setTimeout(() => window.showToast("🎁 Реферальная скидка 5% применена!"), 800);
+        }
     } else if (localStorage.getItem("vapeReferredBy") && !localStorage.getItem("vapeRefUsed")) {
-        window.referralDiscountActive = true;
+        // повторно скидку не даём, если уже был оплаченный заказ по рефералке
+        if (localStorage.getItem("vapeReferredBy") !== myId) window.referralDiscountActive = true;
     }
 };
 
@@ -1823,9 +1873,12 @@ window.openSupport = function () {
 
 window.shareReferral = function () {
     haptic("medium");
-    const code = window._myRefCode || localStorage.getItem("vapeRefCode") || "VAPESHOP";
+    if (!window._myRefId) window.initReferralCode();
+    const refId = window._myRefId || window._myRefCode || "VAPESHOP";
     const botName = "vapebazar_bot";
-    const shareUrl = `https://t.me/${botName}?start=ref_${code}`;
+    // startapp открывает Mini App и передаёт ref_<id> в start_param — так скидка
+    // 5% применяется у друга автоматически, а бот узнаёт, кто кого пригласил.
+    const shareUrl = `https://t.me/${botName}?startapp=ref_${refId}`;
     const text = `🛍 Заходи в VAPEBAZAR — лучший вейп-магазин!\nПо моей ссылке получишь скидку 5% на первый заказ 🎁`;
     if (window.tg && window.tg.openTelegramLink) {
         try {
