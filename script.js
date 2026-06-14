@@ -38,10 +38,18 @@ const RELATED_PRODUCTS = {
 
 window.tg = (window.Telegram && window.Telegram.WebApp) ? window.Telegram.WebApp : null;
 
-// ── ОТПРАВКА ЗАКАЗОВ НАПРЯМУЮ ЧЕРЕЗ BOT API ──
+// ── ОТПРАВКА ЗАКАЗОВ ──
 // tg.sendData() работает ТОЛЬКО если магазин открыт через кнопку клавиатуры
 // в чате бота; при открытии через меню/профиль/ссылку данные молча теряются.
-// Прямой вызов Bot API доставляет заказ при любом способе открытия.
+// Поэтому шлём через Bot API.
+//
+// ⚠️ БЕЗОПАСНОСТЬ: токен бота НЕЛЬЗЯ держать в этом файле — он раздаётся
+// публично через GitHub Pages. Правильный путь — релей на Cloudflare Worker
+// (см. relay/worker.js и relay/README.md): токен живёт там, в секрете.
+// После деплоя воркера вставь его адрес в RELAY_URL ниже — и удали BOT_API_TOKEN.
+const RELAY_URL = ""; // напр. "https://vapebazar-relay.ИМЯ.workers.dev"
+// Fallback на время, пока релей не настроен (RELAY_URL пуст). НЕ безопасно —
+// убрать сразу, как только заработает релей.
 const BOT_API_TOKEN = "8687110031:AAE9E430W55aRQQuUwDI8hEMjaVliq_gbG4";
 const ORDER_ADMIN_IDS = [6163521938, 5289357165];
 const MANAGER_TG = "BORO_DOTA";
@@ -70,14 +78,32 @@ function escHtml(s) {
 }
 
 async function tgApiSend(chatId, text, replyMarkup) {
-    const doSend = async (body) => {
-        const resp = await fetch("https://api.telegram.org/bot" + BOT_API_TOKEN + "/sendMessage", {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify(body)
-        });
-        return resp.json();
-    };
+    // Безопасный путь: через релей (токен скрыт на сервере воркера)
+    const doSend = RELAY_URL
+        ? async (body) => {
+            const payload = {
+                initData: (window.tg && window.tg.initData) || "",
+                chatId: body.chat_id,
+                text: body.text,
+            };
+            if (body.parse_mode) payload.parse_mode = body.parse_mode;
+            if (body.reply_markup) payload.reply_markup = body.reply_markup;
+            const resp = await fetch(RELAY_URL, {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify(payload)
+            });
+            return resp.json();
+        }
+        // Fallback: прямой вызов Bot API (пока релей не настроен)
+        : async (body) => {
+            const resp = await fetch("https://api.telegram.org/bot" + BOT_API_TOKEN + "/sendMessage", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify(body)
+            });
+            return resp.json();
+        };
 
     const body = { chat_id: chatId, text, parse_mode: "HTML" };
     if (replyMarkup) body.reply_markup = replyMarkup;
