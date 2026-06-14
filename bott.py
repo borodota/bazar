@@ -41,6 +41,10 @@ dp = Dispatcher(storage=storage)
 DATA_DIR = os.path.dirname(os.path.abspath(__file__))
 SUBSCRIBERS_FILE = os.path.join(DATA_DIR, "subscribers.json")  # кому слать рассылку
 ORDERS_FILE = os.path.join(DATA_DIR, "orders_log.json")        # журнал заказов для /orders и /stats
+BONUSES_FILE = os.path.join(DATA_DIR, "bonuses.json")          # ИСТОЧНИК ПРАВДЫ по баллам и рефералам
+
+REFERRAL_REWARD = 200   # баллов пригласившему за ПЕРВЫЙ оплаченный заказ друга
+EARN_CAP_RATE = 0.15    # санити-лимит начисления: не больше 15% от суммы заказа
 
 ADMINS = set([ADMIN_ID] + DEPUTY_ADMIN_IDS)
 
@@ -104,6 +108,111 @@ def _fmt_money(n):
         return f"{int(n):,}".replace(",", " ")
     except (TypeError, ValueError):
         return "0"
+
+# ==================== БАЛЛЫ И РЕФЕРАЛЫ (источник правды) ====================
+# Браузеру доверять нельзя (localStorage легко подделать). Поэтому баланс баллов,
+# суммы покупок и реферальные связи живут ЗДЕСЬ и меняются только когда админ
+# жмёт «✅ Принять» под заказом. Списание баллов бот ограничивает реальным
+# балансом из этого файла — нарисовать себе баллы в браузере бесполезно.
+
+def _safe_int(v, default=0):
+    try:
+        return int(v)
+    except (TypeError, ValueError):
+        return default
+
+def _load_bonuses():
+    data = _load_json(BONUSES_FILE, {})
+    if not isinstance(data, dict):
+        data = {}
+    data.setdefault("users", {})
+    data.setdefault("settled", {})
+    return data
+
+def _save_bonuses(data):
+    _save_json(BONUSES_FILE, data)
+
+def _ensure_user(data, uid):
+    uid = str(uid)
+    u = data["users"].get(uid)
+    if u is None:
+        u = {"balance": 0, "spent": 0, "orders": 0,
+             "referred_by": None, "ref_rewarded": False,
+             "name": "", "username": ""}
+        data["users"][uid] = u
+    return u
+
+def record_referral(new_user_id, ref_id, user=None):
+    """Запоминает, кто кого пригласил, по факту перехода /start ref_<id> —
+    серверная (надёжная) фиксация связи. Только для нового клиента без покупок."""
+    if not ref_id or str(ref_id) in ("0", "", str(new_user_id)):
+        return
+    data = _load_bonuses()
+    cust = _ensure_user(data, new_user_id)
+    if cust["orders"] == 0 and not cust.get("referred_by") and not cust.get("ref_rewarded"):
+        cust["referred_by"] = str(ref_id)
+        if user:
+            cust["name"] = user.first_name or cust.get("name", "")
+            cust["username"] = user.username or cust.get("username", "")
+        _save_bonuses(data)
+
+def settle_order_bonuses(order_id, customer_id, total, earn, redeem, ref_id):
+    """Учитывает баллы по ПОДТВЕРЖДЁННОМУ заказу. Идемпотентно по order_id.
+    Возвращает результат для уведомлений или None (нет клиента / уже учтён)."""
+    if not customer_id:
+        return None
+    data = _load_bonuses()
+    if data["settled"].get(str(order_id)):
+        return None  # уже учитывали этот заказ — без двойного начисления
+
+    cust = _ensure_user(data, customer_id)
+    total = max(0, _safe_int(total))
+
+    # 1. Списание: не больше реального баланса в нашем леджере (анти-фрод)
+    redeem = max(0, _safe_int(redeem))
+    actual_redeem = min(redeem, cust["balance"])
+    redeem_capped = redeem > actual_redeem
+
+    # 2. Начисление: доверяем расчёту клиента, но не больше 15% от суммы
+    earn = max(0, _safe_int(earn))
+    earn = min(earn, int(total * EARN_CAP_RATE) + 1)
+
+    first_order = cust["orders"] == 0
+
+    cust["balance"] = max(0, cust["balance"] - actual_redeem + earn)
+    cust["spent"] += total
+    cust["orders"] += 1
+
+    # 3. Реферальная связь: серверной нет — берём из заказа (по факту покупки)
+    referrer_id = cust.get("referred_by")
+    if not referrer_id and ref_id and str(ref_id) not in ("0", "", str(customer_id)):
+        referrer_id = str(ref_id)
+        cust["referred_by"] = referrer_id
+
+    # 4. Награда пригласившему — ТОЛЬКО за первый оплаченный заказ друга, один раз
+    ref_result = None
+    if (first_order and referrer_id and not cust["ref_rewarded"]
+            and str(referrer_id) != str(customer_id)):
+        ref = _ensure_user(data, referrer_id)
+        ref["balance"] += REFERRAL_REWARD
+        cust["ref_rewarded"] = True
+        ref_result = {"referrer_id": referrer_id,
+                      "reward": REFERRAL_REWARD,
+                      "referrer_balance": ref["balance"]}
+
+    data["settled"][str(order_id)] = True
+    _save_bonuses(data)
+
+    return {
+        "earn": earn,
+        "redeem": actual_redeem,
+        "requested_redeem": redeem,
+        "redeem_capped": redeem_capped,
+        "balance": cust["balance"],
+        "spent": cust["spent"],
+        "orders": cust["orders"],
+        "ref": ref_result,
+    }
 
 def get_main_keyboard():
     web_app_url = "https://borodota.github.io/bazar/"  
@@ -297,6 +406,10 @@ async def change_order_status(callback: types.CallbackQuery):
     order_id = parts[2] if len(parts) > 2 else "?"
     customer_id = parts[3] if len(parts) > 3 else None
     total = parts[4] if len(parts) > 4 else 0
+    # доп. поля есть только у кнопки «Принять»: earn, redeem, ref
+    earn = parts[5] if len(parts) > 5 else 0
+    redeem = parts[6] if len(parts) > 6 else 0
+    ref_id = parts[7] if len(parts) > 7 else 0
 
     statuses = {
         "accept": "Принят в работу 🟡",
@@ -310,6 +423,35 @@ async def change_order_status(callback: types.CallbackQuery):
     # Фиксируем заказ в журнале (для заказов из браузера это первый момент,
     # когда бот узнаёт о заказе — данные берём из callback_data).
     log_order(order_id, customer_id, total, action, new_status)
+
+    # ── Начисление баллов: ТОЛЬКО при «Принять» и один раз на заказ ──
+    bonus_summary = None
+    if action == "accept":
+        try:
+            bonus_summary = settle_order_bonuses(order_id, customer_id, total, earn, redeem, ref_id)
+        except Exception as e:
+            logger.error(f"Ошибка начисления баллов по заказу #{order_id}: {e}")
+        # Уведомляем админа об итогах и подозрительном списании
+        if bonus_summary:
+            try:
+                warn = ""
+                if bonus_summary["redeem_capped"]:
+                    warn = (f"\n⚠️ <b>Клиент пытался списать {_fmt_money(bonus_summary['requested_redeem'])} баллов, "
+                            f"а доступно было только {_fmt_money(bonus_summary['redeem'])}.</b> Списано по факту.")
+                ref_line = ""
+                if bonus_summary["ref"]:
+                    r = bonus_summary["ref"]
+                    ref_line = f"\n🎁 Рефереру <code>{r['referrer_id']}</code> начислено {r['reward']} (баланс: {_fmt_money(r['referrer_balance'])})"
+                await bot.send_message(
+                    chat_id=callback.from_user.id,
+                    text=(f"💎 <b>Баллы по заказу #{order_id} учтены</b>\n"
+                          f"├ Начислено: <b>+{_fmt_money(bonus_summary['earn'])}</b>\n"
+                          f"├ Списано: <b>{_fmt_money(bonus_summary['redeem'])}</b>\n"
+                          f"└ Баланс клиента: <b>{_fmt_money(bonus_summary['balance'])}</b>"
+                          f"{ref_line}{warn}")
+                )
+            except Exception as e:
+                logger.error(f"Не удалось отправить сводку по баллам админу: {e}")
 
     # html_text сохраняет жирный шрифт и форматирование при редактировании
     text = callback.message.html_text or callback.message.text or ""
@@ -330,6 +472,18 @@ async def change_order_status(callback: types.CallbackQuery):
             "done": "Спасибо за покупку! Будем рады видеть вас снова 💚",
             "cancel": f"Если возникли вопросы — напишите @{MANAGER_USERNAME}"
         }
+        # При «Принять» дописываем клиенту реальные баллы из нашего леджера
+        bonus_line = ""
+        if action == "accept" and bonus_summary:
+            parts_b = []
+            if bonus_summary["earn"] > 0:
+                parts_b.append(f"💎 Начислено <b>{_fmt_money(bonus_summary['earn'])}</b> баллов")
+            if bonus_summary["redeem"] > 0:
+                parts_b.append(f"➖ Списано {_fmt_money(bonus_summary['redeem'])} баллов")
+            if bonus_summary["redeem_capped"]:
+                parts_b.append(f"ℹ️ Списали {_fmt_money(bonus_summary['redeem'])} вместо {_fmt_money(bonus_summary['requested_redeem'])} — столько баллов на вашем счёте")
+            parts_b.append(f"💼 Ваш баланс: <b>{_fmt_money(bonus_summary['balance'])}</b> баллов")
+            bonus_line = "\n\n" + "\n".join(parts_b)
         try:
             await bot.send_message(
                 chat_id=int(customer_id),
@@ -338,16 +492,40 @@ async def change_order_status(callback: types.CallbackQuery):
                     f"━━━━━━━━━━━━━━━━━━━━━━━━\n"
                     f"📊 Новый статус: <b>{new_status}</b>\n\n"
                     f"{status_extra.get(action, '')}"
+                    f"{bonus_line}"
                 )
             )
         except Exception as e:
             logger.error(f"Не удалось уведомить клиента {customer_id} о статусе заказа #{order_id}: {e}")
+
+    # Радуем пригласившего: его друг сделал первый заказ
+    if bonus_summary and bonus_summary.get("ref"):
+        r = bonus_summary["ref"]
+        try:
+            await bot.send_message(
+                chat_id=int(r["referrer_id"]),
+                text=(
+                    f"🎁 <b>Реферальная награда!</b>\n"
+                    f"Твой друг сделал первый заказ — тебе начислено <b>+{r['reward']}</b> баллов.\n"
+                    f"💼 Баланс: <b>{_fmt_money(r['referrer_balance'])}</b> баллов.\n\n"
+                    f"Спасибо, что зовёшь друзей в VAPEBAZAR 💚"
+                )
+            )
+        except Exception as e:
+            logger.error(f"Не удалось уведомить реферера {r['referrer_id']}: {e}")
 
     await callback.answer(f"Статус изменен: {new_status}")
 
 @dp.message(Command("start"))
 async def cmd_start(message: types.Message):
     remember_user(message.from_user)
+    # Реферальная ссылка ведёт на /start ref_<id> — надёжно фиксируем, кто пригласил
+    payload = (message.text.partition(" ")[2].strip() if message.text else "")
+    if payload.startswith("ref_"):
+        try:
+            record_referral(message.from_user.id, payload[4:], message.from_user)
+        except Exception as e:
+            logger.error(f"Не удалось записать реферала из /start: {e}")
     await message.answer(
         f"Привет, {message.from_user.first_name}! Добро пожаловать в магазин <b>VAPEBAZAR PREMIUM</b>.\n"
         f"Нажми кнопку ниже, чтобы войти в каталог.",
@@ -358,6 +536,8 @@ async def cmd_start(message: types.Message):
             "🛠 <b>Команды администратора</b>\n"
             "├ /stats — статистика и выручка\n"
             "├ /orders — последние заказы\n"
+            "├ /bonus <i>id</i> — баланс баллов клиента\n"
+            "├ /bonus_add <i>id сумма</i> — изменить баллы (можно −)\n"
             "├ /broadcast <i>текст</i> — рассылка всем подписчикам\n"
             "└ /broadcast_buyers <i>текст</i> — рассылка только покупателям"
         )
@@ -503,6 +683,79 @@ async def cmd_stats(message: types.Message):
         f"👥 <b>Подписчиков:</b> {len(subs)}\n\n"
         "<i>В журнал попадают заказы из кнопки магазина и те, по которым вы нажимали статус.</i>"
     )
+
+
+@dp.message(Command("bonus"))
+async def cmd_bonus(message: types.Message):
+    if message.from_user.id not in ADMINS:
+        return
+    args = (message.text or "").split()
+    if len(args) < 2:
+        await message.answer(
+            "💎 <b>Баллы клиента</b>\n\n"
+            "Использование: <code>/bonus &lt;telegram_id&gt;</code>\n"
+            "ID клиента есть в карточке заказа (поле «ID»)."
+        )
+        return
+    uid = args[1].lstrip("@")
+    data = _load_bonuses()
+    u = data["users"].get(str(uid))
+    if not u:
+        await message.answer(f"По клиенту <code>{uid}</code> данных пока нет (не было подтверждённых заказов).")
+        return
+    ref_txt = u.get("referred_by") or "—"
+    name = (u.get("name") or "").strip()
+    uname = u.get("username")
+    who = (f"{name} " if name else "") + (f"@{uname}" if uname else "")
+    await message.answer(
+        f"💎 <b>Клиент {who or uid}</b>\n"
+        f"├ ID: <code>{uid}</code>\n"
+        f"├ Баланс баллов: <b>{_fmt_money(u.get('balance', 0))}</b>\n"
+        f"├ Сумма покупок: <b>{_fmt_money(u.get('spent', 0))} ₽</b>\n"
+        f"├ Заказов оплачено: <b>{u.get('orders', 0)}</b>\n"
+        f"├ Пригласил его: <code>{ref_txt}</code>\n"
+        f"└ Реф-награда выдана: {'да' if u.get('ref_rewarded') else 'нет'}"
+    )
+
+
+@dp.message(Command("bonus_add"))
+async def cmd_bonus_add(message: types.Message):
+    """Ручная корректировка баланса: /bonus_add <id> <сумма> (сумма может быть отрицательной)."""
+    if message.from_user.id not in ADMINS:
+        return
+    args = (message.text or "").split()
+    if len(args) < 3:
+        await message.answer(
+            "✏️ <b>Изменить баллы клиента</b>\n\n"
+            "Использование: <code>/bonus_add &lt;telegram_id&gt; &lt;сумма&gt;</code>\n"
+            "Пример: <code>/bonus_add 6163521938 500</code> — добавить 500.\n"
+            "Отрицательная сумма — списать: <code>/bonus_add 6163521938 -200</code>."
+        )
+        return
+    uid = args[1].lstrip("@")
+    delta = _safe_int(args[2], None)
+    if delta is None:
+        await message.answer("❌ Сумма должна быть числом, например 500 или -200.")
+        return
+    data = _load_bonuses()
+    u = _ensure_user(data, uid)
+    u["balance"] = max(0, u["balance"] + delta)
+    _save_bonuses(data)
+    await message.answer(
+        f"✅ Баланс клиента <code>{uid}</code> изменён на {'+' if delta >= 0 else ''}{_fmt_money(delta)}.\n"
+        f"💼 Текущий баланс: <b>{_fmt_money(u['balance'])}</b> баллов."
+    )
+    # сообщим клиенту, если это начисление
+    if delta > 0:
+        try:
+            await bot.send_message(
+                chat_id=int(uid),
+                text=(f"💎 Вам начислено <b>+{_fmt_money(delta)}</b> баллов!\n"
+                      f"💼 Баланс: <b>{_fmt_money(u['balance'])}</b> баллов.")
+            )
+        except Exception:
+            pass
+
 
 @dp.message(F.text == "📞 Контакты")
 async def show_contacts(message: types.Message):
