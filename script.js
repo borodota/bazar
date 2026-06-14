@@ -1158,7 +1158,9 @@ window.applyPromoCode = function () {
         // Применяем как реферальную скидку 5%, если у этого клиента ещё не была скидка.
         const myId = String((window.tg && window.tg.initDataUnsafe && window.tg.initDataUnsafe.user && window.tg.initDataUnsafe.user.id) || "");
         const refId = code.replace(/^VAPE/, ""); // убираем префикс, оставляем числовой ID
-        if (refId && refId !== myId) {
+        // блок само-реферала, в т.ч. старого усечённого кода (VAPE61635219 ← id 6163521938)
+        const isSelf = refId && myId && (refId === myId || myId.startsWith(refId) || refId.startsWith(myId));
+        if (refId && !isSelf) {
             haptic("success");
             if (!localStorage.getItem("vapeReferredBy")) {
                 localStorage.setItem("vapeReferredBy", refId);
