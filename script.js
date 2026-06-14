@@ -1153,6 +1153,30 @@ window.applyPromoCode = function () {
         msg.style.color = "var(--neon-green)";
         input.disabled = true;
         document.getElementById("promoApplyBtn").disabled = true;
+    } else if (!window.referralDiscountActive && _looksLikeRefCode(code)) {
+        // Кто-то ввёл реферальный код вручную (например «VAPE61635219» или числовой ID).
+        // Применяем как реферальную скидку 5%, если у этого клиента ещё не была скидка.
+        const myId = String((window.tg && window.tg.initDataUnsafe && window.tg.initDataUnsafe.user && window.tg.initDataUnsafe.user.id) || "");
+        const refId = code.replace(/^VAPE/, ""); // убираем префикс, оставляем числовой ID
+        if (refId && refId !== myId) {
+            haptic("success");
+            if (!localStorage.getItem("vapeReferredBy")) {
+                localStorage.setItem("vapeReferredBy", refId);
+            }
+            window.referralDiscountActive = true;
+            msg.innerText = "✅ Реферальная скидка 5% применена!";
+            msg.style.color = "var(--neon-green)";
+            input.disabled = true;
+            document.getElementById("promoApplyBtn").disabled = true;
+        } else {
+            haptic("error");
+            msg.innerText = "❌ Нельзя использовать свой же реферальный код";
+            msg.style.color = "var(--neon-red)";
+        }
+    } else if (window.referralDiscountActive && _looksLikeRefCode(code)) {
+        haptic("error");
+        msg.innerText = "✅ Реферальная скидка уже активна!";
+        msg.style.color = "var(--neon-green)";
     } else {
         haptic("error");
         window.appliedPromo = null;
@@ -1161,6 +1185,11 @@ window.applyPromoCode = function () {
     }
     window.updateCartTotalDisplay();
 };
+
+// Реферальные коды: VAPE + цифры (старый формат) или только цифры (Telegram ID)
+function _looksLikeRefCode(code) {
+    return /^VAPE\d{4,}$/.test(code) || /^\d{5,}$/.test(code);
+}
 
 // ── ДОСТАВКА ──
 window.selectDeliveryTab = function (method) {
