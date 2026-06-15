@@ -179,6 +179,7 @@ header.scrolled { border-bottom-color: var(--border); }
 .tag-hot { background: rgba(255,45,85,0.12); color: var(--neon-red); }
 .tag-sale { background: rgba(255,171,0,0.12); color: var(--gold); }
 .tag-low { background: rgba(255,45,85,0.10); color: var(--neon-red); }
+.tag-preorder { background: rgba(0,153,255,0.14); color: #3399ff; }
 
 .product-image-wrapper {
     width: 100%; height: 112px; display: flex; align-items: center; justify-content: center;

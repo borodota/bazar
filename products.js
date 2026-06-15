@@ -383,6 +383,60 @@ window.VAPE_PRODUCTS = [
         tags: ["🔥 СНЮС"],
         isNew: false,
         inStock: true
+    },
+
+    // ================= APPLE / ТЕХНИКА (под заказ из Дубая) =================
+    {
+        id: "iphone_15_128",
+        name: "iPhone 15 128 ГБ",
+        brand: "Apple",
+        category: "📱 Apple",
+        price: 51090,
+        emoji: "📱",
+        preOrder: true,
+        description: "📦 Под заказ из Дубая · предоплата 50% · доставка 7–14 дней. Цвет чёрный · 128 ГБ · nano-SIM + eSIM. РФ-версия (RU), новый, не активирован. Оригинал Apple — ниже магазинных цен.",
+        tags: ["🍏 Apple"],
+        isNew: true,
+        inStock: true
+    },
+    {
+        id: "iphone_16_128",
+        name: "iPhone 16 128 ГБ",
+        brand: "Apple",
+        category: "📱 Apple",
+        price: 57819,
+        emoji: "📱",
+        preOrder: true,
+        description: "📦 Под заказ из Дубая · предоплата 50% · доставка 7–14 дней. Цвет бирюзовый · 128 ГБ · nano-SIM + eSIM. РФ-версия (RU), новый, не активирован. Оригинал Apple — ниже магазинных цен.",
+        tags: ["🍏 Apple"],
+        isNew: true,
+        inStock: true
+    },
+    {
+        id: "iphone_17_256",
+        name: "iPhone 17 256 ГБ",
+        brand: "Apple",
+        category: "📱 Apple",
+        price: 72823,
+        emoji: "📱",
+        preOrder: true,
+        description: "📦 Под заказ из Дубая · предоплата 50% · доставка 7–14 дней. Цвет чёрный · 256 ГБ · eSIM + eSIM. РФ-версия (RU), новый, не активирован. Оригинал Apple — ниже магазинных цен.",
+        tags: ["🍏 Apple", "🆕 NEW"],
+        isNew: true,
+        inStock: true
+    },
+    {
+        id: "iphone_17_pro_256",
+        name: "iPhone 17 Pro 256 ГБ",
+        brand: "Apple",
+        category: "📱 Apple",
+        price: 103234,
+        emoji: "📱",
+        preOrder: true,
+        description: "📦 Под заказ из Дубая · предоплата 50% · доставка 7–14 дней. Цвет оранжевый · 256 ГБ (12 ГБ RAM) · eSIM + eSIM. РФ-версия (RU), новый, не активирован. Оригинал Apple — топ линейки, ниже магазинных цен.",
+        tags: ["🍏 Apple", "⚔️ PREMIUM"],
+        isNew: true,
+        inStock: true
     }
 ];
 
