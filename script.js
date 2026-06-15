@@ -741,6 +741,21 @@ window.renderProducts = function (list) {
         grid.appendChild(card);
         window.renderCardAction(p);
     });
+
+    // Постоянный CTA в конце каталога: нет нужного товара — напиши, найдём под заказ
+    const cta = document.createElement("div");
+    cta.className = "no-results-cta";
+    cta.style.gridColumn = "span 2";
+    cta.style.marginTop = "10px";
+    cta.onclick = () => { haptic("light"); window.openSpecialOrder(); };
+    cta.innerHTML = `
+        <div class="nrc-icon">🔎</div>
+        <div class="nrc-text">
+            <div class="nrc-title">Не нашёл нужное?</div>
+            <div class="nrc-sub">Напиши — найдём под заказ и предложим лучшую цену.</div>
+        </div>
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="m9 18 6-6-6-6"/></svg>`;
+    grid.appendChild(cta);
 };
 
 // Кнопка + или степпер на карточке
