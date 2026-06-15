@@ -709,10 +709,11 @@ window.renderProducts = function (list) {
         // стаггер: каждая карточка появляется чуть позже предыдущей
         card.style.animationDelay = Math.min(idx * 35, 350) + "ms";
         const imgSrc = p.image ? `img/${p.image}` : "";
-        const letter = p.name ? p.name.charAt(0).toUpperCase() : "V";
+        const letter = p.emoji || (p.name ? p.name.charAt(0).toUpperCase() : "V");
         const qty = window.getCartQty(p.id);
 
         let tags = "";
+        if (p.preOrder) tags += '<span class="tag tag-preorder">📦 Под заказ</span>';
         if (p.isNew || (p.tags && p.tags.some(t => t.includes("NEW")))) tags += '<span class="tag tag-new">New</span>';
         if (p.tags && p.tags.some(t => t.includes("ХИТ") || t.includes("HOT"))) tags += '<span class="tag tag-hot">Хит</span>';
         if (p.oldPrice) tags += '<span class="tag tag-sale">Скидка</span>';
@@ -824,7 +825,7 @@ window.openVapePopup = function (product) {
     document.getElementById("popupName").innerText = product.name;
     document.getElementById("popupBrand").innerText = product.brand || "";
     const imgSrc = product.image ? "img/" + product.image : "";
-    const letter = product.name ? product.name.charAt(0).toUpperCase() : "V";
+    const letter = product.emoji || (product.name ? product.name.charAt(0).toUpperCase() : "V");
     const img = document.getElementById("popupImg");
     const ph = document.getElementById("popupPlaceholder");
     if (imgSrc) {
@@ -946,22 +947,31 @@ window.plural = function (n, one, few, many) {
     return many;
 };
 
+// Товары «под заказ» (телефоны Apple) — тонкая маржа: на них НЕ действуют
+// промокоды, реферальная скидка и баллы (ни начисление, ни списание).
+window.isBonusable = function (item) {
+    const p = window.products.find(x => x.id === item.id);
+    return !(p && (p.preOrder || p.noBonus));
+};
+
 // ── РАСЧЁТ ──
 window.calcOrderTotals = function () {
     const subtotal = window.cart.reduce((s, i) => s + i.price * i.quantity, 0);
+    // сумма товаров, на которые распространяются скидки и баллы (без телефонов)
+    const bonusableSubtotal = window.cart.reduce((s, i) => window.isBonusable(i) ? s + i.price * i.quantity : s, 0);
     let discount = 0;
     if (window.appliedPromo) {
-        discount = Math.round(subtotal * window.appliedPromo.discount);
+        discount = Math.round(bonusableSubtotal * window.appliedPromo.discount);
     } else if (window.referralDiscountActive) {
-        discount = Math.round(subtotal * REFERRAL_DISCOUNT);
+        discount = Math.round(bonusableSubtotal * REFERRAL_DISCOUNT);
     }
     const afterDiscount = subtotal - discount;
     const deliveryCost = (window.currentDeliveryMethod === "delivery" && afterDiscount < FREE_DELIVERY_THRESHOLD) ? DELIVERY_COST : 0;
-    // баллы лояльности: списать можно не больше 20% от суммы товаров и не больше баланса
-    const maxRedeem = Math.max(0, Math.min(bonusGet(), Math.floor(afterDiscount * BONUS_MAX_REDEEM)));
+    // баллы лояльности: списать можно не больше 20% от суммы БОНУСНЫХ товаров и не больше баланса
+    const maxRedeem = Math.max(0, Math.min(bonusGet(), Math.floor((bonusableSubtotal - discount) * BONUS_MAX_REDEEM)));
     const bonusUsed = window.bonusApplied ? maxRedeem : 0;
     const total = Math.max(0, afterDiscount - bonusUsed + deliveryCost);
-    return { subtotal, discount, deliveryCost, maxRedeem, bonusUsed, total };
+    return { subtotal, bonusableSubtotal, discount, deliveryCost, maxRedeem, bonusUsed, total };
 };
 
 // ── КОРЗИНА ──
@@ -1332,7 +1342,7 @@ window.checkoutVapeOrder = function () {
     if (window.currentDeliveryMethod === "delivery" && !address) {
         haptic("error"); shakeField("deliveryAddress"); window.showToast("Укажите адрес доставки"); return;
     }
-    const { subtotal, discount, deliveryCost, bonusUsed, total } = window.calcOrderTotals();
+    const { subtotal, bonusableSubtotal, discount, deliveryCost, bonusUsed, total } = window.calcOrderTotals();
     if (subtotal < MIN_ORDER_AMOUNT) { haptic("error"); window.showToast(`Минимум ${MIN_ORDER_AMOUNT} ₽ (сейчас ${subtotal} ₽)`); return; }
 
     const formattedUsername = username.startsWith("@") ? username : "@" + username;
@@ -1399,7 +1409,7 @@ window.checkoutVapeOrder = function () {
         `📊 Статус: <b>🆕 Новый</b>`;
 
     // баллы: % зависит от уровня клиента, считаем от реально потраченных на товары денег
-    const bonusEarned = Math.max(0, Math.round((subtotal - discount - bonusUsed) * bonusRate()));
+    const bonusEarned = Math.max(0, Math.round((bonusableSubtotal - discount - bonusUsed) * bonusRate()));
     // кто пригласил этого клиента (Telegram ID), либо 0 — нужно боту для реф-награды
     const refId = (window.referralDiscountActive && /^\d+$/.test(localStorage.getItem("vapeReferredBy") || "")) ? localStorage.getItem("vapeReferredBy") : "0";
 
