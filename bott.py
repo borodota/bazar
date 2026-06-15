@@ -27,6 +27,7 @@ logger = logging.getLogger(__name__)
 SHOP_BOT_TOKEN = os.getenv("BOT_TOKEN", "8687110031:AAE9E430W55aRQQuUwDI8hEMjaVliq_gbG4")
 ADMIN_ID = 6163521938
 MANAGER_USERNAME = 'BORO_DOTA'
+BOT_USERNAME = 'vapebazar_bot'   # для реферальных ссылок t.me/<bot>?startapp=ref_<id>
 DEPUTY_ADMIN_IDS = [5289357165, 6163521938]
 
 DELIVERY_BASE_COST = 250
@@ -59,9 +60,15 @@ def _load_json(path, default):
         return default
 
 def _save_json(path, data):
+    # Атомарная запись: сначала во временный файл, затем подменяем оригинал.
+    # Так файл с баллами (это деньги) не побьётся, если бот упадёт в момент записи.
     try:
-        with open(path, "w", encoding="utf-8") as f:
+        tmp = path + ".tmp"
+        with open(tmp, "w", encoding="utf-8") as f:
             json.dump(data, f, ensure_ascii=False, indent=2)
+            f.flush()
+            os.fsync(f.fileno())
+        os.replace(tmp, path)
     except Exception as e:
         logger.error(f"Не удалось сохранить {path}: {e}")
 
@@ -120,6 +127,10 @@ def _safe_int(v, default=0):
         return int(v)
     except (TypeError, ValueError):
         return default
+
+# Все операции «прочитать-изменить-записать» с баллами идут под этим замком,
+# иначе два одновременных нажатия «Принять» могут затереть изменения друг друга.
+_bonus_lock = asyncio.Lock()
 
 def _load_bonuses():
     data = _load_json(BONUSES_FILE, {})
@@ -214,13 +225,27 @@ def settle_order_bonuses(order_id, customer_id, total, earn, redeem, ref_id):
         "ref": ref_result,
     }
 
+def referral_stats(uid):
+    """Сколько друзей привёл клиент и сколько из них уже оплатили первый заказ."""
+    data = _load_bonuses()
+    uid = str(uid)
+    invited = rewarded = 0
+    for u in data["users"].values():
+        if str(u.get("referred_by")) == uid:
+            invited += 1
+            if u.get("ref_rewarded"):
+                rewarded += 1
+    bal = data["users"].get(uid, {}).get("balance", 0)
+    return {"invited": invited, "rewarded": rewarded, "balance": bal}
+
 def get_main_keyboard():
-    web_app_url = "https://borodota.github.io/bazar/"  
+    web_app_url = "https://borodota.github.io/bazar/"
     return ReplyKeyboardMarkup(
         keyboard=[
             [KeyboardButton(text="📱 Открыть Магазин / Корзину", web_app=types.WebAppInfo(url=web_app_url))],
-            [KeyboardButton(text="🛍️ Мои заказы"), KeyboardButton(text="🤝 Партнерам")],
-            [KeyboardButton(text="📞 Контакты"), KeyboardButton(text="ℹ️ О магазине")]
+            [KeyboardButton(text="💎 Мои баллы"), KeyboardButton(text="🎁 Пригласить друга")],
+            [KeyboardButton(text="🛍️ Мои заказы"), KeyboardButton(text="📞 Контакты")],
+            [KeyboardButton(text="ℹ️ О магазине")]
         ],
         resize_keyboard=True
     )
@@ -428,7 +453,8 @@ async def change_order_status(callback: types.CallbackQuery):
     bonus_summary = None
     if action == "accept":
         try:
-            bonus_summary = settle_order_bonuses(order_id, customer_id, total, earn, redeem, ref_id)
+            async with _bonus_lock:
+                bonus_summary = settle_order_bonuses(order_id, customer_id, total, earn, redeem, ref_id)
         except Exception as e:
             logger.error(f"Ошибка начисления баллов по заказу #{order_id}: {e}")
         # Уведомляем админа об итогах и подозрительном списании
@@ -523,7 +549,8 @@ async def cmd_start(message: types.Message):
     payload = (message.text.partition(" ")[2].strip() if message.text else "")
     if payload.startswith("ref_"):
         try:
-            record_referral(message.from_user.id, payload[4:], message.from_user)
+            async with _bonus_lock:
+                record_referral(message.from_user.id, payload[4:], message.from_user)
         except Exception as e:
             logger.error(f"Не удалось записать реферала из /start: {e}")
     await message.answer(
@@ -737,10 +764,11 @@ async def cmd_bonus_add(message: types.Message):
     if delta is None:
         await message.answer("❌ Сумма должна быть числом, например 500 или -200.")
         return
-    data = _load_bonuses()
-    u = _ensure_user(data, uid)
-    u["balance"] = max(0, u["balance"] + delta)
-    _save_bonuses(data)
+    async with _bonus_lock:
+        data = _load_bonuses()
+        u = _ensure_user(data, uid)
+        u["balance"] = max(0, u["balance"] + delta)
+        _save_bonuses(data)
     await message.answer(
         f"✅ Баланс клиента <code>{uid}</code> изменён на {'+' if delta >= 0 else ''}{_fmt_money(delta)}.\n"
         f"💼 Текущий баланс: <b>{_fmt_money(u['balance'])}</b> баллов."
@@ -769,9 +797,58 @@ async def show_about(message: types.Message):
         "⚡ Только оригинальные под-системы, премиальные жидкости и расходники."
     )
 
-@dp.message(F.text == "🤝 Партнерам")
-async def show_partner_panel(message: types.Message):
-    await message.answer("🤝 Раздел партнерской программы на техническом обслуживании.")
+@dp.message(F.text == "💎 Мои баллы")
+async def show_my_bonuses(message: types.Message):
+    data = _load_bonuses()
+    u = data["users"].get(str(message.from_user.id))
+    bal = u.get("balance", 0) if u else 0
+    spent = u.get("spent", 0) if u else 0
+    orders = u.get("orders", 0) if u else 0
+    if bal == 0 and orders == 0:
+        await message.answer(
+            "💎 <b>Ваши баллы</b>\n\n"
+            "Пока баллов нет. Они начисляются <b>5%</b> с каждого оплаченного заказа "
+            "и копятся автоматически — потратите их на скидку в следующий раз.\n\n"
+            "👇 Сделайте первый заказ в магазине!",
+            reply_markup=get_main_keyboard()
+        )
+        return
+    await message.answer(
+        f"💎 <b>Ваши баллы</b>\n"
+        f"━━━━━━━━━━━━━━━━━━━━━━━━\n"
+        f"💼 Баланс: <b>{_fmt_money(bal)}</b> баллов\n"
+        f"🛒 Покупок на: <b>{_fmt_money(spent)} ₽</b>\n"
+        f"📦 Оплачено заказов: <b>{orders}</b>\n\n"
+        f"<i>Баллами можно оплатить до 20% заказа прямо в корзине.</i>",
+        reply_markup=get_main_keyboard()
+    )
+
+@dp.message(F.text == "🎁 Пригласить друга")
+async def show_referral_panel(message: types.Message):
+    uid = message.from_user.id
+    link = f"https://t.me/{BOT_USERNAME}?startapp=ref_{uid}"
+    st = referral_stats(uid)
+    share_kb = InlineKeyboardMarkup(inline_keyboard=[[
+        InlineKeyboardButton(
+            text="📤 Отправить другу",
+            url=f"https://t.me/share/url?url={link}&text="
+                "Лови скидку 5% в VAPEBAZAR PREMIUM 🔥 Жми на ссылку!"
+        )
+    ]])
+    await message.answer(
+        f"🎁 <b>Реферальная программа</b>\n"
+        f"━━━━━━━━━━━━━━━━━━━━━━━━\n\n"
+        f"Приглашай друзей и зарабатывай баллы:\n"
+        f"├ Друг получает <b>−5%</b> на первый заказ\n"
+        f"└ Тебе <b>+{REFERRAL_REWARD} баллов</b> после его первого оплаченного заказа\n\n"
+        f"🔗 <b>Твоя ссылка:</b>\n<code>{link}</code>\n\n"
+        f"📊 <b>Твоя статистика</b>\n"
+        f"├ Перешли по ссылке: <b>{st['invited']}</b>\n"
+        f"├ Сделали заказ: <b>{st['rewarded']}</b>\n"
+        f"└ Твой баланс: <b>{_fmt_money(st['balance'])}</b> баллов\n\n"
+        f"<i>Нажми кнопку ниже — друг откроет магазин со скидкой автоматически.</i>",
+        reply_markup=share_kb
+    )
 
 @dp.message(F.text == "🛍️ Мои заказы")
 async def show_my_orders(message: types.Message):
