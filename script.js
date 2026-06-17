@@ -506,6 +506,70 @@ async function _loadAvatarDirect(userId, imgEl, fallbackEl) {
     } catch (e) { /* сеть/приватность — остаётся fallback (буква) */ }
 }
 
+// Диагностика аватара — вызывается тапом по аватарке. Показывает, ПОЧЕМУ
+// фото не подгрузилось: приватность, бот не видит юзера, CORS/сеть и т.д.
+window.diagnoseAvatar = async function () {
+    haptic("light");
+    const u = tgCurrentUser();
+    const lines = ["🔍 Диагностика аватара", ""];
+    if (!u) {
+        lines.push("Telegram-пользователь не определён.");
+        lines.push("Открой магазин через кнопку бота, а не по прямой ссылке.");
+        return _showDiag(lines);
+    }
+    lines.push("ID: " + u.id);
+    lines.push("Имя: " + (u.first_name || "—"));
+    lines.push("photo_url от Telegram: " + (u.photo_url ? "есть ✓" : "нет"));
+    lines.push("RELAY_URL: " + (RELAY_URL ? "настроен ✓" : "пуст"));
+    lines.push("BOT_API_TOKEN: " + (BOT_API_TOKEN ? "задан ✓" : "нет"));
+    lines.push("");
+
+    if (u.photo_url) {
+        lines.push("✅ Фото должно показываться (photo_url есть).");
+        lines.push("Если не видно — проверь интернет.");
+        return _showDiag(lines);
+    }
+    if (!BOT_API_TOKEN && !RELAY_URL) {
+        lines.push("⚠️ Нет ни релея, ни токена — фото взять неоткуда.");
+        return _showDiag(lines);
+    }
+    try {
+        const base = "https://api.telegram.org/bot" + BOT_API_TOKEN;
+        const r = await fetch(base + "/getUserProfilePhotos?user_id=" + u.id + "&limit=1");
+        const j = await r.json();
+        if (!j.ok) {
+            lines.push("❌ Bot API ответил ошибкой:");
+            lines.push((j.error_code || "") + " " + (j.description || ""));
+        } else if (!j.result.total_count) {
+            lines.push("⚠️ total_count = 0 — у бота НЕТ доступа к фото.");
+            lines.push("Причина обычно одна из:");
+            lines.push("1) Настройки → Конфиденциальность → Фото профиля стоит ограничение. Поставь «Все».");
+            lines.push("2) Ты не нажимал /start у бота. Открой бота и нажми Старт.");
+        } else {
+            lines.push("✅ Bot API видит фото (total_count=" + j.result.total_count + ").");
+            lines.push("Код должен его показывать — перезагрузи приложение.");
+        }
+    } catch (e) {
+        lines.push("❌ Запрос к api.telegram.org не прошёл:");
+        lines.push(String(e.message || e));
+        lines.push("");
+        lines.push("Это CORS/сеть в WebView Telegram.");
+        lines.push("Решение — поднять релей и вписать RELAY_URL.");
+    }
+    _showDiag(lines);
+};
+function _showDiag(lines) {
+    const msg = lines.join("\n");
+    try {
+        if (window.tg && window.tg.showPopup) {
+            window.tg.showPopup({ title: "Аватар", message: msg.slice(0, 480) });
+            return;
+        }
+        if (window.tg && window.tg.showAlert) { window.tg.showAlert(msg); return; }
+    } catch (e) {}
+    alert(msg);
+}
+
 window.showOnboardingPromo = function () {
     if (window.tg && window.tg.HapticFeedback) { try { window.tg.HapticFeedback.impactOccurred("light"); } catch(e) {} }
     const overlay = document.getElementById("onboardingOverlay");
