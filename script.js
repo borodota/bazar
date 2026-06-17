@@ -436,23 +436,51 @@ window.switchTab = function (target) {
 };
 
 // ── ПРОФИЛЬ ──
+// Палитра как в самом Telegram: цветной кружок с инициалами для тех,
+// у кого нет фото (или фото скрыто приватностью). Цвет — детерминированно по id.
+const AVATAR_GRADIENTS = [
+    ["#ff916b", "#ff5e62"], // красно-оранжевый
+    ["#ffd16b", "#ffa14a"], // оранжевый
+    ["#9aa6ff", "#6a5cff"], // фиолетовый
+    ["#9ee87f", "#54cb68"], // зелёный
+    ["#5ce6d4", "#28b9c9"], // бирюзовый
+    ["#74d6fd", "#2a9ef1"], // голубой
+    ["#e6a4f5", "#d564ec"], // розовый
+];
+function _applyInitialsAvatar(avatarEl, fallbackEl, u) {
+    const a = (u.first_name || "").trim().charAt(0);
+    const b = (u.last_name || "").trim().charAt(0);
+    const initials = ((a + b) || (u.username || "V").charAt(0)).toUpperCase();
+    if (fallbackEl) {
+        fallbackEl.innerText = initials;
+        fallbackEl.style.color = "#ffffff";
+        fallbackEl.style.display = "flex";
+    }
+    const g = AVATAR_GRADIENTS[Math.abs(Number(u.id) || 0) % AVATAR_GRADIENTS.length];
+    if (avatarEl) avatarEl.style.background = "linear-gradient(135deg," + g[0] + " 0%," + g[1] + " 100%)";
+}
+
 window.setupProfile = function () {
     const u = (window.tg && window.tg.initDataUnsafe && window.tg.initDataUnsafe.user) || null;
     const nameEl = document.getElementById("profileName");
     const handleEl = document.getElementById("profileHandle");
     const fallbackEl = document.getElementById("profileAvatarFallback");
     const imgEl = document.getElementById("profileAvatarImg");
+    const avatarEl = document.getElementById("profileAvatar");
     if (u) {
         const fullName = [u.first_name, u.last_name].filter(Boolean).join(" ") || "Пользователь";
         if (nameEl) nameEl.innerText = fullName;
         if (handleEl) handleEl.innerText = u.username ? "@" + u.username : "VAPEBAZAR Premium";
-        if (fallbackEl) fallbackEl.innerText = (u.first_name || "V").charAt(0).toUpperCase();
 
-        // Быстрый путь: Telegram иногда передаёт photo_url напрямую
+        // 1) Всегда сразу рисуем телеграм-стиль аватар (инициалы на цветном фоне).
+        //    Так аватарка есть ВСЕГДА, даже если реальное фото недоступно.
+        _applyInitialsAvatar(avatarEl, fallbackEl, u);
+
+        // 2) Поверх пытаемся подгрузить настоящее фото профиля (если доступно).
         if (u.photo_url && imgEl) {
             _setAvatarImg(imgEl, u.photo_url, fallbackEl);
         } else if (RELAY_URL && window.tg && window.tg.initData && imgEl) {
-            // Основной путь: проксируем через relay (бот → Telegram API)
+            // через relay (бот → Telegram API)
             fetch(RELAY_URL, {
                 method: "POST",
                 headers: { "Content-Type": "application/json" },
@@ -461,17 +489,18 @@ window.setupProfile = function () {
             .then(function (r) { return r.ok ? r.blob() : Promise.reject(); })
             .then(function (blob) {
                 if (!imgEl) return;
-                const url = URL.createObjectURL(blob);
-                _setAvatarImg(imgEl, url, fallbackEl);
+                _setAvatarImg(imgEl, URL.createObjectURL(blob), fallbackEl);
             })
-            .catch(function () { /* нет фото — fallback (буква) уже показан */ });
+            .catch(function () { /* остаётся телеграм-стиль аватар */ });
         } else if (BOT_API_TOKEN && u.id && imgEl) {
-            // Fallback: пока релей не настроен — тянем фото напрямую через Bot API
+            // напрямую через Bot API (пока релей не настроен)
             _loadAvatarDirect(u.id, imgEl, fallbackEl);
         }
     } else {
+        // Открыто не из Telegram — нейтральный аватар
         if (nameEl) nameEl.innerText = "Гость";
         if (handleEl) handleEl.innerText = "VAPEBAZAR Premium";
+        if (fallbackEl) { fallbackEl.innerText = "V"; fallbackEl.style.display = "flex"; }
     }
     if (localStorage.getItem("vapeNewsletterSub") === "1") {
         const pSub = document.getElementById("profileNewsletterSub");
@@ -484,7 +513,7 @@ function _setAvatarImg(imgEl, src, fallbackEl) {
         imgEl.style.display = "block";
         if (fallbackEl) fallbackEl.style.display = "none";
     };
-    imgEl.onerror = function () { /* оставляем fallback (буква) */ };
+    imgEl.onerror = function () { /* оставляем телеграм-стиль аватар (инициалы) */ };
     imgEl.src = src;
 }
 
