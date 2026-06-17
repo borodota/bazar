@@ -19,7 +19,7 @@
 const ADMIN_IDS = [6163521938, 5289357165];
 
 export default {
-    async fetch(request, env) {
+    async fetch(request, env, ctx) {
         const cors = {
             "Access-Control-Allow-Origin": "*",
             "Access-Control-Allow-Methods": "POST, OPTIONS",
@@ -58,6 +58,18 @@ export default {
         if (action === "getAvatar") {
             // Юзер авторизован через initData — запрашиваем только его собственное фото.
             const userId = Number(user.id);
+
+            // Кэш на edge: повторные открытия профиля отдаются мгновенно,
+            // Telegram не дёргается лишний раз. Ключ — по id пользователя.
+            const cache = caches.default;
+            const cacheKey = new Request("https://avatar-cache.internal/u/" + userId);
+            const hit = await cache.match(cacheKey);
+            if (hit) {
+                const h = new Headers(hit.headers);
+                for (const k in cors) h.set(k, cors[k]);
+                return new Response(hit.body, { status: 200, headers: h });
+            }
+
             let photosData;
             try {
                 const r = await fetch("https://api.telegram.org/bot" + token + "/getUserProfilePhotos", {
@@ -94,10 +106,17 @@ export default {
             );
             const imgBytes = await imgResp.arrayBuffer();
             const ct = imgResp.headers.get("Content-Type") || "image/jpeg";
-            return new Response(imgBytes, {
+
+            // Кладём в edge-кэш на сутки (без CORS — их добавим при отдаче).
+            const cacheable = new Response(imgBytes, {
                 status: 200,
-                headers: Object.assign({ "Content-Type": ct }, cors),
+                headers: { "Content-Type": ct, "Cache-Control": "public, max-age=86400" },
             });
+            ctx.waitUntil(cache.put(cacheKey, cacheable.clone()));
+
+            const h = new Headers(cacheable.headers);
+            for (const k in cors) h.set(k, cors[k]);
+            return new Response(imgBytes, { status: 200, headers: h });
         }
 
         // ── SEND MESSAGE ───────────────────────────────────────────────────────
