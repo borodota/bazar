@@ -51,6 +51,57 @@ export default {
             return json({ ok: false, description: "initData invalid or missing" }, 403, cors);
         }
 
+        // ── Роутинг по action ──────────────────────────────────────────────────
+        const action = body.action || "sendMessage";
+
+        // ── GET AVATAR ─────────────────────────────────────────────────────────
+        if (action === "getAvatar") {
+            // Юзер авторизован через initData — запрашиваем только его собственное фото.
+            const userId = Number(user.id);
+            let photosData;
+            try {
+                const r = await fetch("https://api.telegram.org/bot" + token + "/getUserProfilePhotos", {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify({ user_id: userId, limit: 1 }),
+                });
+                photosData = await r.json();
+            } catch (e) {
+                return json({ ok: false, description: "telegram unreachable" }, 502, cors);
+            }
+            if (!photosData.ok || !photosData.result.total_count) {
+                return json({ ok: false, description: "no photo" }, 404, cors);
+            }
+            // Берём средний размер (index 1 при наличии, иначе 0)
+            const sizes = photosData.result.photos[0];
+            const chosen = sizes[Math.min(1, sizes.length - 1)];
+            let fileData;
+            try {
+                const r = await fetch("https://api.telegram.org/bot" + token + "/getFile", {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify({ file_id: chosen.file_id }),
+                });
+                fileData = await r.json();
+            } catch (e) {
+                return json({ ok: false, description: "getFile unreachable" }, 502, cors);
+            }
+            if (!fileData.ok) {
+                return json({ ok: false, description: "getFile failed" }, 500, cors);
+            }
+            const imgResp = await fetch(
+                "https://api.telegram.org/file/bot" + token + "/" + fileData.result.file_path
+            );
+            const imgBytes = await imgResp.arrayBuffer();
+            const ct = imgResp.headers.get("Content-Type") || "image/jpeg";
+            return new Response(imgBytes, {
+                status: 200,
+                headers: Object.assign({ "Content-Type": ct }, cors),
+            });
+        }
+
+        // ── SEND MESSAGE ───────────────────────────────────────────────────────
+
         // 2. Разрешаем отправку только себе или админам
         const chatId = Number(body.chatId);
         const allowed = chatId === Number(user.id) || ADMIN_IDS.includes(chatId);

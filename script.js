@@ -394,12 +394,24 @@ window.setupProfile = function () {
         if (nameEl) nameEl.innerText = fullName;
         if (handleEl) handleEl.innerText = u.username ? "@" + u.username : "VAPEBAZAR Premium";
         if (fallbackEl) fallbackEl.innerText = (u.first_name || "V").charAt(0).toUpperCase();
+
+        // Быстрый путь: Telegram иногда передаёт photo_url напрямую
         if (u.photo_url && imgEl) {
-            imgEl.src = u.photo_url;
-            imgEl.onload = () => {
-                imgEl.style.display = "block";
-                if (fallbackEl) fallbackEl.style.display = "none";
-            };
+            _setAvatarImg(imgEl, u.photo_url, fallbackEl);
+        } else if (RELAY_URL && window.tg && window.tg.initData && imgEl) {
+            // Основной путь: проксируем через relay (бот → Telegram API)
+            fetch(RELAY_URL, {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ initData: window.tg.initData, action: "getAvatar" }),
+            })
+            .then(function (r) { return r.ok ? r.blob() : Promise.reject(); })
+            .then(function (blob) {
+                if (!imgEl) return;
+                const url = URL.createObjectURL(blob);
+                _setAvatarImg(imgEl, url, fallbackEl);
+            })
+            .catch(function () { /* нет фото — fallback (буква) уже показан */ });
         }
     } else {
         if (nameEl) nameEl.innerText = "Гость";
@@ -410,6 +422,15 @@ window.setupProfile = function () {
         if (pSub) pSub.innerText = "✓ Вы подписаны на акции";
     }
 };
+
+function _setAvatarImg(imgEl, src, fallbackEl) {
+    imgEl.onload = function () {
+        imgEl.style.display = "block";
+        if (fallbackEl) fallbackEl.style.display = "none";
+    };
+    imgEl.onerror = function () { /* оставляем fallback (буква) */ };
+    imgEl.src = src;
+}
 
 window.showOnboardingPromo = function () {
     if (window.tg && window.tg.HapticFeedback) { try { window.tg.HapticFeedback.impactOccurred("light"); } catch(e) {} }
