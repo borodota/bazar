@@ -1,0 +1,6 @@
+{
+  "outputDirectory": ".",
+  "rewrites": [
+    { "source": "/api/relay", "destination": "/api/relay.js" }
+  ]
+}
