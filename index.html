@@ -138,6 +138,22 @@
                 <div class="level-track"><div class="level-progress" id="levelProgress"></div></div>
                 <div class="level-hint" id="levelHint">Покупайте больше — повышайте уровень</div>
             </div>
+            <div class="profile-card customize-card">
+                <div class="customize-head">
+                    <div class="pc-icon" style="background:rgba(var(--accent-rgb),0.12);color:rgb(var(--accent-rgb));">🎨</div>
+                    <div class="pc-text">
+                        <div class="pc-title">Цвет оформления</div>
+                        <div class="pc-sub">Выберите акцент приложения</div>
+                    </div>
+                </div>
+                <div class="theme-row" id="themeRow">
+                    <div class="theme-swatch" data-theme="green"  style="background:#00f07c;" onclick="window.setTheme('green')"></div>
+                    <div class="theme-swatch" data-theme="purple" style="background:#a06bff;" onclick="window.setTheme('purple')"></div>
+                    <div class="theme-swatch" data-theme="pink"   style="background:#ff4d94;" onclick="window.setTheme('pink')"></div>
+                    <div class="theme-swatch" data-theme="blue"   style="background:#00aaff;" onclick="window.setTheme('blue')"></div>
+                    <div class="theme-swatch" data-theme="gold"   style="background:#ffb000;" onclick="window.setTheme('gold')"></div>
+                </div>
+            </div>
             <div class="profile-card bonus-profile-card" onclick="window.openBonusInfo()">
                 <div class="pc-icon" style="background:rgba(160,107,255,0.12);color:#a06bff;">💎</div>
                 <div class="pc-text">
@@ -163,7 +179,7 @@
                 <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="m9 18 6-6-6-6"/></svg>
             </div>
             <div class="profile-card" onclick="window.openSupport()">
-                <div class="pc-icon" style="background:rgba(0,240,124,0.08);color:#00f07c;">💬</div>
+                <div class="pc-icon" style="background:rgba(var(--accent-rgb),0.08);color:rgb(var(--accent-rgb));">💬</div>
                 <div class="pc-text">
                     <div class="pc-title">Поддержка</div>
                     <div class="pc-sub">Ответим быстро в Telegram</div>

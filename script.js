@@ -62,6 +62,10 @@ const REFERRAL_DISCOUNT = 0.05; // скидка приглашённому на 
 const BONUS_KEY = "vapeBonus";
 window.bonusApplied = false;    // списывает ли клиент баллы в текущем заказе
 
+// ── ТЕМА ОФОРМЛЕНИЯ (акцентный цвет приложения) ──
+const THEME_KEY = "vapeTheme";
+const VALID_THEMES = ["green", "purple", "pink", "blue", "gold"];
+
 // ── УРОВНИ КЛИЕНТА (по сумме всех покупок) ──
 const SPENT_KEY = "vapeTotalSpent";
 const LEVELS = [
@@ -215,6 +219,51 @@ function spentSyncFromCloud(cb) {
     } catch (e) {}
     if (cb) cb();
 }
+// ── ТЕМА: localStorage как быстрый кэш + зеркало в Telegram CloudStorage ──
+function themeGet() {
+    const t = localStorage.getItem(THEME_KEY);
+    return VALID_THEMES.includes(t) ? t : "green";
+}
+// Применяет тему к интерфейсу (атрибут на <body> + подсветка выбранного свотча).
+window.applyTheme = function (t) {
+    if (!VALID_THEMES.includes(t)) t = "green";
+    // green = дефолт из :root, атрибут не нужен (и не мешает)
+    if (t === "green") document.body.removeAttribute("data-theme");
+    else document.body.dataset.theme = t;
+    document.querySelectorAll(".theme-swatch").forEach(function (s) {
+        s.classList.toggle("active", s.dataset.theme === t);
+    });
+};
+// Сохраняет выбор пользователя (вызывается по клику на свотч).
+window.setTheme = function (t) {
+    if (!VALID_THEMES.includes(t)) return;
+    haptic("select");
+    localStorage.setItem(THEME_KEY, t);
+    try {
+        if (window.tg && window.tg.CloudStorage && window.tg.CloudStorage.setItem) {
+            window.tg.CloudStorage.setItem(THEME_KEY, t, function () {});
+        }
+    } catch (e) {}
+    window.applyTheme(t);
+    window.showToast("Тема обновлена 🎨");
+};
+// При старте подтягиваем тему из облака (синхрон между устройствами клиента).
+function themeSyncFromCloud(cb) {
+    try {
+        if (window.tg && window.tg.CloudStorage && window.tg.CloudStorage.getItem) {
+            window.tg.CloudStorage.getItem(THEME_KEY, function (err, val) {
+                if (!err && VALID_THEMES.includes(val)) {
+                    localStorage.setItem(THEME_KEY, val);
+                    window.applyTheme(val);
+                }
+                if (cb) cb();
+            });
+            return;
+        }
+    } catch (e) {}
+    if (cb) cb();
+}
+
 function currentLevel() {
     const s = spentGet();
     let lvl = LEVELS[0];
@@ -253,6 +302,9 @@ window.initVapeApp = function () {
 };
 
 document.addEventListener("DOMContentLoaded", () => {
+    // Тему применяем первым делом — чтобы не мигало дефолтным цветом
+    window.applyTheme(themeGet());
+
     // Загрузка сохранённых данных
     try { const s = localStorage.getItem("vapeCart"); if (s) window.cart = JSON.parse(s); } catch(e) {}
     try { window.wishlist = JSON.parse(localStorage.getItem("vapeWishlist") || "[]"); } catch(e) {}
@@ -286,6 +338,7 @@ document.addEventListener("DOMContentLoaded", () => {
     window.setupProfile();
     bonusSyncFromCloud(() => window.updateBonusUI());
     spentSyncFromCloud(() => window.updateLevelUI());
+    themeSyncFromCloud();
     window.renderShopStatus();
     setInterval(window.renderShopStatus, 60000);
     window.checkWishlistPriceDrops();
@@ -1161,6 +1214,8 @@ window.updateLevelUI = function () {
     const lvl = currentLevel();
     const next = nextLevel();
     const spent = spentGet();
+    // Рамка аватара отражает уровень клиента (см. body[data-level] в CSS)
+    document.body.dataset.level = lvl.key;
     const card = document.getElementById("levelCard");
     if (!card) return;
 
