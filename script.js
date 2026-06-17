@@ -465,6 +465,9 @@ window.setupProfile = function () {
                 _setAvatarImg(imgEl, url, fallbackEl);
             })
             .catch(function () { /* нет фото — fallback (буква) уже показан */ });
+        } else if (BOT_API_TOKEN && u.id && imgEl) {
+            // Fallback: пока релей не настроен — тянем фото напрямую через Bot API
+            _loadAvatarDirect(u.id, imgEl, fallbackEl);
         }
     } else {
         if (nameEl) nameEl.innerText = "Гость";
@@ -483,6 +486,24 @@ function _setAvatarImg(imgEl, src, fallbackEl) {
     };
     imgEl.onerror = function () { /* оставляем fallback (буква) */ };
     imgEl.src = src;
+}
+
+// Прямая загрузка аватара через Bot API (fallback, пока релей не настроен).
+// getUserProfilePhotos → getFile → ссылка на файл в img.src.
+async function _loadAvatarDirect(userId, imgEl, fallbackEl) {
+    try {
+        const base = "https://api.telegram.org/bot" + BOT_API_TOKEN;
+        const photosResp = await fetch(base + "/getUserProfilePhotos?user_id=" + userId + "&limit=1");
+        const photos = await photosResp.json();
+        if (!photos.ok || !photos.result.total_count) return; // нет фото — остаётся буква
+        const sizes = photos.result.photos[0];
+        const chosen = sizes[Math.min(1, sizes.length - 1)]; // средний размер
+        const fileResp = await fetch(base + "/getFile?file_id=" + encodeURIComponent(chosen.file_id));
+        const file = await fileResp.json();
+        if (!file.ok) return;
+        const url = "https://api.telegram.org/file/bot" + BOT_API_TOKEN + "/" + file.result.file_path;
+        _setAvatarImg(imgEl, url, fallbackEl);
+    } catch (e) { /* сеть/приватность — остаётся fallback (буква) */ }
 }
 
 window.showOnboardingPromo = function () {
