@@ -510,6 +510,15 @@ window.submitSpecialOrder = function () {
     });
 };
 
+// Цветовая тема карточки по категории
+function _catTheme(cat) {
+    if (!cat) return "default";
+    if (cat.includes("Apple")) return "apple";
+    if (cat.includes("Samsung")) return "samsung";
+    if (cat.includes("Консоли")) return "gaming";
+    return "default";
+}
+
 // ── КАТЕГОРИИ ──
 window.renderCategories = function () {
     const container = document.getElementById("categories");
@@ -545,13 +554,19 @@ window.renderFeatured = function () {
     featured.slice(0, 8).forEach(p => {
         const card = document.createElement("div");
         card.className = "featured-card";
+        card.dataset.catTheme = _catTheme(p.category);
         const imgSrc = p.image ? `img/${p.image}` : "";
+        const fcLetter = p.name ? p.name.charAt(0).toUpperCase() : "V";
+        const fcImg = imgSrc
+            ? `<img src="${imgSrc}" alt="" style="width:100%;height:100%;object-fit:contain;padding:7px;" onerror="this.style.display='none';this.nextElementSibling.style.display='flex';">
+               <div class="fc-placeholder" style="display:none;">${fcLetter}</div>`
+            : `<div class="fc-placeholder">${fcLetter}</div>`;
         let badge = "";
         if (p.isNew) badge = '<div class="fc-badge new">New</div>';
         else if (p.tags && p.tags.some(t => t.includes("ХИТ") || t.includes("HOT"))) badge = '<div class="fc-badge hot">Хит</div>';
         card.innerHTML = `
             ${badge}
-            <div class="fc-img">${imgSrc ? `<img src="${imgSrc}" alt="" onerror="this.parentElement.innerText='${p.name.charAt(0)}'">` : p.name.charAt(0)}</div>
+            <div class="fc-img">${fcImg}</div>
             <div class="fc-name">${p.name}</div>
             <div class="fc-footer">
                 <div class="fc-price">${fmt(p.price)} ₽</div>
@@ -706,10 +721,10 @@ window.renderProducts = function (list) {
         const card = document.createElement("div");
         card.className = "product-card";
         card.dataset.productId = p.id;
-        // стаггер: каждая карточка появляется чуть позже предыдущей
+        card.dataset.catTheme = _catTheme(p.category);
         card.style.animationDelay = Math.min(idx * 35, 350) + "ms";
         const imgSrc = p.image ? `img/${p.image}` : "";
-        const letter = p.emoji || (p.name ? p.name.charAt(0).toUpperCase() : "V");
+        const letter = p.name ? p.name.charAt(0).toUpperCase() : "V";
         const qty = window.getCartQty(p.id);
 
         let tags = "";
@@ -840,7 +855,7 @@ window.openVapePopup = function (product) {
     document.getElementById("popupName").innerText = product.name;
     document.getElementById("popupBrand").innerText = product.brand || "";
     const imgSrc = product.image ? "img/" + product.image : "";
-    const letter = product.emoji || (product.name ? product.name.charAt(0).toUpperCase() : "V");
+    const letter = product.name ? product.name.charAt(0).toUpperCase() : "V";
     const img = document.getElementById("popupImg");
     const ph = document.getElementById("popupPlaceholder");
     if (imgSrc) {
@@ -848,6 +863,9 @@ window.openVapePopup = function (product) {
         img.onerror = () => { img.style.display = "none"; ph.style.display = "flex"; };
     } else { img.style.display = "none"; ph.style.display = "flex"; }
     ph.innerText = letter;
+    // цветовая тема плейсхолдера в попапе
+    const popupImgWrap = document.getElementById("popupImgWrapper");
+    if (popupImgWrap) popupImgWrap.dataset.catTheme = _catTheme(product.category);
     document.getElementById("popupDesc").innerText = product.description || "Премиальное качество.";
     document.getElementById("popupFooterPrice").innerText = `${fmt(product.price)} ₽`;
     const fc = document.getElementById("popupFlavors");
