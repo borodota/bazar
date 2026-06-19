@@ -701,10 +701,29 @@ window.submitSpecialOrder = function () {
 // Цветовая тема карточки по категории
 function _catTheme(cat) {
     if (!cat) return "default";
-    if (cat.includes("Apple")) return "apple";
+    if (cat.includes("Apple") || cat.includes("iPhone") || cat.includes("MacBook") || cat.includes("AirPods") || cat.includes("Watch")) return "apple";
     if (cat.includes("Samsung")) return "samsung";
-    if (cat.includes("Консоли")) return "gaming";
+    if (cat.includes("Консол") || cat.includes("PlayStation") || cat.includes("Nintendo")) return "gaming";
+    if (cat.includes("Под-систем") || cat.includes("Мод")) return "pod";
+    if (cat.includes("Одноразк")) return "disposable";
+    if (cat.includes("Жидкост")) return "liquid";
+    if (cat.includes("Расходник") || cat.includes("Картридж") || cat.includes("Испаритель")) return "consumable";
     return "default";
+}
+function _catIcon(cat) {
+    if (!cat) return null;
+    if (cat.includes("Apple") || cat.includes("iPhone") || cat.includes("MacBook")) return "🍎";
+    if (cat.includes("AirPods")) return "🎧";
+    if (cat.includes("Watch")) return "⌚";
+    if (cat.includes("Samsung")) return "📱";
+    if (cat.includes("PlayStation")) return "🎮";
+    if (cat.includes("Nintendo")) return "🕹";
+    if (cat.includes("Консол")) return "🎮";
+    if (cat.includes("Под-систем") || cat.includes("Мод")) return "⚡";
+    if (cat.includes("Одноразк")) return "💨";
+    if (cat.includes("Жидкост")) return "💧";
+    if (cat.includes("Расходник") || cat.includes("Картридж") || cat.includes("Испаритель")) return "🔋";
+    return null;
 }
 
 // ── КАТЕГОРИИ ──
@@ -887,12 +906,101 @@ window.showSkeletons = function (count) {
     ).join("");
 };
 
-// ── РЕНДЕР ТОВАРОВ ──
+// ── РЕНДЕР ТОВАРОВ — пагинация через IntersectionObserver ──
+// Рисуем первые 20, остальные догружаем лениво при скролле.
+const _RENDER_PAGE = 20;
+let _renderList = [];
+let _renderOffset = 0;
+let _renderObserver = null;
+
+function _buildProductCard(p, animIdx) {
+    const card = document.createElement("div");
+    card.className = "product-card";
+    card.dataset.productId = p.id;
+    card.dataset.catTheme = _catTheme(p.category);
+    card.style.animationDelay = (animIdx >= 0 ? Math.min(animIdx * 30, 300) : 0) + "ms";
+    const imgSrc = p.image ? `img/${p.image}` : "";
+    const icon = _catIcon(p.category) || (p.name ? p.name.charAt(0).toUpperCase() : "V");
+    const isWished = (window.wishlist || []).includes(p.id);
+    const viewersHtml = p.viewers ? `<span class="viewers-badge">👁 ${p.viewers}</span>` : "";
+    const oldPriceHtml = p.oldPrice ? `<span class="product-old-price">${fmt(p.oldPrice)} ₽</span>` : "";
+    let tags = "";
+    if (p.preOrder) tags += '<span class="tag tag-preorder">📦 Под заказ</span>';
+    if (p.isNew || (p.tags && p.tags.some(t => t.includes("NEW")))) tags += '<span class="tag tag-new">New</span>';
+    if (p.tags && p.tags.some(t => t.includes("ХИТ") || t.includes("HOT"))) tags += '<span class="tag tag-hot">Хит</span>';
+    if (p.oldPrice) tags += '<span class="tag tag-sale">Скидка</span>';
+    if (p.lowStock) tags += `<span class="tag tag-low">🔥 ${p.lowStock} шт.</span>`;
+    card.innerHTML = `
+        ${tags ? `<div class="product-tags">${tags}</div>` : ""}
+        <button class="wish-btn${isWished ? " wished" : ""}" onclick="event.stopPropagation();window.toggleWishlist('${p.id}')">♡</button>
+        <div class="product-image-wrapper">
+            ${imgSrc ? `<img src="${imgSrc}" class="product-img" alt="" loading="lazy" onerror="this.style.display='none';this.nextElementSibling.style.display='flex';">` : ""}
+            <div class="product-img-placeholder" style="${imgSrc ? "display:none;" : "display:flex;"}">${icon}</div>
+        </div>
+        ${viewersHtml}
+        <div class="product-name">${p.name}</div>
+        <div class="product-brand">${p.brand || ""}</div>
+        <div class="product-footer">
+            <div class="product-price-wrap">${oldPriceHtml}<div class="product-price">${fmt(p.price)} ₽</div></div>
+            <div class="card-action" id="action-${p.id}"></div>
+        </div>`;
+    card.onclick = () => { haptic("light"); window.handleCardClick(p.id); };
+    return card;
+}
+
+function _renderNextPage(grid, animate) {
+    if (_renderObserver) { _renderObserver.disconnect(); _renderObserver = null; }
+    const page = _renderList.slice(_renderOffset, _renderOffset + _RENDER_PAGE);
+    const frag = document.createDocumentFragment();
+    page.forEach((p, i) => {
+        const card = _buildProductCard(p, animate ? i : -1);
+        frag.appendChild(card);
+    });
+    _renderOffset += page.length;
+    // убираем старый sentinel перед вставкой новых карточек
+    const sentinel = grid.querySelector(".products-sentinel");
+    if (sentinel) grid.removeChild(sentinel);
+    grid.appendChild(frag);
+    // рендерим кнопки +/степперы (после того как карточки в DOM)
+    page.forEach(p => window.renderCardAction(p));
+    if (_renderOffset < _renderList.length) {
+        // добавляем новый sentinel — когда появится в viewport, догрузим следующую страницу
+        const next = document.createElement("div");
+        next.className = "products-sentinel";
+        next.style.cssText = "grid-column:span 2;height:1px;pointer-events:none;";
+        grid.appendChild(next);
+        _renderObserver = new IntersectionObserver(entries => {
+            if (entries[0].isIntersecting) _renderNextPage(grid, false);
+        }, { rootMargin: "300px" });
+        _renderObserver.observe(next);
+    } else {
+        _appendProductsCTA(grid);
+    }
+}
+
+function _appendProductsCTA(grid) {
+    const cta = document.createElement("div");
+    cta.className = "no-results-cta";
+    cta.style.cssText = "grid-column:span 2;margin-top:10px;";
+    cta.onclick = () => { haptic("light"); window.openSpecialOrder(); };
+    cta.innerHTML = `
+        <div class="nrc-icon">🔎</div>
+        <div class="nrc-text">
+            <div class="nrc-title">Не нашёл нужное?</div>
+            <div class="nrc-sub">Напиши — найдём под заказ и предложим лучшую цену.</div>
+        </div>
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="m9 18 6-6-6-6"/></svg>`;
+    grid.appendChild(cta);
+}
+
 window.renderProducts = function (list) {
     const grid = document.getElementById("products");
     if (!grid) return;
+    if (_renderObserver) { _renderObserver.disconnect(); _renderObserver = null; }
     grid.innerHTML = "";
-    if (!list || list.length === 0) {
+    _renderList = list || [];
+    _renderOffset = 0;
+    if (_renderList.length === 0) {
         grid.innerHTML = `
             <div style="grid-column:span 2;text-align:center;color:var(--text-secondary);margin:30px 0 10px;font-size:14px;font-weight:600;">😕 Ничего не найдено</div>
             <div class="no-results-cta" onclick="window.openSpecialOrder()">
@@ -905,60 +1013,7 @@ window.renderProducts = function (list) {
             </div>`;
         return;
     }
-    list.forEach((p, idx) => {
-        const card = document.createElement("div");
-        card.className = "product-card";
-        card.dataset.productId = p.id;
-        card.dataset.catTheme = _catTheme(p.category);
-        card.style.animationDelay = Math.min(idx * 35, 350) + "ms";
-        const imgSrc = p.image ? `img/${p.image}` : "";
-        const letter = p.name ? p.name.charAt(0).toUpperCase() : "V";
-        const qty = window.getCartQty(p.id);
-
-        let tags = "";
-        if (p.preOrder) tags += '<span class="tag tag-preorder">📦 Под заказ</span>';
-        if (p.isNew || (p.tags && p.tags.some(t => t.includes("NEW")))) tags += '<span class="tag tag-new">New</span>';
-        if (p.tags && p.tags.some(t => t.includes("ХИТ") || t.includes("HOT"))) tags += '<span class="tag tag-hot">Хит</span>';
-        if (p.oldPrice) tags += '<span class="tag tag-sale">Скидка</span>';
-        if (p.lowStock) tags += `<span class="tag tag-low">🔥 ${p.lowStock} шт.</span>`;
-
-        const oldPriceHtml = p.oldPrice ? `<span class="product-old-price">${fmt(p.oldPrice)} ₽</span>` : "";
-        const isWished = (window.wishlist || []).includes(p.id);
-        const viewersHtml = p.viewers ? `<span class="viewers-badge">👁 ${p.viewers} смотрят</span>` : "";
-
-        card.innerHTML = `
-            ${tags ? `<div class="product-tags">${tags}</div>` : ""}
-            <button class="wish-btn${isWished ? " wished" : ""}" onclick="event.stopPropagation();window.toggleWishlist('${p.id}')">♡</button>
-            <div class="product-image-wrapper">
-                ${imgSrc ? `<img src="${imgSrc}" class="product-img" alt="" loading="lazy" onerror="this.style.display='none';this.nextElementSibling.style.display='flex';">` : ""}
-                <div class="product-img-placeholder" style="${imgSrc ? "display:none;" : "display:flex;"}">${letter}</div>
-            </div>
-            ${viewersHtml}
-            <div class="product-name">${p.name}</div>
-            <div class="product-brand">${p.brand || ""}</div>
-            <div class="product-footer">
-                <div class="product-price-wrap">${oldPriceHtml}<div class="product-price">${fmt(p.price)} ₽</div></div>
-                <div class="card-action" id="action-${p.id}"></div>
-            </div>`;
-        card.onclick = () => { haptic("light"); window.handleCardClick(p.id); };
-        grid.appendChild(card);
-        window.renderCardAction(p);
-    });
-
-    // Постоянный CTA в конце каталога: нет нужного товара — напиши, найдём под заказ
-    const cta = document.createElement("div");
-    cta.className = "no-results-cta";
-    cta.style.gridColumn = "span 2";
-    cta.style.marginTop = "10px";
-    cta.onclick = () => { haptic("light"); window.openSpecialOrder(); };
-    cta.innerHTML = `
-        <div class="nrc-icon">🔎</div>
-        <div class="nrc-text">
-            <div class="nrc-title">Не нашёл нужное?</div>
-            <div class="nrc-sub">Напиши — найдём под заказ и предложим лучшую цену.</div>
-        </div>
-        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="m9 18 6-6-6-6"/></svg>`;
-    grid.appendChild(cta);
+    _renderNextPage(grid, true);
 };
 
 // Кнопка + или степпер на карточке
@@ -1438,6 +1493,17 @@ window.selectDeliveryTab = function (method) {
 };
 
 // ── ПОИСК ──
+// Debounced wrapper — вызывается из oninput. Кнопка «×» появляется сразу,
+// а тяжёлый фильтр+рендер запускается только после паузы в 250 мс.
+window._filterDebounced = function () {
+    const input = document.getElementById("searchInput");
+    const q = (input ? input.value : "").trim();
+    const clearBtn = document.getElementById("searchClear");
+    if (clearBtn) clearBtn.style.display = q ? "block" : "none";
+    clearTimeout(window._filterTimer);
+    window._filterTimer = setTimeout(window.filterVapeProducts, 250);
+};
+
 window.filterVapeProducts = function () {
     const input = document.getElementById("searchInput");
     const q = (input ? input.value : "").trim().toLowerCase();
@@ -1458,6 +1524,8 @@ window.filterVapeProducts = function () {
     if (featured) featured.style.display = (window.currentCategory === "Все" && !q && noMods) ? "block" : "none";
     const label = document.getElementById("allProductsLabel");
     if (label) label.innerText = q ? "Результаты поиска" : (window.currentCategory === "Все" ? "Все товары" : window.currentCategory);
+    const countEl = document.getElementById("resultsCount");
+    if (countEl) countEl.textContent = (q || window.currentCategory !== "Все" || window.currentFilter) ? filtered.length + " товар" + (filtered.length === 1 ? "" : filtered.length >= 2 && filtered.length <= 4 ? "а" : "ов") : "";
     window.renderProducts(filtered);
 };
 
@@ -2053,18 +2121,22 @@ window.startHeroTimer = function () {
     const elM = document.getElementById("htM");
     const elS = document.getElementById("htS");
     if (!elH || !elM || !elS) return;
-    const pad = (n) => String(n).padStart(2, "0");
+    const pad = n => String(n).padStart(2, "0");
+    let prevDiff = -1;
     function tick() {
         const now = new Date();
-        const end = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 23, 59, 59);
-        const diff = Math.max(0, Math.floor((end - now) / 1000));
-        elH.textContent = pad(Math.floor(diff / 3600));
-        elM.textContent = pad(Math.floor((diff % 3600) / 60));
-        elS.textContent = pad(diff % 60);
+        const diff = Math.max(0, Math.floor((new Date(now.getFullYear(), now.getMonth(), now.getDate(), 23, 59, 59) - now) / 1000));
+        if (diff !== prevDiff) {
+            prevDiff = diff;
+            elH.textContent = pad(Math.floor(diff / 3600));
+            elM.textContent = pad(Math.floor((diff % 3600) / 60));
+            elS.textContent = pad(diff % 60);
+        }
+        window._heroRafId = requestAnimationFrame(tick);
     }
-    tick();
-    if (window._heroTimerInt) clearInterval(window._heroTimerInt);
-    window._heroTimerInt = setInterval(tick, 1000);
+    if (window._heroRafId) cancelAnimationFrame(window._heroRafId);
+    if (window._heroTimerInt) { clearInterval(window._heroTimerInt); window._heroTimerInt = null; }
+    window._heroRafId = requestAnimationFrame(tick);
 };
 
 // ── ОНБОРДИНГ ──

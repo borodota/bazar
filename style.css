@@ -179,6 +179,14 @@ header.scrolled { border-bottom-color: var(--border); }
 .fc-add:active { transform: scale(0.82); opacity: 0.85; }
 
 /* ── СЕТКА ── */
+.catalog-heading-row {
+    display: flex; align-items: center; justify-content: space-between;
+    padding: 0 18px 8px;
+}
+.results-count {
+    font-size: 11px; font-weight: 700; letter-spacing: 0.04em;
+    color: var(--text-secondary); opacity: 0.7;
+}
 .products-grid { display: grid; grid-template-columns: repeat(2,1fr); gap: 10px; padding: 0 18px; }
 .product-card {
     background: #0c0f1a;
@@ -239,23 +247,20 @@ header.scrolled { border-bottom-color: var(--border); }
 }
 .product-img { max-width: 100%; max-height: 100%; object-fit: contain; padding: 5px; }
 .product-img-placeholder {
-    width: 64px; height: 64px;
-    background: linear-gradient(135deg, rgba(var(--accent-rgb),0.12) 0%, rgba(0,200,255,0.06) 100%);
+    width: 72px; height: 72px;
+    background: linear-gradient(135deg, rgba(var(--accent-rgb),0.14) 0%, rgba(var(--accent-2-rgb),0.07) 100%);
     border: 2px solid rgba(var(--accent-rgb),0.28);
-    border-radius: 50%;
+    border-radius: 20px;
     display: flex; align-items: center; justify-content: center;
-    font-size: 26px; font-weight: 900; color: var(--neon-green);
-    box-shadow: 0 0 22px rgba(var(--accent-rgb),0.14), inset 0 1px 0 rgba(255,255,255,0.08);
-    letter-spacing: -0.5px;
+    font-size: 30px;
+    box-shadow: 0 0 24px rgba(var(--accent-rgb),0.12), inset 0 1px 0 rgba(255,255,255,0.08);
     flex-shrink: 0;
 }
 
 /* Apple — серебряно-перламутровый */
 [data-cat-theme="apple"] .product-img-placeholder {
-    background: linear-gradient(135deg, rgba(210,220,240,0.12) 0%, rgba(255,255,255,0.05) 100%);
-    border-color: rgba(210,220,240,0.32);
-    color: #c8d4ee;
-    box-shadow: 0 0 22px rgba(200,210,240,0.10), inset 0 1px 0 rgba(255,255,255,0.12);
+    background: linear-gradient(135deg, rgba(210,220,240,0.14) 0%, rgba(255,255,255,0.05) 100%);
+    border-color: rgba(210,220,240,0.32); box-shadow: 0 0 22px rgba(200,210,240,0.10);
 }
 [data-cat-theme="apple"] .product-image-wrapper {
     background: linear-gradient(135deg, rgba(210,220,240,0.06) 0%, rgba(255,255,255,0.02) 100%);
@@ -264,10 +269,8 @@ header.scrolled { border-bottom-color: var(--border); }
 
 /* Samsung — электрик-синий */
 [data-cat-theme="samsung"] .product-img-placeholder {
-    background: linear-gradient(135deg, rgba(30,120,255,0.14) 0%, rgba(0,70,220,0.07) 100%);
-    border-color: rgba(30,120,255,0.38);
-    color: #6699ff;
-    box-shadow: 0 0 22px rgba(30,120,255,0.14), inset 0 1px 0 rgba(255,255,255,0.08);
+    background: linear-gradient(135deg, rgba(30,120,255,0.16) 0%, rgba(0,70,220,0.07) 100%);
+    border-color: rgba(30,120,255,0.36); box-shadow: 0 0 22px rgba(30,120,255,0.14);
 }
 [data-cat-theme="samsung"] .product-image-wrapper {
     background: linear-gradient(135deg, rgba(30,120,255,0.07) 0%, rgba(0,70,220,0.03) 100%);
@@ -276,14 +279,52 @@ header.scrolled { border-bottom-color: var(--border); }
 
 /* Консоли — фиолетово-пурпурный */
 [data-cat-theme="gaming"] .product-img-placeholder {
-    background: linear-gradient(135deg, rgba(160,60,255,0.14) 0%, rgba(100,0,210,0.07) 100%);
-    border-color: rgba(160,60,255,0.38);
-    color: #cc88ff;
-    box-shadow: 0 0 22px rgba(160,60,255,0.14), inset 0 1px 0 rgba(255,255,255,0.08);
+    background: linear-gradient(135deg, rgba(160,60,255,0.16) 0%, rgba(100,0,210,0.07) 100%);
+    border-color: rgba(160,60,255,0.36); box-shadow: 0 0 22px rgba(160,60,255,0.14);
 }
 [data-cat-theme="gaming"] .product-image-wrapper {
     background: linear-gradient(135deg, rgba(160,60,255,0.07) 0%, rgba(100,0,210,0.03) 100%);
     border-color: rgba(160,60,255,0.16);
+}
+
+/* Под-системы — электро-зелёный (акцент) */
+[data-cat-theme="pod"] .product-img-placeholder {
+    background: linear-gradient(135deg, rgba(var(--accent-rgb),0.18) 0%, rgba(var(--accent-rgb),0.06) 100%);
+    border-color: rgba(var(--accent-rgb),0.40); box-shadow: 0 0 22px rgba(var(--accent-rgb),0.18);
+}
+[data-cat-theme="pod"] .product-image-wrapper {
+    background: linear-gradient(135deg, rgba(var(--accent-rgb),0.07) 0%, rgba(var(--accent-rgb),0.02) 100%);
+    border-color: rgba(var(--accent-rgb),0.18);
+}
+
+/* Одноразки — оранжевый */
+[data-cat-theme="disposable"] .product-img-placeholder {
+    background: linear-gradient(135deg, rgba(255,140,0,0.18) 0%, rgba(255,80,0,0.07) 100%);
+    border-color: rgba(255,140,0,0.40); box-shadow: 0 0 22px rgba(255,140,0,0.14);
+}
+[data-cat-theme="disposable"] .product-image-wrapper {
+    background: linear-gradient(135deg, rgba(255,140,0,0.07) 0%, rgba(255,80,0,0.02) 100%);
+    border-color: rgba(255,140,0,0.16);
+}
+
+/* Жидкости — голубой */
+[data-cat-theme="liquid"] .product-img-placeholder {
+    background: linear-gradient(135deg, rgba(0,160,255,0.18) 0%, rgba(0,100,200,0.07) 100%);
+    border-color: rgba(0,160,255,0.40); box-shadow: 0 0 22px rgba(0,160,255,0.14);
+}
+[data-cat-theme="liquid"] .product-image-wrapper {
+    background: linear-gradient(135deg, rgba(0,160,255,0.07) 0%, rgba(0,100,200,0.02) 100%);
+    border-color: rgba(0,160,255,0.16);
+}
+
+/* Расходники/Картриджи — янтарный */
+[data-cat-theme="consumable"] .product-img-placeholder {
+    background: linear-gradient(135deg, rgba(255,180,0,0.18) 0%, rgba(200,120,0,0.07) 100%);
+    border-color: rgba(255,180,0,0.40); box-shadow: 0 0 22px rgba(255,180,0,0.14);
+}
+[data-cat-theme="consumable"] .product-image-wrapper {
+    background: linear-gradient(135deg, rgba(255,180,0,0.07) 0%, rgba(200,120,0,0.02) 100%);
+    border-color: rgba(255,180,0,0.16);
 }
 .product-name { font-size: 12px; font-weight: 700; line-height: 1.35; margin-bottom: 5px; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
 .product-brand { font-size: 10px; color: var(--text-secondary); font-weight: 600; margin-bottom: 10px; }
