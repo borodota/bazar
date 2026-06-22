@@ -43,6 +43,7 @@ DATA_DIR = os.path.dirname(os.path.abspath(__file__))
 SUBSCRIBERS_FILE = os.path.join(DATA_DIR, "subscribers.json")  # кому слать рассылку
 ORDERS_FILE = os.path.join(DATA_DIR, "orders_log.json")        # журнал заказов для /orders и /stats
 BONUSES_FILE = os.path.join(DATA_DIR, "bonuses.json")          # ИСТОЧНИК ПРАВДЫ по баллам и рефералам
+NOTIFY_FILE = os.path.join(DATA_DIR, "notify_requests.json")   # запросы уведомить о поступлении товара
 
 REFERRAL_REWARD = 200   # баллов пригласившему за ПЕРВЫЙ оплаченный заказ друга
 EARN_CAP_RATE = 0.15    # санити-лимит начисления: не больше 15% от суммы заказа
@@ -84,7 +85,7 @@ def remember_user(user):
     }
     _save_json(SUBSCRIBERS_FILE, subs)
 
-def log_order(order_id, customer_id, total, action, status_label):
+def log_order(order_id, customer_id, total, action, status_label, items=None, name=None, phone=None, address=None):
     """Создаёт/обновляет запись заказа в журнале. Вызывается при создании заказа
     (путь sendData) и при каждой смене статуса кнопкой (путь Bot API из браузера)."""
     orders = _load_json(ORDERS_FILE, [])
@@ -102,6 +103,14 @@ def log_order(order_id, customer_id, total, action, status_label):
         rec["total"] = int(total)
     if customer_id and not rec.get("customer_id"):
         rec["customer_id"] = str(customer_id)
+    if items and not rec.get("items"):
+        rec["items"] = str(items)
+    if name and not rec.get("name"):
+        rec["name"] = str(name)
+    if phone and not rec.get("phone"):
+        rec["phone"] = str(phone)
+    if address and not rec.get("address"):
+        rec["address"] = str(address)
     rec["status"] = action
     rec["status_label"] = status_label
     rec["updated_at"] = now
@@ -193,6 +202,7 @@ def settle_order_bonuses(order_id, customer_id, total, earn, redeem, ref_id):
     cust["balance"] = max(0, cust["balance"] - actual_redeem + earn)
     cust["spent"] += total
     cust["orders"] += 1
+    cust["last_order_ts"] = datetime.now().isoformat(timespec="seconds")
 
     # 3. Реферальная связь: серверной нет — берём из заказа (по факту покупки)
     referrer_id = cust.get("referred_by")
@@ -303,6 +313,15 @@ async def handle_web_app_order(message: types.Message):
         if is_json and raw_data.get("type") == "notify_request":
             username_text = f"@{message.from_user.username}" if message.from_user.username else "Скрыт"
             prod_name = raw_data.get("product_name", "—")
+            # Сохраняем запрос — когда товар придёт, /restock оповестит всех
+            notify_reqs = _load_json(NOTIFY_FILE, {})
+            prod_key = prod_name.lower().strip()
+            if prod_key not in notify_reqs:
+                notify_reqs[prod_key] = []
+            uid_str = str(message.from_user.id)
+            if uid_str not in notify_reqs[prod_key]:
+                notify_reqs[prod_key].append(uid_str)
+            _save_json(NOTIFY_FILE, notify_reqs)
             await message.answer(f"🔔 Мы сообщим как только <b>{prod_name}</b> появится в наличии!", reply_markup=get_main_keyboard())
             for chat_id in set([ADMIN_ID] + DEPUTY_ADMIN_IDS):
                 try: await bot.send_message(chat_id=chat_id, text=f"🔔 <b>Запрос наличия</b>\nКлиент: {username_text}\nТовар: {prod_name}\nID: <code>{message.from_user.id}</code>")
@@ -406,7 +425,8 @@ async def handle_web_app_order(message: types.Message):
         ])
 
         # Заказ из sendData приходит с полными данными — сразу пишем его в журнал
-        log_order(order_id, customer_id, final_total, "new", "🆕 Новый")
+        log_order(order_id, customer_id, final_total, "new", "🆕 Новый",
+                  items=items, name=name, phone=phone, address=address)
 
         all_chats = set([ADMIN_ID] + DEPUTY_ADMIN_IDS)
         for chat_id in all_chats:
@@ -489,6 +509,31 @@ async def change_order_status(callback: types.CallbackQuery):
         except Exception as e:
             logger.error(f"Не удалось обновить сообщение заказа #{order_id}: {e}")
 
+    # При завершении заказа — отправляем чек клиенту
+    if action == "done" and customer_id:
+        orders = _load_json(ORDERS_FILE, [])
+        rec = next((o for o in orders if str(o.get("order_id")) == str(order_id)), None)
+        if rec:
+            receipt_items = rec.get("items") or "—"
+            receipt_total = _fmt_money(rec.get("total") or total)
+            receipt_date = rec.get("created_at", datetime.now().isoformat())[:10]
+            receipt_text = (
+                f"🧾 <b>ВАШ ЧЕК — VAPEBAZAR PREMIUM</b>\n"
+                f"━━━━━━━━━━━━━━━━━━━━━━━━\n"
+                f"📦 Заказ: <b>#{order_id}</b>\n"
+                f"📅 Дата: {receipt_date}\n\n"
+                f"🛒 <b>Состав:</b>\n<blockquote>{receipt_items}</blockquote>\n\n"
+                f"💰 <b>Итого: {receipt_total} ₽</b>\n"
+                f"━━━━━━━━━━━━━━━━━━━━━━━━\n"
+                f"✅ <b>ОПЛАЧЕН И ВЫДАН</b>\n\n"
+                f"Спасибо за покупку! Возвращайтесь 💚\n"
+                f"📞 По вопросам: @{MANAGER_USERNAME}"
+            )
+            try:
+                await bot.send_message(chat_id=int(customer_id), text=receipt_text)
+            except Exception as e:
+                logger.error(f"Не удалось отправить чек клиенту {customer_id}: {e}")
+
     # Уведомляем клиента о смене статуса
     if customer_id:
         status_extra = {
@@ -565,6 +610,7 @@ async def cmd_start(message: types.Message):
             "├ /orders — последние заказы\n"
             "├ /bonus <i>id</i> — баланс баллов клиента\n"
             "├ /bonus_add <i>id сумма</i> — изменить баллы (можно −)\n"
+            "├ /restock <i>товар</i> — поступление: оповестить ждущих\n"
             "├ /broadcast <i>текст</i> — рассылка всем подписчикам\n"
             "└ /broadcast_buyers <i>текст</i> — рассылка только покупателям"
         )
@@ -1000,11 +1046,193 @@ async def fallback_any_message(message: types.Message):
         reply_markup=get_main_keyboard()
     )
 
+@dp.message(Command("birthday"))
+async def cmd_birthday(message: types.Message):
+    """Пользователь сохраняет дату рождения: /birthday ДД.ММ"""
+    args = (message.text or "").split()
+    if len(args) < 2:
+        await message.answer(
+            "🎂 <b>День рождения</b>\n\n"
+            "Укажи дату: <code>/birthday ДД.ММ</code>\n"
+            "Например: <code>/birthday 15.03</code>\n\n"
+            "В день рождения тебя ждёт подарок от VAPEBAZAR 🎁"
+        )
+        return
+    date_str = args[1].strip()
+    try:
+        parts = date_str.split(".")
+        day, month = int(parts[0]), int(parts[1])
+        assert 1 <= day <= 31 and 1 <= month <= 12
+        formatted = f"{day:02d}.{month:02d}"
+    except Exception:
+        await message.answer("❌ Неверный формат. Пример: <code>/birthday 15.03</code>")
+        return
+    subs = _load_json(SUBSCRIBERS_FILE, {})
+    uid = str(message.from_user.id)
+    if uid not in subs:
+        subs[uid] = {"name": message.from_user.first_name or "", "username": message.from_user.username or "", "ts": datetime.now().isoformat(timespec="seconds")}
+    subs[uid]["birthday"] = formatted
+    _save_json(SUBSCRIBERS_FILE, subs)
+    await message.answer(f"🎂 День рождения сохранён: <b>{formatted}</b>\nВ этот день тебя ждёт подарок от VAPEBAZAR! 🎁")
+
+
+@dp.message(Command("restock"))
+async def cmd_restock(message: types.Message):
+    """Админ отмечает поступление товара — оповещаем всех, кто ждал."""
+    if message.from_user.id not in ADMINS:
+        return
+    product_name = message.text.partition(" ")[2].strip()
+    if not product_name:
+        notify_reqs = _load_json(NOTIFY_FILE, {})
+        if notify_reqs:
+            items_list = "\n".join(f"• {k} ({len(v)} чел.)" for k, v in list(notify_reqs.items())[:15])
+            await message.answer(
+                "📦 <b>Поступление товара</b>\n\n"
+                f"Использование: <code>/restock Название товара</code>\n\n"
+                f"<b>Ожидают поступления:</b>\n{items_list}"
+            )
+        else:
+            await message.answer(
+                "📦 <b>Поступление товара</b>\n\n"
+                "Использование: <code>/restock Название товара</code>\n"
+                "Пока нет запросов на уведомление."
+            )
+        return
+    notify_reqs = _load_json(NOTIFY_FILE, {})
+    query = product_name.lower()
+    matching_users = set()
+    matched_keys = []
+    for key, users in notify_reqs.items():
+        if query in key or key in query:
+            matched_keys.append(key)
+            matching_users.update(users)
+    if not matching_users:
+        await message.answer(f"🔕 Нет запросов на «{product_name}».")
+        return
+    await message.answer(f"📢 Оповещаю {len(matching_users)} пользователей о поступлении «{product_name}»…")
+    sent = failed = 0
+    for uid in matching_users:
+        try:
+            await bot.send_message(
+                chat_id=int(uid),
+                text=(
+                    f"🔔 <b>Товар появился в наличии!</b>\n\n"
+                    f"<b>{product_name}</b> — снова есть! 🎉\n"
+                    f"Заходи в магазин и оформляй заказ 🛒"
+                ),
+                reply_markup=get_main_keyboard()
+            )
+            sent += 1
+        except Exception as e:
+            failed += 1
+            logger.warning(f"restock notify → {uid}: {e}")
+        await asyncio.sleep(0.05)
+    for key in matched_keys:
+        notify_reqs.pop(key, None)
+    _save_json(NOTIFY_FILE, notify_reqs)
+    await message.answer(f"✅ Отправлено: {sent}, не доставлено: {failed}")
+
+
+async def birthday_check_loop():
+    """Ежедневно проверяет дни рождения и начисляет +100 баллов."""
+    while True:
+        try:
+            now = datetime.now()
+            today_str = f"{now.day:02d}.{now.month:02d}"
+            subs = _load_json(SUBSCRIBERS_FILE, {})
+            changed = False
+            for uid, data in subs.items():
+                if data.get("birthday") != today_str:
+                    continue
+                if data.get("last_birthday_bonus") == now.year:
+                    continue
+                async with _bonus_lock:
+                    bonuses = _load_bonuses()
+                    u = _ensure_user(bonuses, uid)
+                    u["balance"] += 100
+                    _save_bonuses(bonuses)
+                subs[uid]["last_birthday_bonus"] = now.year
+                changed = True
+                name = data.get("name") or "друг"
+                try:
+                    await bot.send_message(
+                        chat_id=int(uid),
+                        text=(
+                            f"🎂 <b>С Днём Рождения, {name}!</b>\n\n"
+                            f"Вся команда VAPEBAZAR поздравляет тебя! 🥳\n"
+                            f"В подарок — <b>+100 баллов</b> на твой счёт 💎\n\n"
+                            f"Трать с удовольствием 💚"
+                        ),
+                        reply_markup=get_main_keyboard()
+                    )
+                except Exception as e:
+                    logger.error(f"Birthday message failed for {uid}: {e}")
+            if changed:
+                _save_json(SUBSCRIBERS_FILE, subs)
+        except Exception as e:
+            logger.error(f"Birthday loop error: {e}")
+        # Следующий запуск в 10:00 следующего дня
+        now = datetime.now()
+        tomorrow = (now + timedelta(days=1)).replace(hour=10, minute=0, second=0, microsecond=0)
+        await asyncio.sleep((tomorrow - now).total_seconds())
+
+
+async def smart_reminder_loop():
+    """Раз в сутки находит тех, кто не заказывал 14+ дней, и присылает напоминание."""
+    await asyncio.sleep(3600)  # первый запуск через час после старта бота
+    while True:
+        try:
+            now = datetime.now()
+            cutoff = now - timedelta(days=14)
+            data = _load_bonuses()
+            for uid, u in data["users"].items():
+                last_ts_str = u.get("last_order_ts")
+                if not last_ts_str:
+                    continue
+                try:
+                    last_ts = datetime.fromisoformat(last_ts_str)
+                except Exception:
+                    continue
+                if last_ts > cutoff:
+                    continue
+                reminded_str = u.get("last_reminded_ts")
+                if reminded_str:
+                    try:
+                        reminded_ts = datetime.fromisoformat(reminded_str)
+                        if reminded_ts > last_ts:
+                            continue  # уже напоминали после последнего заказа
+                    except Exception:
+                        pass
+                name = u.get("name") or "друг"
+                try:
+                    await bot.send_message(
+                        chat_id=int(uid),
+                        text=(
+                            f"💨 <b>Давно тебя не видели, {name}!</b>\n\n"
+                            f"Запасы подходят к концу? 😉\n"
+                            f"Свежие поступления уже в каталоге — заходи!\n\n"
+                            f"💎 У тебя на балансе: <b>{_fmt_money(u.get('balance', 0))}</b> баллов"
+                        ),
+                        reply_markup=get_main_keyboard()
+                    )
+                    async with _bonus_lock:
+                        d2 = _load_bonuses()
+                        if uid in d2["users"]:
+                            d2["users"][uid]["last_reminded_ts"] = now.isoformat(timespec="seconds")
+                            _save_bonuses(d2)
+                except Exception as e:
+                    logger.error(f"Smart reminder failed for {uid}: {e}")
+                await asyncio.sleep(0.05)
+        except Exception as e:
+            logger.error(f"Smart reminder loop error: {e}")
+        await asyncio.sleep(86400)  # раз в сутки
+
+
 async def main():
     logger.info("Запуск сервера бота VAPEBAZAR PREMIUM...")
-    # Webhook нужно снять, иначе polling не получит апдейты.
-    # Накопившиеся за время простоя заказы НЕ сбрасываем — они доставятся после старта.
     await bot.delete_webhook(drop_pending_updates=False)
+    asyncio.create_task(birthday_check_loop())
+    asyncio.create_task(smart_reminder_loop())
     await dp.start_polling(bot)
 
 if __name__ == "__main__":

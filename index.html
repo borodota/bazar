@@ -18,6 +18,12 @@
 </head>
 <body>
 
+    <div id="splashScreen" class="splash-screen">
+        <div class="splash-logo">💨</div>
+        <div class="splash-title">VAPEBAZAR</div>
+        <div class="splash-sub">Premium Shop</div>
+    </div>
+
     <!-- ШАПКА -->
     <header id="appHeader">
         <div class="header-left">
@@ -495,6 +501,17 @@
 
     <div id="toast" class="toast-notification">Добавлено в корзину</div>
     <div id="flyDot" class="fly-dot"></div>
+
+    <div id="orderSuccessOverlay" class="order-success-overlay" style="display:none;">
+        <div class="oso-content">
+            <div class="oso-icon">🎉</div>
+            <div class="oso-title">Заказ оформлен!</div>
+            <div class="oso-num" id="osoNum">#0000</div>
+            <div class="oso-text">Бот пришлёт подтверждение в Telegram</div>
+            <div class="oso-bonus" id="osoBonus"></div>
+            <button class="oso-btn" onclick="window.closeOrderSuccess()">Отлично!</button>
+        </div>
+    </div>
 
     <script src="products.js?v=2026061503"></script>
     <script src="script.js?v=2026061503"></script>

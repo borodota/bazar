@@ -302,6 +302,10 @@ window.initVapeApp = function () {
 };
 
 document.addEventListener("DOMContentLoaded", () => {
+    // #4: Splash screen — hide after 1200ms, remove after fade
+    var splash = document.getElementById("splashScreen");
+    if (splash) setTimeout(function() { splash.classList.add("hidden"); setTimeout(function() { splash.remove(); }, 400); }, 1200);
+
     // Тему применяем первым делом — чтобы не мигало дефолтным цветом
     window.applyTheme(themeGet());
 
@@ -939,7 +943,6 @@ function _buildProductCard(p, animIdx) {
     const imgSrc = p.image ? `img/${p.image}` : "";
     const icon = _catIcon(p.category) || (p.name ? p.name.charAt(0).toUpperCase() : "V");
     const isWished = (window.wishlist || []).includes(p.id);
-    const viewersHtml = p.viewers ? `<span class="viewers-badge">👁 ${p.viewers}</span>` : "";
     const oldPriceHtml = p.oldPrice ? `<span class="product-old-price">${fmt(p.oldPrice)} ₽</span>` : "";
     let tags = "";
     if (p.preOrder) tags += '<span class="tag tag-preorder">📦 Под заказ</span>';
@@ -954,7 +957,6 @@ function _buildProductCard(p, animIdx) {
             ${imgSrc ? `<img src="${imgSrc}" class="product-img" alt="" loading="lazy" onerror="this.style.display='none';this.nextElementSibling.style.display='flex';">` : ""}
             <div class="product-img-placeholder" style="${imgSrc ? "display:none;" : "display:flex;"}">${icon}</div>
         </div>
-        ${viewersHtml}
         <div class="product-name">${p.name}</div>
         <div class="product-brand">${p.brand || ""}</div>
         <div class="product-footer">
@@ -1143,6 +1145,29 @@ window.openVapePopup = function (product) {
         });
     } else { fb.style.display = "none"; }
     window.renderRelatedProducts(product.id);
+    // #39: share button
+    (function () {
+        var existingShare = document.getElementById("popupShareBtn");
+        if (existingShare) existingShare.remove();
+        var scrollContent = document.querySelector("#productPopup .popup-scroll-content");
+        if (!scrollContent) return;
+        var btn = document.createElement("button");
+        btn.id = "popupShareBtn";
+        btn.className = "share-btn";
+        btn.innerHTML = '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="18" cy="5" r="3"/><circle cx="6" cy="12" r="3"/><circle cx="18" cy="19" r="3"/><line x1="8.59" y1="13.51" x2="15.42" y2="17.49"/><line x1="15.41" y1="6.51" x2="8.59" y2="10.49"/></svg> Поделиться';
+        var p = product;
+        btn.onclick = function () {
+            haptic("light");
+            if (navigator.share) {
+                navigator.share({ title: p.name, text: p.name + " — " + p.price + " ₽\nVAPEBAZAR", url: "https://t.me/VapeBazar_bot/shop" }).catch(function () {});
+            } else if (window.tg && window.tg.switchInlineQuery) {
+                try { window.tg.switchInlineQuery(p.name + " " + p.price + "₽"); } catch (e) {}
+            } else if (window.tg && window.tg.showPopup) {
+                try { window.tg.showPopup({ message: p.name + "\n" + p.price + " ₽\nVAPEBAZAR — @VapeBazar_bot" }); } catch (e) {}
+            }
+        };
+        scrollContent.appendChild(btn);
+    })();
     window.updatePopupStockState(product);
     document.getElementById("productPopup").classList.add("active");
     window.setupBackButton(window.closeVapePopup);
@@ -1175,6 +1200,12 @@ window.addToCart = function () {
     if (existing) existing.quantity += 1;
     else window.cart.push({ id: p.id, name: p.name, price: p.price, flavor, quantity: 1 });
     haptic("success");
+    // #7: neon glow flash on the add-to-cart button
+    const addBtn = document.querySelector(".popup-add-btn");
+    if (addBtn) {
+        addBtn.classList.add("btn-add-cart-flash");
+        setTimeout(function() { addBtn.classList.remove("btn-add-cart-flash"); }, 600);
+    }
     window.updateCartCounters();
     window.renderCardAction(p);
     window.markCardInCart(p.id);
@@ -1307,6 +1338,11 @@ window.openVapeCart = function () {
             });
         }
     }
+    // #16: pre-fill saved delivery address
+    var addrEl = document.getElementById("deliveryAddress");
+    var savedAddr = localStorage.getItem("vapeSavedAddr");
+    if (savedAddr && addrEl) addrEl.value = savedAddr;
+
     window.updateCartTotalDisplay();
     document.getElementById("cartPopup").classList.add("active");
     window.updateNewsletterBanner();
@@ -1650,6 +1686,10 @@ window.checkoutVapeOrder = function () {
     if (window.currentDeliveryMethod === "delivery" && !address) {
         haptic("error"); shakeField("deliveryAddress"); window.showToast("Укажите адрес доставки"); return;
     }
+    // #16: save delivery address to localStorage
+    var addrElSave = document.getElementById("deliveryAddress");
+    if (addrElSave && addrElSave.value.trim()) localStorage.setItem("vapeSavedAddr", addrElSave.value.trim());
+
     const { subtotal, bonusableSubtotal, discount, deliveryCost, bonusUsed, total } = window.calcOrderTotals();
     if (subtotal < MIN_ORDER_AMOUNT) { haptic("error"); window.showToast(`Минимум ${MIN_ORDER_AMOUNT} ₽ (сейчас ${subtotal} ₽)`); return; }
 
@@ -1676,7 +1716,8 @@ window.checkoutVapeOrder = function () {
             window.referralDiscountActive ? `Реферал: ${localStorage.getItem("vapeReferredBy") || ""}` : null,
             localStorage.getItem("vapeNewsletterSub") === "1" ? "Рассылка: да" : null,
         ].filter(Boolean).join(", ") || "Нет",
-        total
+        total,
+        _status: "new"
     };
 
     const user = tgCurrentUser();
@@ -1766,13 +1807,7 @@ window.checkoutVapeOrder = function () {
         window.updateCartCounters();
         window.updateBonusUI();
         window.showConfetti();
-        window.showToast(bonusEarned > 0
-            ? `✅ Заказ #${orderData.order_id} отправлен! +${fmt(bonusEarned)} баллов 💎`
-            : `✅ Заказ #${orderData.order_id} отправлен!`);
-        setTimeout(() => {
-            try { if (window.tg && window.tg.close) { window.tg.close(); return; } } catch (e) {}
-            window.closeVapeCart();
-        }, 2000);
+        window.showOrderSuccess(orderData.order_id, bonusEarned);
     }).catch((err) => {
         haptic("error");
         console.error("Order send error:", err);
@@ -1917,13 +1952,23 @@ window.renderHistoryPage = function () {
     }
     content.innerHTML = "";
     history.forEach(order => {
+        const statusMap = {
+            "new": { label: "🆕 Новый", cls: "hi-status-new" },
+            "accept": { label: "🟡 Принят", cls: "hi-status-accept" },
+            "pack": { label: "📦 В сборке", cls: "hi-status-pack" },
+            "ship": { label: "🚚 В пути", cls: "hi-status-ship" },
+            "done": { label: "✅ Выполнен", cls: "hi-status-done" },
+            "cancel": { label: "❌ Отменён", cls: "hi-status-cancel" },
+        };
+        const st = statusMap[order._status] || statusMap["new"];
         const item = document.createElement("div");
-        item.className = "history-item";
+        item.className = "history-item" + (order._status === "done" ? " hi-done" : "") + (order._status === "cancel" ? " hi-cancelled" : "");
         item.innerHTML = `
             <div class="hi-header">
                 <span class="hi-order-id">Заказ #${order.order_id}</span>
                 <span class="hi-date">${order.date}</span>
             </div>
+            <span class="hi-status ${st.cls}">${st.label}</span>
             <div class="hi-total">${fmt(order.total)} ₽</div>
             <div class="hi-items">${order.products}</div>
             <div class="hi-delivery">${order.delivery} · ${order.address}</div>`;
@@ -2036,6 +2081,30 @@ window.renderWishlistPage = function () {
         return;
     }
     content.innerHTML = "";
+    // #20: "Add all to cart" button
+    const addAllBtn = document.createElement("button");
+    addAllBtn.className = "action-btn structural-success-btn";
+    addAllBtn.style.cssText = "margin-bottom:14px;";
+    addAllBtn.innerText = "Добавить всё в корзину";
+    addAllBtn.onclick = function () {
+        haptic("success");
+        var added = 0;
+        window.wishlist.forEach(function (id) {
+            var p = window.products.find(function (x) { return x.id === id; });
+            if (!p) return;
+            // Only add items without flavors directly; flavored items still need popup
+            if (!p.flavors || p.flavors.length === 0) {
+                var existing = window.cart.find(function (i) { return i.id === p.id && i.flavor === "Стандарт"; });
+                if (existing) existing.quantity += 1;
+                else window.cart.push({ id: p.id, name: p.name, price: p.price, flavor: "Стандарт", quantity: 1 });
+                added++;
+            }
+        });
+        window.updateCartCounters();
+        if (added > 0) window.showToast("Добавлено " + added + " " + window.plural(added, "товар", "товара", "товаров") + " в корзину");
+        else window.showToast("Товары требуют выбора вкуса — открой каждый");
+    };
+    content.appendChild(addAllBtn);
     const snaps = wishPricesGet();
     window.wishlist.forEach(id => {
         const p = window.products.find(x => x.id === id);
@@ -2222,6 +2291,26 @@ window.openSupport = function () {
         try { window.tg.openTelegramLink(url); return; } catch(e) {}
     }
     window.open(url, "_blank");
+};
+
+// ── ORDER SUCCESS OVERLAY (#17) ──
+window.showOrderSuccess = function (orderNum, bonusEarned) {
+    var overlay = document.getElementById("orderSuccessOverlay");
+    if (!overlay) return;
+    var numEl = document.getElementById("osoNum");
+    var bonusEl = document.getElementById("osoBonus");
+    if (numEl) numEl.innerText = "#" + orderNum;
+    if (bonusEl) bonusEl.innerText = bonusEarned ? "+" + bonusEarned + " бонусных баллов начислено" : "";
+    overlay.style.display = "flex";
+    haptic("success");
+};
+
+window.closeOrderSuccess = function () {
+    var overlay = document.getElementById("orderSuccessOverlay");
+    if (overlay) overlay.style.display = "none";
+    window.cart = [];
+    window.updateCartCounters();
+    window.closeVapeCart();
 };
 
 window.shareReferral = function () {
