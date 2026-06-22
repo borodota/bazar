@@ -94,20 +94,19 @@ async function tgApiSend(chatId, text, replyMarkup) {
             };
             if (body.parse_mode) payload.parse_mode = body.parse_mode;
             if (body.reply_markup) payload.reply_markup = body.reply_markup;
-            const resp = await fetch(RELAY_URL, {
-                method: "POST",
-                headers: { "Content-Type": "application/json" },
-                body: JSON.stringify(payload)
-            });
+            const resp = await Promise.race([
+                fetch(RELAY_URL, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(payload) }),
+                new Promise((_, r) => setTimeout(() => r(new Error("Timeout")), 10000))
+            ]);
             return resp.json();
         }
-        // Fallback: прямой вызов Bot API (пока релей не настроен)
         : async (body) => {
-            const resp = await fetch("https://api.telegram.org/bot" + BOT_API_TOKEN + "/sendMessage", {
-                method: "POST",
-                headers: { "Content-Type": "application/json" },
-                body: JSON.stringify(body)
-            });
+            const resp = await Promise.race([
+                fetch("https://api.telegram.org/bot" + BOT_API_TOKEN + "/sendMessage", {
+                    method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body)
+                }),
+                new Promise((_, r) => setTimeout(() => r(new Error("Timeout")), 10000))
+            ]);
             return resp.json();
         };
 
@@ -1763,7 +1762,6 @@ window.checkoutVapeOrder = function () {
     const refId = (window.referralDiscountActive && /^\d+$/.test(localStorage.getItem("vapeReferredBy") || "")) ? localStorage.getItem("vapeReferredBy") : "0";
 
     // В кнопку «Принять» зашиваем earn/redeem/ref — бот сверяет и начисляет баллы
-    // СВОИМ источником правды (bonuses.json), а не доверяет браузеру.
     const acceptData = `st_accept_${orderData.order_id}_${customerId}_${total}_${bonusEarned}_${bonusUsed}_${refId}`;
     const kb = { inline_keyboard: [
         [ { text: "✅ Принять", callback_data: acceptData },
@@ -1774,9 +1772,58 @@ window.checkoutVapeOrder = function () {
     ]};
     if (customerId) kb.inline_keyboard.push([{ text: "📞 Связаться с клиентом", url: "tg://user?id=" + customerId }]);
 
+    // Общая функция успешного завершения: обновляет localStorage и UI.
+    function _finishSuccess() {
+        haptic("success");
+        bonusSet(bonusGet() - bonusUsed + bonusEarned);
+        window.bonusApplied = false;
+        spentAdd(subtotal - discount);
+        window.updateLevelUI();
+        window.saveOrderToHistory(orderData);
+        window.referralDiscountActive = false;
+        localStorage.setItem("vapeRefUsed", "1");
+        window.cart = []; window.appliedPromo = null;
+        window.updateCartCounters();
+        window.updateBonusUI();
+    }
+
+    // Показ ошибки — alert() ЗАБЛОКИРОВАН в Telegram Mobile, используем showPopup/showToast.
+    function _showError(err) {
+        haptic("error");
+        console.error("Order send error:", err);
+        const msg = "Заказ не отправлен. Напишите @" + MANAGER_TG + " — корзина сохранена.";
+        if (window.tg && window.tg.showPopup) {
+            window.tg.showPopup({ title: "Ошибка отправки", message: msg, buttons: [{ type: "ok" }] });
+        } else {
+            window.showToast("❌ " + msg, 5000);
+        }
+    }
+
+    // ── Путь 1: tg.sendData() ──
+    // Идёт через инфраструктуру Telegram напрямую, не блокируется провайдерами.
+    // Работает только если Mini App открыт через кнопку клавиатуры в боте.
+    // Бросает ошибку, если открыт по прямой ссылке (Bot API 6.0+).
+    if (window.tg && typeof window.tg.sendData === "function") {
+        try {
+            const payload = JSON.stringify(Object.assign({}, orderData, {
+                earn: bonusEarned, redeem: bonusUsed, ref_id: refId,
+                customer_id: String(customerId || "")
+            }));
+            window.tg.sendData(payload);
+            // sendData не бросил → заказ ушёл через Telegram.
+            // Бот пришлёт подтверждение клиенту сам. Telegram закроет Mini App.
+            _finishSuccess();
+            return;
+        } catch (e) {
+            // sendData недоступен (открыт по прямой ссылке) — идём через Bot API.
+            console.warn("sendData unavailable, switching to Bot API:", e.message || e);
+        }
+    }
+
+    // ── Путь 2: Bot API ──
     window.showToast("Отправляем заказ…");
     notifyAdmins(adminText, kb).then(() => {
-        // подтверждение клиенту в чат с ботом (придёт, если клиент запускал бота)
+        // подтверждение клиенту в чат с ботом (если клиент запускал бота)
         if (customerId) {
             tgApiSend(customerId,
                 `✅ <b>Заказ #${orderData.order_id} принят!</b>\n` +
@@ -1791,28 +1838,10 @@ window.checkoutVapeOrder = function () {
                 `🔔 Мы пришлём уведомление, когда статус заказа изменится!`
             ).catch(() => {});
         }
-        haptic("success");
-        // Оптимистично обновляем баланс в приложении ради приятного UX.
-        // ИСТОЧНИК ПРАВДЫ — бот (bonuses.json): он сверяет и фиксирует баллы,
-        // когда админ жмёт «Принять», и не даст списать больше реального баланса.
-        bonusSet(bonusGet() - bonusUsed + bonusEarned);
-        window.bonusApplied = false;
-        // копим сумму покупок для уровня (реальные деньги за товары)
-        spentAdd(subtotal - discount);
-        window.updateLevelUI();
-        window.saveOrderToHistory(orderData);
-        window.referralDiscountActive = false;
-        localStorage.setItem("vapeRefUsed", "1");
-        window.cart = []; window.appliedPromo = null;
-        window.updateCartCounters();
-        window.updateBonusUI();
+        _finishSuccess();
         window.showConfetti();
         window.showOrderSuccess(orderData.order_id, bonusEarned);
-    }).catch((err) => {
-        haptic("error");
-        console.error("Order send error:", err);
-        alert(`⚠️ Не удалось отправить заказ.\n\nОшибка: ${err.message}\n\nНапишите @${MANAGER_TG} — корзина сохранена.`);
-    });
+    }).catch(_showError);
 };
 
 // ==========================================================================
