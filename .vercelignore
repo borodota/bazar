@@ -2,5 +2,7 @@ bott.py
 requirements.txt
 subscribers.json
 orders_log.json
+bonuses.json
+notify_requests.json
 bot.log
 relay/

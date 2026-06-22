@@ -596,6 +596,15 @@ header.scrolled { border-bottom-color: var(--border); }
 .hi-total { font-size: 16px; font-weight: 900; color: var(--neon-green); margin-bottom: 6px; }
 .hi-items { font-size: 12px; color: var(--text-secondary); line-height: 1.6; white-space: pre-wrap; }
 .hi-delivery { font-size: 11px; font-weight: 700; color: var(--text-dim); margin-top: 6px; }
+.hi-status { display: inline-block; font-size: 10px; font-weight: 800; letter-spacing: 0.04em; padding: 3px 9px; border-radius: 20px; margin-bottom: 8px; }
+.hi-status-new { background: rgba(255,255,255,0.08); color: var(--text-secondary); }
+.hi-status-accept { background: rgba(255,200,0,0.15); color: #ffd000; }
+.hi-status-pack { background: rgba(0,180,255,0.15); color: #00c4ff; }
+.hi-status-ship { background: rgba(100,130,255,0.15); color: #8899ff; }
+.hi-status-done { background: rgba(0,240,124,0.15); color: var(--neon-green); }
+.hi-status-cancel { background: rgba(255,60,60,0.12); color: #ff6060; }
+.hi-done { border-color: rgba(0,240,124,0.25); }
+.hi-cancelled { opacity: 0.6; }
 
 /* ── FILTER BAR ── */
 .filter-bar { display: flex; gap: 7px; overflow-x: auto; padding: 0 18px 14px; scrollbar-width: none; }

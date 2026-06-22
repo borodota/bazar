@@ -1716,7 +1716,8 @@ window.checkoutVapeOrder = function () {
             window.referralDiscountActive ? `Реферал: ${localStorage.getItem("vapeReferredBy") || ""}` : null,
             localStorage.getItem("vapeNewsletterSub") === "1" ? "Рассылка: да" : null,
         ].filter(Boolean).join(", ") || "Нет",
-        total
+        total,
+        _status: "new"
     };
 
     const user = tgCurrentUser();
@@ -1951,13 +1952,23 @@ window.renderHistoryPage = function () {
     }
     content.innerHTML = "";
     history.forEach(order => {
+        const statusMap = {
+            "new": { label: "🆕 Новый", cls: "hi-status-new" },
+            "accept": { label: "🟡 Принят", cls: "hi-status-accept" },
+            "pack": { label: "📦 В сборке", cls: "hi-status-pack" },
+            "ship": { label: "🚚 В пути", cls: "hi-status-ship" },
+            "done": { label: "✅ Выполнен", cls: "hi-status-done" },
+            "cancel": { label: "❌ Отменён", cls: "hi-status-cancel" },
+        };
+        const st = statusMap[order._status] || statusMap["new"];
         const item = document.createElement("div");
-        item.className = "history-item";
+        item.className = "history-item" + (order._status === "done" ? " hi-done" : "") + (order._status === "cancel" ? " hi-cancelled" : "");
         item.innerHTML = `
             <div class="hi-header">
                 <span class="hi-order-id">Заказ #${order.order_id}</span>
                 <span class="hi-date">${order.date}</span>
             </div>
+            <span class="hi-status ${st.cls}">${st.label}</span>
             <div class="hi-total">${fmt(order.total)} ₽</div>
             <div class="hi-items">${order.products}</div>
             <div class="hi-delivery">${order.delivery} · ${order.address}</div>`;
