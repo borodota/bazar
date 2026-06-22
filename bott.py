@@ -354,6 +354,10 @@ async def handle_web_app_order(message: types.Message):
                         break
                     except:
                         continue
+            # Бонусные данные — передаются из браузера для кнопки «Принять»
+            order_earn = _safe_int(raw_data.get("earn") or raw_data.get("bonusEarned"), 0)
+            order_redeem = _safe_int(raw_data.get("redeem") or raw_data.get("bonusUsed"), 0)
+            order_ref_id = str(raw_data.get("ref_id") or "0")
         else:
             order_id = datetime.now().strftime("%M%S")
             date_str = datetime.now().strftime("%d.%m.%Y %H:%M")
@@ -363,7 +367,9 @@ async def handle_web_app_order(message: types.Message):
             address = "Проверь текст ниже"
             comment = "В тексте заказа"
             total_items_cost = 0
-            items = raw_string  
+            items = raw_string
+            order_earn = order_redeem = 0
+            order_ref_id = "0"
 
         delivery_cost = 0
         if "доставка" in str(delivery_type).strip().lower():
@@ -407,9 +413,11 @@ async def handle_web_app_order(message: types.Message):
         )
 
         customer_id = message.from_user.id
+        # В кнопку «Принять» зашиваем earn/redeem/ref — бот сверяет и начисляет баллы из bonuses.json
+        accept_cb = f"st_accept_{order_id}_{customer_id}_{final_total}_{order_earn}_{order_redeem}_{order_ref_id}"
         kb = InlineKeyboardMarkup(inline_keyboard=[
             [
-                InlineKeyboardButton(text="✅ Принять", callback_data=f"st_accept_{order_id}_{customer_id}_{final_total}"),
+                InlineKeyboardButton(text="✅ Принять", callback_data=accept_cb),
                 InlineKeyboardButton(text="📦 В сборке", callback_data=f"st_pack_{order_id}_{customer_id}_{final_total}")
             ],
             [
