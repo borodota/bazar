@@ -1,6 +1,7 @@
 import csv
 import io
 import logging
+import re
 from aiogram import Bot, Dispatcher, types, F
 from aiogram.client.default import DefaultBotProperties
 from aiogram.fsm.storage.memory import MemoryStorage
@@ -476,8 +477,18 @@ async def change_order_status(callback: types.CallbackQuery):
     new_status = statuses.get(action, "Изменен")
 
     # Фиксируем заказ в журнале (для заказов из браузера это первый момент,
-    # когда бот узнаёт о заказе — данные берём из callback_data).
-    log_order(order_id, customer_id, total, action, new_status)
+    # когда бот узнаёт о заказе — данные берём из текста сообщения).
+    _msg_html = callback.message.html_text or callback.message.text or ""
+    _bq = re.search(r'<blockquote>(.*?)</blockquote>', _msg_html, re.DOTALL)
+    _extracted_items = _bq.group(1).strip() if _bq else None
+    _phone_m = re.search(r'Телефон: (?:<code>)?([^<\n]+?)(?:</code>)?$', _msg_html, re.MULTILINE)
+    _name_m = re.search(r'Указал в форме: ([^\n<]+)', _msg_html) or re.search(r'Telegram: ([^\n<]+)', _msg_html)
+    _addr_m = re.search(r'Адрес: ([^\n<]+)', _msg_html)
+    log_order(order_id, customer_id, total, action, new_status,
+              items=_extracted_items,
+              name=_name_m.group(1).strip() if _name_m else None,
+              phone=_phone_m.group(1).strip() if _phone_m else None,
+              address=_addr_m.group(1).strip() if _addr_m else None)
 
     # ── Начисление баллов: ТОЛЬКО при «Принять» и один раз на заказ ──
     bonus_summary = None
@@ -1049,15 +1060,20 @@ async def cmd_top(message: types.Message):
         if o.get("status") == "cancel":
             continue
         for line in (o.get("items") or "").split("\n"):
-            line = line.strip().lstrip("•▪️ ")
-            if not line:
+            stripped = line.strip()
+            if not stripped:
                 continue
-            # Берём имя товара до [, —, · или ×
-            name = line.split("[")[0].split("—")[0].split("·")[0].split("×")[0].strip()
+            # Пропускаем строки кол-ва/итога (начинаются с цифры или эмодзи)
+            if not stripped.startswith(("•", "▪")):
+                continue
+            clean = stripped.lstrip("•▪️️ ")
+            # Берём имя товара до ·, [, — или ×
+            name = clean.split("·")[0].split("[")[0].split("—")[0].split("×")[0].strip()
             if 3 < len(name) < 60:
                 counter[name] += 1
     if not counter:
-        await message.answer("📊 Не удалось распознать товары в заказах.")
+        await message.answer("📊 Заказы найдены, но состав товаров пока не записан.\n"
+                             "Он запишется автоматически при следующем нажатии «Принять» на новых заказах.")
         return
     medals = ["🥇", "🥈", "🥉"]
     lines = ["🏆 <b>Топ товаров</b>", "━━━━━━━━━━━━━━━━━━━━━━━━"]
