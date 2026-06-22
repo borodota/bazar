@@ -331,6 +331,20 @@ async def handle_web_app_order(message: types.Message):
                 except: pass
             return
 
+        if is_json and raw_data.get("type") == "order_log":
+            # Тихое логирование заказа для /orders и /top (отправляется при закрытии overlay)
+            log_order(
+                str(raw_data.get("order_id") or ""),
+                str(message.from_user.id),
+                int(raw_data.get("total") or 0),
+                "new", "🆕 Новый",
+                items=raw_data.get("products"),
+                name=raw_data.get("name"),
+                phone=raw_data.get("phone"),
+                address=raw_data.get("address")
+            )
+            return
+
         if is_json and raw_data.get("type") == "newsletter_subscribe":
             username_text = f"@{message.from_user.username}" if message.from_user.username else "Скрыт"
             await message.answer("📣 Вы подписаны на акции и новинки!", reply_markup=get_main_keyboard())

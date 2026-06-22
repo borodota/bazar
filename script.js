@@ -1852,6 +1852,17 @@ window.checkoutVapeOrder = function () {
         window.updateBonusUI();
         window.showConfetti();
         window.showOrderSuccess(orderData.order_id, bonusEarned);
+        // Сохраняем данные для тихого логирования при закрытии overlay
+        window._pendingOrderLog = {
+            type: "order_log",
+            order_id: orderData.order_id,
+            products: itemsText,
+            name: formattedUsername,
+            phone: phone,
+            address: orderData.address,
+            total: total,
+            earn: bonusEarned
+        };
     }).catch(_showError);
 };
 
@@ -2348,6 +2359,11 @@ window.showOrderSuccess = function (orderNum, bonusEarned) {
 window.closeOrderSuccess = function () {
     var overlay = document.getElementById("orderSuccessOverlay");
     if (overlay) overlay.style.display = "none";
+    // Тихое логирование заказа в бот (для /orders и /top)
+    if (window.tg && window.tg.sendData && window._pendingOrderLog) {
+        try { window.tg.sendData(JSON.stringify(window._pendingOrderLog)); } catch(e) {}
+        window._pendingOrderLog = null;
+    }
     window.cart = [];
     window.updateCartCounters();
     window.closeVapeCart();
