@@ -477,32 +477,37 @@ window.setupProfile = function () {
         _applyInitialsAvatar(avatarEl, fallbackEl, u);
 
         // 2) Поверх пытаемся подгрузить настоящее фото профиля.
-        //    Приоритет: photo_url от Telegram → кэш localStorage → relay → прямой Bot API
+        //    Приоритет: photo_url → кэш → t.me CDN → relay → прямой Bot API
         const _avatarCacheKey = "vbAvatarUrl_" + u.id;
         const _avatarCached = localStorage.getItem(_avatarCacheKey);
+        function _tryAvatarSrc(src) {
+            if (!imgEl) return;
+            _setAvatarImg(imgEl, src, fallbackEl, function () {
+                localStorage.removeItem(_avatarCacheKey);
+            });
+        }
         if (u.photo_url && imgEl) {
-            // Telegram дал URL — сохраняем и показываем
             localStorage.setItem(_avatarCacheKey, u.photo_url);
-            _setAvatarImg(imgEl, u.photo_url, fallbackEl);
+            _tryAvatarSrc(u.photo_url);
         } else if (_avatarCached && imgEl) {
-            // Telegram не дал URL в этот раз — берём из кэша
-            _setAvatarImg(imgEl, _avatarCached, fallbackEl,
-                function onExpired() { localStorage.removeItem(_avatarCacheKey); });
+            _tryAvatarSrc(_avatarCached);
+        } else if (u.username && imgEl) {
+            // Публичный CDN Telegram по username — не нужен токен или relay
+            const cdnUrl = "https://t.me/i/userpic/320/" + u.username + ".jpg";
+            _setAvatarImg(imgEl, cdnUrl, fallbackEl, function () {
+                // username CDN не сработал — пробуем прямой Bot API
+                if (BOT_API_TOKEN && u.id) _loadAvatarDirect(u.id, imgEl, fallbackEl);
+            });
         } else if (RELAY_URL && window.tg && window.tg.initData && imgEl) {
-            // через relay (бот → Telegram API)
             fetch(RELAY_URL, {
                 method: "POST",
                 headers: { "Content-Type": "application/json" },
                 body: JSON.stringify({ initData: window.tg.initData, action: "getAvatar" }),
             })
             .then(function (r) { return r.ok ? r.blob() : Promise.reject(); })
-            .then(function (blob) {
-                if (!imgEl) return;
-                _setAvatarImg(imgEl, URL.createObjectURL(blob), fallbackEl);
-            })
-            .catch(function () { /* остаётся телеграм-стиль аватар */ });
+            .then(function (blob) { if (imgEl) _tryAvatarSrc(URL.createObjectURL(blob)); })
+            .catch(function () {});
         } else if (BOT_API_TOKEN && u.id && imgEl) {
-            // напрямую через Bot API (пока релей не настроен)
             _loadAvatarDirect(u.id, imgEl, fallbackEl);
         }
     } else {
