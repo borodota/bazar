@@ -1131,3 +1131,55 @@ body[data-level="platinum"] .profile-avatar-ring { animation-duration: 4s; opaci
 .wi-old { color: var(--text-dim); text-decoration: line-through; font-size: 12px; }
 .wi-new { color: var(--neon-green); font-weight: 800; }
 .wi-drop { font-size: 11px; color: #ff6b81; font-weight: 700; }
+
+/* ── NEON GLOW "ADD TO CART" FLASH (#7) ── */
+@keyframes cartFlash {
+    0%   { transform: scale(1);    box-shadow: 0 6px 32px rgba(var(--accent-rgb),0.35), 0 2px 8px rgba(0,0,0,0.3); }
+    25%  { transform: scale(1.07); box-shadow: 0 0 0 6px rgba(var(--accent-rgb),0.25), 0 0 30px rgba(var(--accent-rgb),0.6); }
+    60%  { transform: scale(0.96); box-shadow: 0 0 0 3px rgba(var(--accent-rgb),0.15), 0 0 18px rgba(var(--accent-rgb),0.4); }
+    100% { transform: scale(1);    box-shadow: 0 6px 32px rgba(var(--accent-rgb),0.35), 0 2px 8px rgba(0,0,0,0.3); }
+}
+.btn-add-cart-flash {
+    animation: cartFlash 0.6s var(--ease-spring) forwards !important;
+}
+
+/* ── SPLASH SCREEN (#4) ── */
+.splash-screen {
+    position: fixed; inset: 0; z-index: 9999;
+    background: var(--bg);
+    display: flex; flex-direction: column; align-items: center; justify-content: center;
+    transition: opacity var(--t-slow);
+}
+.splash-screen.hidden { opacity: 0; pointer-events: none; }
+.splash-logo { font-size: 64px; animation: splashPulse 0.6s ease both; }
+.splash-title { font-size: 28px; font-weight: 900; color: var(--neon-green); letter-spacing: 3px; margin-top: 16px; }
+.splash-sub { font-size: 13px; color: var(--text-secondary); margin-top: 8px; }
+@keyframes splashPulse {
+    0%   { transform: scale(0.8); }
+    70%  { transform: scale(1.05); }
+    100% { transform: scale(1); }
+}
+
+/* ── ORDER SUCCESS OVERLAY (#17) ── */
+@keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
+.order-success-overlay { position:fixed;inset:0;background:rgba(4,5,10,0.97);z-index:9000;display:flex;align-items:center;justify-content:center;animation:fadeIn 0.3s ease; }
+.oso-content { text-align:center;padding:40px 32px; }
+.oso-icon { font-size:72px;margin-bottom:16px;animation:osoBounce 0.5s ease; }
+.oso-title { font-size:28px;font-weight:900;color:var(--text-primary);margin-bottom:8px; }
+.oso-num { font-size:22px;font-weight:800;color:rgba(var(--accent-rgb),1);margin-bottom:16px; }
+.oso-text { font-size:14px;color:var(--text-secondary);margin-bottom:12px; }
+.oso-bonus { font-size:13px;color:rgba(var(--accent-rgb),1);font-weight:700;min-height:20px;margin-bottom:28px; }
+.oso-btn { background:rgba(var(--accent-rgb),1);color:#04050a;border:none;border-radius:14px;padding:16px 48px;font-size:16px;font-weight:800;cursor:pointer;width:100%; }
+@keyframes osoBounce { 0%{transform:scale(0.5);opacity:0} 70%{transform:scale(1.15)} 100%{transform:scale(1);opacity:1} }
+
+/* ── SHARE BUTTON (#39) ── */
+.share-btn {
+    display: inline-flex; align-items: center; gap: 6px;
+    background: rgba(255,255,255,0.04); border: 1px solid var(--border);
+    color: var(--text-secondary); border-radius: var(--r-sm);
+    padding: 9px 16px; font-size: 12px; font-weight: 700;
+    cursor: pointer; font-family: inherit;
+    transition: border-color var(--t-fast), color var(--t-fast);
+    width: 100%; justify-content: center; margin-top: 10px;
+}
+.share-btn:active { border-color: var(--border-green); color: var(--neon-green); transform: scale(0.97); }
