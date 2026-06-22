@@ -476,9 +476,18 @@ window.setupProfile = function () {
         //    Так аватарка есть ВСЕГДА, даже если реальное фото недоступно.
         _applyInitialsAvatar(avatarEl, fallbackEl, u);
 
-        // 2) Поверх пытаемся подгрузить настоящее фото профиля (если доступно).
+        // 2) Поверх пытаемся подгрузить настоящее фото профиля.
+        //    Приоритет: photo_url от Telegram → кэш localStorage → relay → прямой Bot API
+        const _avatarCacheKey = "vbAvatarUrl_" + u.id;
+        const _avatarCached = localStorage.getItem(_avatarCacheKey);
         if (u.photo_url && imgEl) {
+            // Telegram дал URL — сохраняем и показываем
+            localStorage.setItem(_avatarCacheKey, u.photo_url);
             _setAvatarImg(imgEl, u.photo_url, fallbackEl);
+        } else if (_avatarCached && imgEl) {
+            // Telegram не дал URL в этот раз — берём из кэша
+            _setAvatarImg(imgEl, _avatarCached, fallbackEl,
+                function onExpired() { localStorage.removeItem(_avatarCacheKey); });
         } else if (RELAY_URL && window.tg && window.tg.initData && imgEl) {
             // через relay (бот → Telegram API)
             fetch(RELAY_URL, {
@@ -508,12 +517,15 @@ window.setupProfile = function () {
     }
 };
 
-function _setAvatarImg(imgEl, src, fallbackEl) {
+function _setAvatarImg(imgEl, src, fallbackEl, onError) {
     imgEl.onload = function () {
         imgEl.style.display = "block";
         if (fallbackEl) fallbackEl.style.display = "none";
     };
-    imgEl.onerror = function () { /* оставляем телеграм-стиль аватар (инициалы) */ };
+    imgEl.onerror = function () {
+        if (onError) onError();
+        /* оставляем телеграм-стиль аватар (инициалы) */
+    };
     imgEl.src = src;
 }
 
