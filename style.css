@@ -1192,3 +1192,37 @@ body[data-level="platinum"] .profile-avatar-ring { animation-duration: 4s; opaci
     width: 100%; justify-content: center; margin-top: 10px;
 }
 .share-btn:active { border-color: var(--border-green); color: var(--neon-green); transform: scale(0.97); }
+
+/* ── #4 SKELETON-ЗАГРУЗКА ── */
+.skeleton-card { background: rgba(255,255,255,0.05); border-radius: 20px; height: 220px; animation: skeletonPulse 1.4s ease-in-out infinite; flex-shrink: 0; width: calc(50% - 5px); }
+@keyframes skeletonPulse { 0%,100%{opacity:0.35} 50%{opacity:0.7} }
+
+/* ── #5 ФИЛЬТР ПО БРЕНДУ ── */
+.brand-filter-row { display:flex; gap:7px; overflow-x:auto; padding:0 18px 10px; scrollbar-width:none; }
+.brand-filter-row::-webkit-scrollbar { display:none; }
+
+/* ── #6 КНОПКА НАВЕРХ ── */
+.scroll-top-btn { position:fixed; bottom:80px; right:16px; width:40px; height:40px; border-radius:50%; background:rgba(0,240,124,0.15); border:1.5px solid var(--neon-green); color:var(--neon-green); font-size:18px; font-weight:900; cursor:pointer; z-index:400; backdrop-filter:blur(10px); transition:opacity 0.3s, transform 0.3s; }
+
+/* ── #8 СОХРАНЁННЫЕ АДРЕСА ── */
+.saved-addrs-row { display:flex; gap:6px; flex-wrap:wrap; margin-bottom:8px; }
+.saved-addr-chip { background:rgba(255,255,255,0.06); border:1px solid var(--border); border-radius:20px; padding:4px 10px; font-size:11px; font-weight:600; color:var(--text-secondary); cursor:pointer; white-space:nowrap; }
+.saved-addr-chip:active { background:rgba(0,240,124,0.1); }
+
+/* ── #9 СЛОТ ДОСТАВКИ ── */
+.time-slot-label { font-size:11px; font-weight:700; color:var(--text-secondary); margin:10px 0 6px; text-transform:uppercase; letter-spacing:0.06em; }
+.time-slot-row { display:flex; gap:6px; }
+.ts-opt { flex:1; display:flex; align-items:center; justify-content:center; background:rgba(255,255,255,0.04); border:1px solid var(--border); border-radius:12px; padding:8px 4px; font-size:11px; font-weight:700; cursor:pointer; transition:all 0.2s; }
+.ts-opt input { display:none; }
+.ts-opt:has(input:checked) { background:rgba(0,240,124,0.12); border-color:var(--neon-green); color:var(--neon-green); }
+
+/* ── #11 КОММЕНТАРИЙ К ТОВАРУ В КОРЗИНЕ ── */
+.cart-item-note-row { width:100%; margin-top:4px; }
+.cart-item-note-toggle { font-size:10px; color:var(--text-dim); cursor:pointer; font-weight:600; }
+.cart-item-note-input { width:100%; background:rgba(255,255,255,0.04); border:1px solid var(--border); border-radius:8px; padding:5px 8px; font-size:11px; color:var(--text-primary); font-family:inherit; margin-top:4px; }
+
+/* ── #31 АНИМАЦИЯ ПЕРЕКЛЮЧЕНИЯ ТАБОВ ── */
+#catalogSection, #wishlistSection, #historySection, #profileSection {
+    animation: tabFadeIn 0.22s ease;
+}
+@keyframes tabFadeIn { from { opacity:0; transform:translateY(6px); } to { opacity:1; transform:translateY(0); } }

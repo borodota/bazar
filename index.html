@@ -91,6 +91,9 @@
             <button class="filter-chip" data-value="new" onclick="window.selectFilterChip(this,'filter','new')">Новинки</button>
         </div>
 
+        <!-- ФИЛЬТР ПО БРЕНДУ -->
+        <div id="brandFilterRow" class="brand-filter-row"></div>
+
         <!-- ХИТЫ ПРОДАЖ -->
         <div id="featuredSection" class="featured-section" style="display:none;">
             <div class="section-heading">🔥 Хиты продаж</div>
@@ -347,9 +350,16 @@
                         </div>
                     </div>
                     <div id="deliveryAddressWrapper" style="display:none;">
+                        <div id="savedAddrsRow" class="saved-addrs-row" style="display:none"></div>
                         <div class="input-icon-group">
                             <span class="input-icon">🚗</span>
                             <input type="text" id="deliveryAddress" class="form-input" placeholder="Улица, дом, квартира">
+                        </div>
+                        <div class="time-slot-label">Время доставки</div>
+                        <div id="timeSlotRow" class="time-slot-row">
+                            <label class="ts-opt"><input type="radio" name="timeSlot" value="10:00–14:00"> 10:00–14:00</label>
+                            <label class="ts-opt"><input type="radio" name="timeSlot" value="14:00–18:00" checked> 14:00–18:00</label>
+                            <label class="ts-opt"><input type="radio" name="timeSlot" value="18:00–22:00"> 18:00–22:00</label>
                         </div>
                     </div>
                     <div id="deliveryNote" class="delivery-note" style="display:none;"></div>
@@ -513,6 +523,7 @@
         </div>
     </div>
 
+    <button id="scrollTopBtn" class="scroll-top-btn" onclick="window.scrollTo({top:0,behavior:'smooth'})" style="display:none">↑</button>
     <script src="products.js?v=2026061503"></script>
     <script src="script.js?v=2026061503"></script>
 </body>

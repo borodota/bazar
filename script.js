@@ -12,6 +12,7 @@ window.appliedPromo = null;
 window.currentSort = "default";
 window.currentFilter = null;
 window.wishlist = [];
+window._activeBrand = null;
 
 const PROMO_CODES = {
     "BORO":       { discount: 0.10, label: "Скидка 10% 🎉" },
@@ -290,6 +291,7 @@ window.initVapeApp = function () {
             // показываем скелетон пока каталог не отрисован
             window.showSkeletons(6);
             window.renderCategories();
+            window._renderBrandChips();
             window.renderFeatured();
             window.renderCombos();
             requestAnimationFrame(() => window.renderProducts(window.products));
@@ -362,6 +364,14 @@ document.addEventListener("DOMContentLoaded", () => {
             }
             scrollTicking = false;
         });
+    }, { passive: true });
+    // #6: кнопка "Наверх"
+    window.addEventListener('scroll', function() {
+        const btn = document.getElementById('scrollTopBtn');
+        if (!btn) return;
+        btn.style.display = window.scrollY > 350 ? 'flex' : 'none';
+        btn.style.alignItems = 'center';
+        btn.style.justifyContent = 'center';
     }, { passive: true });
     window.initSwipeToClose();
     window.initCardTilt();
@@ -968,6 +978,10 @@ function _buildProductCard(p, animIdx) {
 
 function _renderNextPage(grid, animate) {
     if (_renderObserver) { _renderObserver.disconnect(); _renderObserver = null; }
+    // #4: показываем скелетоны перед первой страницей если грид пустой
+    if (_renderOffset === 0 && grid.children.length === 0) {
+        window.showSkeletons(6);
+    }
     const page = _renderList.slice(_renderOffset, _renderOffset + _RENDER_PAGE);
     const frag = document.createDocumentFragment();
     page.forEach((p, i) => {
@@ -978,6 +992,8 @@ function _renderNextPage(grid, animate) {
     // убираем старый sentinel перед вставкой новых карточек
     const sentinel = grid.querySelector(".products-sentinel");
     if (sentinel) grid.removeChild(sentinel);
+    // #4: убираем скелетоны (они там если первая страница)
+    if (_renderOffset <= _RENDER_PAGE) { grid.innerHTML = ""; }
     grid.appendChild(frag);
     // рендерим кнопки +/степперы (после того как карточки в DOM)
     page.forEach(p => window.renderCardAction(p));
@@ -1332,6 +1348,10 @@ window.openVapeCart = function () {
                         <button onclick="window.changeQty(${idx},-1)">−</button>
                         <span>${item.quantity}</span>
                         <button onclick="window.changeQty(${idx},1)">+</button>
+                    </div>
+                    <div class="cart-item-note-row">
+                        <span class="cart-item-note-toggle" onclick="window._toggleCartNote(${idx})">💬 Пометка</span>
+                        <input type="text" id="cartNote_${idx}" class="cart-item-note-input" placeholder="без коробки, подарок…" value="${(item.note||'').replace(/"/g,'&quot;')}" oninput="window._setCartNote(${idx},this.value)" style="${item.note?'':'display:none'}">
                     </div>`;
                 listEl.appendChild(row);
             });
@@ -1341,6 +1361,8 @@ window.openVapeCart = function () {
     var addrEl = document.getElementById("deliveryAddress");
     var savedAddr = localStorage.getItem("vapeSavedAddr");
     if (savedAddr && addrEl) addrEl.value = savedAddr;
+    // #8: рендер сохранённых адресов
+    window._renderSavedAddrs();
 
     window.updateCartTotalDisplay();
     document.getElementById("cartPopup").classList.add("active");
@@ -1564,6 +1586,7 @@ window.filterVapeProducts = function () {
     let filtered = window.products.filter(p => {
         const matchCat = window.currentCategory === "Все" || p.category === window.currentCategory;
         const matchQ = !q || (p.name && p.name.toLowerCase().includes(q)) || (p.brand && p.brand.toLowerCase().includes(q));
+        if (window._activeBrand && p.brand !== window._activeBrand) return false;
         return matchCat && matchQ;
     });
     if (window.currentFilter === "sale")    filtered = filtered.filter(p => p.oldPrice);
@@ -1672,6 +1695,8 @@ window.checkoutVapeOrder = function () {
     const username = (document.getElementById("customerTelegram")?.value || "").trim();
     const phone = (document.getElementById("customerPhone")?.value || "").trim();
     const address = (document.getElementById("deliveryAddress")?.value || "").trim();
+    // #9: время доставки
+    var selectedSlot = (document.querySelector('input[name="timeSlot"]:checked') || {}).value || "";
 
     // валидация с подсветкой конкретного поля
     function shakeField(id) {
@@ -1688,6 +1713,14 @@ window.checkoutVapeOrder = function () {
     // #16: save delivery address to localStorage
     var addrElSave = document.getElementById("deliveryAddress");
     if (addrElSave && addrElSave.value.trim()) localStorage.setItem("vapeSavedAddr", addrElSave.value.trim());
+    // #8: Сохраняем в список адресов (макс 4)
+    var addrs = JSON.parse(localStorage.getItem('vapeSavedAddrs') || '[]');
+    var addrVal = addrElSave ? addrElSave.value.trim() : '';
+    if (addrVal && !addrs.includes(addrVal)) {
+        addrs.unshift(addrVal);
+        if (addrs.length > 4) addrs.pop();
+        localStorage.setItem('vapeSavedAddrs', JSON.stringify(addrs));
+    }
 
     const { subtotal, bonusableSubtotal, discount, deliveryCost, bonusUsed, total } = window.calcOrderTotals();
     if (subtotal < MIN_ORDER_AMOUNT) { haptic("error"); window.showToast(`Минимум ${MIN_ORDER_AMOUNT} ₽ (сейчас ${subtotal} ₽)`); return; }
@@ -1695,10 +1728,10 @@ window.checkoutVapeOrder = function () {
     const formattedUsername = username.startsWith("@") ? username : "@" + username;
     // нарядный список товаров для сообщений в Telegram
     const itemsList = window.cart.map(i =>
-        `▪️ ${i.name} · ${i.flavor}\n      ${i.quantity} шт × ${fmt(i.price)} ₽  =  ${fmt(i.price * i.quantity)} ₽`
+        `▪️ ${i.name} · ${i.flavor}${i.note ? ' [' + i.note + ']' : ''}\n      ${i.quantity} шт × ${fmt(i.price)} ₽  =  ${fmt(i.price * i.quantity)} ₽`
     ).join("\n");
     // плоский текст для локальной истории заказов
-    let itemsText = window.cart.map(i => `• ${i.name} [${i.flavor}] — ${i.quantity} шт. × ${i.price} ₽ = ${i.price * i.quantity} ₽`).join("\n");
+    let itemsText = window.cart.map(i => `• ${i.name} [${i.flavor}]${i.note ? ' [' + i.note + ']' : ''} — ${i.quantity} шт. × ${i.price} ₽ = ${i.price * i.quantity} ₽`).join("\n");
     if (discount > 0) itemsText += `\n🎁 Промокод (${window.appliedPromo.label}): −${discount} ₽`;
     if (deliveryCost > 0) itemsText += `\n🚚 Доставка: ${deliveryCost} ₽`;
 
@@ -1724,6 +1757,10 @@ window.checkoutVapeOrder = function () {
     const usernameText = (user && user.username) ? "@" + user.username : formattedUsername;
 
     const isPickup = window.currentDeliveryMethod === "pickup";
+    // #9: добавляем время доставки в комментарий
+    if (!isPickup && selectedSlot) {
+        orderData.comment += (orderData.comment !== 'Нет' ? ', ' : '') + 'Время: ' + selectedSlot;
+    }
     const promoLabel = window.appliedPromo ? window.appliedPromo.label : "";
     // итоговый блок: товары, скидка, доставка
     const totalsBlock =
@@ -1748,6 +1785,7 @@ window.checkoutVapeOrder = function () {
 
         `📍 <b>ПОЛУЧЕНИЕ</b>\n` +
         `├ Способ: ${isPickup ? "🏃 Самовывоз" : "🚚 Доставка курьером"}\n` +
+        (isPickup ? "" : `├ Время: ${selectedSlot || "любое"}\n`) +
         `└ Адрес: ${escHtml(orderData.address)}\n\n` +
 
         `💬 Комментарий: <i>${escHtml(orderData.comment)}</i>\n` +
@@ -2339,4 +2377,58 @@ window.shareReferral = function () {
             .then(() => window.showToast("Ссылка скопирована!"))
             .catch(() => window.showToast("Скопируй: " + shareUrl));
     }
+};
+
+// ── #5 ФИЛЬТР ПО БРЕНДУ ──
+window.setBrandFilter = function(brand) {
+    haptic("select");
+    window._activeBrand = (window._activeBrand === brand) ? null : brand;
+    window._renderBrandChips();
+    window.filterVapeProducts();
+    window.scrollTo({ top: 0, behavior: "smooth" });
+};
+
+window._renderBrandChips = function() {
+    const row = document.getElementById("brandFilterRow");
+    if (!row) return;
+    const brands = [];
+    (window.products || []).forEach(p => { if (p.brand && !brands.includes(p.brand)) brands.push(p.brand); });
+    brands.sort();
+    const all = [null, ...brands];
+    row.innerHTML = all.map(b => {
+        const isActive = (b === null && window._activeBrand === null) || (b === window._activeBrand);
+        const label = b === null ? "Все бренды" : b;
+        return `<button class="filter-chip${isActive ? " active" : ""}" onclick="window.setBrandFilter(${b === null ? "null" : "'" + b.replace(/'/g, "\\'") + "'"})">${label}</button>`;
+    }).join("");
+};
+
+// ── #8 СОХРАНЁННЫЕ АДРЕСА ──
+window._renderSavedAddrs = function() {
+    const row = document.getElementById('savedAddrsRow');
+    const addrEl = document.getElementById('deliveryAddress');
+    if (!row || !addrEl) return;
+    const addrs = JSON.parse(localStorage.getItem('vapeSavedAddrs') || '[]');
+    if (addrs.length === 0) { row.style.display = 'none'; return; }
+    row.style.display = 'flex';
+    row.innerHTML = addrs.map((a, i) =>
+        `<span class="saved-addr-chip" onclick="document.getElementById('deliveryAddress').value='${a.replace(/'/g,"\\'")}'">${a.length>18?a.slice(0,16)+'…':a} <span onclick="event.stopPropagation();window._deleteSavedAddr(${i})" style="opacity:0.5;margin-left:3px">×</span></span>`
+    ).join('');
+};
+window._deleteSavedAddr = function(i) {
+    const addrs = JSON.parse(localStorage.getItem('vapeSavedAddrs') || '[]');
+    addrs.splice(i, 1);
+    localStorage.setItem('vapeSavedAddrs', JSON.stringify(addrs));
+    window._renderSavedAddrs();
+};
+
+// ── #11 ПОМЕТКИ К ТОВАРУ В КОРЗИНЕ ──
+window._toggleCartNote = function(idx) {
+    var inp = document.getElementById('cartNote_' + idx);
+    if (!inp) return;
+    var show = inp.style.display === 'none';
+    inp.style.display = show ? 'block' : 'none';
+    if (show) inp.focus();
+};
+window._setCartNote = function(idx, val) {
+    if (window.cart[idx]) window.cart[idx].note = val;
 };

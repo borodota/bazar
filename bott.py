@@ -1,3 +1,5 @@
+import csv
+import io
 import logging
 from aiogram import Bot, Dispatcher, types, F
 from aiogram.client.default import DefaultBotProperties
@@ -7,7 +9,7 @@ from aiogram.filters import Command
 from aiogram.enums import ParseMode
 import asyncio
 import json
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 import os
 import sys
 
@@ -619,6 +621,8 @@ async def cmd_start(message: types.Message):
             "├ /bonus <i>id</i> — баланс баллов клиента\n"
             "├ /bonus_add <i>id сумма</i> — изменить баллы (можно −)\n"
             "├ /restock <i>товар</i> — поступление: оповестить ждущих\n"
+            "├ /top — топ товаров по заказам\n"
+            "├ /export — выгрузить заказы в CSV\n"
             "├ /broadcast <i>текст</i> — рассылка всем подписчикам\n"
             "└ /broadcast_buyers <i>текст</i> — рассылка только покупателям"
         )
@@ -1030,8 +1034,62 @@ def _match_faq(text: str):
             return item["answer"]
     return None
 
+@dp.message(Command("top"))
+async def cmd_top(message: types.Message):
+    """Топ-10 товаров по количеству упоминаний в заказах."""
+    if message.from_user.id not in ADMINS:
+        return
+    orders = _load_json(ORDERS_FILE, [])
+    if not orders:
+        await message.answer("📊 Заказов пока нет.")
+        return
+    from collections import Counter
+    counter = Counter()
+    for o in orders:
+        if o.get("status") == "cancel":
+            continue
+        for line in (o.get("items") or "").split("\n"):
+            line = line.strip().lstrip("•▪️ ")
+            if not line:
+                continue
+            # Берём имя товара до [, —, · или ×
+            name = line.split("[")[0].split("—")[0].split("·")[0].split("×")[0].strip()
+            if 3 < len(name) < 60:
+                counter[name] += 1
+    if not counter:
+        await message.answer("📊 Не удалось распознать товары в заказах.")
+        return
+    medals = ["🥇", "🥈", "🥉"]
+    lines = ["🏆 <b>Топ товаров</b>", "━━━━━━━━━━━━━━━━━━━━━━━━"]
+    for i, (name, cnt) in enumerate(counter.most_common(10), 1):
+        pref = medals[i - 1] if i <= 3 else f"{i}."
+        lines.append(f"{pref} {name} — <b>{cnt}</b> раз")
+    await message.answer("\n".join(lines))
+
+
+@dp.message(Command("export"))
+async def cmd_export(message: types.Message):
+    """Выгружает журнал заказов в CSV и отправляет файлом."""
+    if message.from_user.id not in ADMINS:
+        return
+    orders = _load_json(ORDERS_FILE, [])
+    if not orders:
+        await message.answer("📭 Журнал заказов пуст.")
+        return
+    output = io.StringIO()
+    fields = ["order_id", "created_at", "total", "status_label", "name", "phone", "address", "items", "customer_id"]
+    writer = csv.DictWriter(output, fieldnames=fields, extrasaction="ignore")
+    writer.writeheader()
+    for o in orders:
+        row = {f: str(o.get(f, "")).replace("\n", " | ") for f in fields}
+        writer.writerow(row)
+    csv_bytes = ("﻿" + output.getvalue()).encode("utf-8")  # BOM для Excel
+    fname = f"orders_{datetime.now().strftime('%Y%m%d_%H%M')}.csv"
+    doc = types.BufferedInputFile(csv_bytes, filename=fname)
+    await message.answer_document(doc, caption=f"📁 Экспорт <b>{len(orders)}</b> заказов")
+
+
 # Ловит всё остальное — регистрируется последним, чтобы не перехватывать другие хэндлеры.
-# Гарантирует, что бот отвечает на ЛЮБОЕ сообщение (удобно для проверки, что бот жив).
 @dp.message()
 async def fallback_any_message(message: types.Message):
     remember_user(message.from_user)
@@ -1041,6 +1099,27 @@ async def fallback_any_message(message: types.Message):
     faq_answer = _match_faq(text)
     if faq_answer:
         await message.answer(faq_answer, reply_markup=get_main_keyboard())
+        return
+
+    # #25 — Автоответ вне рабочего времени (Магадан UTC+10)
+    MAGADAN = timezone(timedelta(hours=10))
+    now_local = datetime.now(MAGADAN)
+    if now_local.hour < SHOP_OPEN_HOUR or now_local.hour >= SHOP_CLOSE_HOUR:
+        opens_at = f"{SHOP_OPEN_HOUR:02d}:00"
+        await message.answer(
+            f"🌙 Магазин сейчас закрыт.\n\n"
+            f"Работаем ежедневно с <b>{SHOP_OPEN_HOUR}:00 до {SHOP_CLOSE_HOUR}:00</b> по Магадану.\n"
+            f"Откроемся в <b>{opens_at}</b> — обязательно ответим!\n\n"
+            f"Ваше сообщение сохранено, менеджер @{MANAGER_USERNAME} увидит его утром.",
+            reply_markup=get_main_keyboard()
+        )
+        # Всё равно уведомить менеджера, чтобы мог ответить раньше
+        uname = f"@{message.from_user.username}" if message.from_user.username else message.from_user.first_name
+        for cid in ADMINS:
+            try:
+                await bot.send_message(cid, f"🌙 Сообщение вне рабочего времени\n{uname}: {text[:300]}")
+            except Exception:
+                pass
         return
 
     await message.answer(
