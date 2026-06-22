@@ -1772,22 +1772,7 @@ window.checkoutVapeOrder = function () {
     ]};
     if (customerId) kb.inline_keyboard.push([{ text: "📞 Связаться с клиентом", url: "tg://user?id=" + customerId }]);
 
-    // Общая функция успешного завершения: обновляет localStorage и UI.
-    function _finishSuccess() {
-        haptic("success");
-        bonusSet(bonusGet() - bonusUsed + bonusEarned);
-        window.bonusApplied = false;
-        spentAdd(subtotal - discount);
-        window.updateLevelUI();
-        window.saveOrderToHistory(orderData);
-        window.referralDiscountActive = false;
-        localStorage.setItem("vapeRefUsed", "1");
-        window.cart = []; window.appliedPromo = null;
-        window.updateCartCounters();
-        window.updateBonusUI();
-    }
-
-    // Показ ошибки — alert() ЗАБЛОКИРОВАН в Telegram Mobile, используем showPopup/showToast.
+    // Показ ошибки — alert() заблокирован в Telegram Mobile, используем showPopup/showToast.
     function _showError(err) {
         haptic("error");
         console.error("Order send error:", err);
@@ -1799,28 +1784,6 @@ window.checkoutVapeOrder = function () {
         }
     }
 
-    // ── Путь 1: tg.sendData() ──
-    // Идёт через инфраструктуру Telegram напрямую, не блокируется провайдерами.
-    // Работает только если Mini App открыт через кнопку клавиатуры в боте.
-    // Бросает ошибку, если открыт по прямой ссылке (Bot API 6.0+).
-    if (window.tg && typeof window.tg.sendData === "function") {
-        try {
-            const payload = JSON.stringify(Object.assign({}, orderData, {
-                earn: bonusEarned, redeem: bonusUsed, ref_id: refId,
-                customer_id: String(customerId || "")
-            }));
-            window.tg.sendData(payload);
-            // sendData не бросил → заказ ушёл через Telegram.
-            // Бот пришлёт подтверждение клиенту сам. Telegram закроет Mini App.
-            _finishSuccess();
-            return;
-        } catch (e) {
-            // sendData недоступен (открыт по прямой ссылке) — идём через Bot API.
-            console.warn("sendData unavailable, switching to Bot API:", e.message || e);
-        }
-    }
-
-    // ── Путь 2: Bot API ──
     window.showToast("Отправляем заказ…");
     notifyAdmins(adminText, kb).then(() => {
         // подтверждение клиенту в чат с ботом (если клиент запускал бота)
@@ -1838,7 +1801,17 @@ window.checkoutVapeOrder = function () {
                 `🔔 Мы пришлём уведомление, когда статус заказа изменится!`
             ).catch(() => {});
         }
-        _finishSuccess();
+        haptic("success");
+        bonusSet(bonusGet() - bonusUsed + bonusEarned);
+        window.bonusApplied = false;
+        spentAdd(subtotal - discount);
+        window.updateLevelUI();
+        window.saveOrderToHistory(orderData);
+        window.referralDiscountActive = false;
+        localStorage.setItem("vapeRefUsed", "1");
+        window.cart = []; window.appliedPromo = null;
+        window.updateCartCounters();
+        window.updateBonusUI();
         window.showConfetti();
         window.showOrderSuccess(orderData.order_id, bonusEarned);
     }).catch(_showError);
