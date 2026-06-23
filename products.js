@@ -28,6 +28,18 @@ window.VAPE_PRODUCTS = [
         image: "pod_xros_5.png",
         description: "Новое поколение самого популярного пода. Улучшенная регулировка обдува, быстрая зарядка и супер-стильный корпус.",
         flavors: ["Matte Black", "Silver", "Neon Blue", "Pink Rose"],
+        tags: [],
+        inStock: true
+    },
+    {
+        id: "pod_xros_6",
+        name: "Vaporesso XROS 6",
+        brand: "Vaporesso",
+        category: "Под-системы",
+        price: 3500,
+        image: "pod_xros_6.png",
+        description: "Флагман линейки XROS шестого поколения. Умная регулировка мощности, увеличенный аккумулятор, поддержка картриджей XROS Series.",
+        flavors: ["Matte Black", "Silver", "Midnight Blue", "Sakura Pink", "Olive Green"],
         tags: ["🆕 NEW"],
         isNew: true,
         inStock: true
