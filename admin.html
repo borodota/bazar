@@ -112,37 +112,31 @@ function checkPw() {
   }
 }
 
-// ─── Отправка команды себе через Bot API ─────────────────────────────────────
-async function sendCmd(cmd) {
+// ─── Отправка команды: открывает Telegram с готовой командой ─────────────────
+function sendCmd(cmd) {
   if (!cmd || cmd === 'undefined' || cmd === 'null') return;
-  log('→ ' + cmd);
-  const results = await Promise.allSettled(
-    ADMINS.map(id => fetch(`https://api.telegram.org/bot${TOKEN}/sendMessage`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ chat_id: id, text: cmd })
-    }).then(r => r.json()))
-  );
-  const ok = results.some(r => r.status === 'fulfilled' && r.value.ok);
-  if (ok) {
-    log('✓ Команда отправлена — проверь Telegram');
-    showBadge(true);
-  } else {
-    log('✗ Ошибка: ' + (results[0].reason?.message || 'см. консоль'));
-    showBadge(false);
-  }
+  openBotCmd(cmd);
 }
+
+const BOT_USERNAME = 'vapebazar_bot';
 
 function doRestockPrompt() {
   const prod = prompt('Название товара (поступление):');
-  if (prod) sendCmd('/restock ' + prod);
+  if (prod) openBotCmd('/restock ' + prod);
 }
 
 async function doBroadcast(type) {
   const text = document.getElementById('broadcastText').value.trim();
   if (!text) { log('✗ Введи текст рассылки'); return; }
   const cmd = type === 'buyers' ? '/broadcast_buyers ' + text : '/broadcast ' + text;
-  sendCmd(cmd);
+  openBotCmd(cmd);
+}
+
+// Открывает Telegram с командой уже вписанной — остаётся только нажать «Отправить»
+function openBotCmd(cmd) {
+  log('→ Открываю Telegram: ' + cmd.slice(0, 40) + '…');
+  const url = 'https://t.me/' + BOT_USERNAME + '?text=' + encodeURIComponent(cmd);
+  window.open(url, '_blank');
 }
 
 // ─── UI helpers ───────────────────────────────────────────────────────────────
