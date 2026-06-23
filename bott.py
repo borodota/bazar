@@ -504,6 +504,18 @@ async def change_order_status(callback: types.CallbackQuery):
               phone=_phone_m.group(1).strip() if _phone_m else None,
               address=_addr_m.group(1).strip() if _addr_m else None)
 
+    # Добавляем клиента в базу подписчиков (чтобы попадал в рассылку)
+    if customer_id:
+        try:
+            _cid = str(customer_id)
+            _subs = _load_json(SUBSCRIBERS_FILE, {})
+            if _cid not in _subs:
+                _name_val = _name_m.group(1).strip() if _name_m else ""
+                _subs[_cid] = {"name": _name_val, "username": "", "ts": datetime.now().isoformat(timespec="seconds")}
+                _save_json(SUBSCRIBERS_FILE, _subs)
+        except Exception:
+            pass
+
     # ── Начисление баллов: ТОЛЬКО при «Принять» и один раз на заказ ──
     bonus_summary = None
     if action == "accept":
