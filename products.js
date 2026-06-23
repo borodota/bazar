@@ -38,7 +38,7 @@ window.VAPE_PRODUCTS = [
         category: "Под-системы",
         price: 3500,
         image: "pod_xros_6.png",
-        description: "Флагман линейки XROS шестого поколения. Умная регулировка мощности, увеличенный аккумулятор, поддержка картриджей XROS Series.",
+        description: "🔋 1800 мАч · 30W · 3 мл · Venturi Airflow. Готов к работе за 60 секунд. Цветной дисплей, картриджи 0.4Ω и 0.6Ω в комплекте. Флагман серии XROS.",
         flavors: ["Dreamy Pink [2 шт]", "Scorching Cloud [2 шт]", "Cosmic Black [2 шт]", "Carbon Fiber Grey [2 шт]", "Aurora Blue [2 шт]"],
         tags: ["🆕 NEW", "🔥 10 шт."],
         isNew: true,
