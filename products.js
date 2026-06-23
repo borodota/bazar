@@ -39,8 +39,8 @@ window.VAPE_PRODUCTS = [
         price: 3500,
         image: "pod_xros_6.png",
         description: "Флагман линейки XROS шестого поколения. Умная регулировка мощности, увеличенный аккумулятор, поддержка картриджей XROS Series.",
-        flavors: ["Matte Black", "Silver", "Midnight Blue", "Sakura Pink", "Olive Green"],
-        tags: ["🆕 NEW"],
+        flavors: ["Dreamy Pink [2 шт]", "Scorching Cloud [2 шт]", "Cosmic Black [2 шт]", "Carbon Fiber Grey [2 шт]", "Aurora Blue [2 шт]"],
+        tags: ["🆕 NEW", "🔥 10 шт."],
         isNew: true,
         inStock: true
     },
