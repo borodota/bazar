@@ -1556,6 +1556,40 @@ function _looksLikeRefCode(code) {
 }
 
 // ── ДОСТАВКА ──
+// ── ОПЛАТА ──
+window.currentPayMethod = "cash";
+window._changeAmount = null;
+
+window.selectPayTab = function(type) {
+    haptic("select");
+    window.currentPayMethod = type;
+    document.getElementById("payTabCash").classList.toggle("active", type === "cash");
+    document.getElementById("payTabTransfer").classList.toggle("active", type === "transfer");
+    document.getElementById("cashOptions").style.display = type === "cash" ? "" : "none";
+    document.getElementById("transferInfo").style.display = type === "transfer" ? "" : "none";
+    if (type === "transfer") { window._changeAmount = null; }
+};
+
+window.toggleChange = function() {
+    const on = document.getElementById("needChange").checked;
+    document.getElementById("changeBlock").style.display = on ? "" : "none";
+    if (!on) { window._changeAmount = null; document.getElementById("changeCustom").value = ""; document.querySelectorAll(".change-chip").forEach(c => c.classList.remove("sel")); }
+};
+
+window.pickChange = function(amount, el) {
+    haptic("light");
+    window._changeAmount = amount;
+    document.getElementById("changeCustom").value = "";
+    document.querySelectorAll(".change-chip").forEach(c => c.classList.remove("sel"));
+    el.classList.add("sel");
+};
+
+window.onChangeCustom = function() {
+    const v = parseInt(document.getElementById("changeCustom").value);
+    window._changeAmount = isNaN(v) ? null : v;
+    document.querySelectorAll(".change-chip").forEach(c => c.classList.remove("sel"));
+};
+
 window.selectDeliveryTab = function (method) {
     haptic("select");
     window.currentDeliveryMethod = method;
@@ -1761,6 +1795,14 @@ window.checkoutVapeOrder = function () {
     if (!isPickup && selectedSlot) {
         orderData.comment += (orderData.comment !== 'Нет' ? ', ' : '') + 'Время: ' + selectedSlot;
     }
+    // Оплата
+    const isCash = window.currentPayMethod !== "transfer";
+    const changeAmt = window._changeAmount || parseInt(document.getElementById("changeCustom")?.value || "0") || null;
+    const needChange = document.getElementById("needChange")?.checked && changeAmt;
+    const payLabel = isCash
+        ? ("💵 Наличка" + (needChange ? ` (сдача с ${changeAmt.toLocaleString("ru-RU")} ₽)` : ""))
+        : "💳 Перевод";
+    orderData.payment = payLabel;
     const promoLabel = window.appliedPromo ? window.appliedPromo.label : "";
     // итоговый блок: товары, скидка, доставка
     const totalsBlock =
@@ -1789,6 +1831,7 @@ window.checkoutVapeOrder = function () {
         `└ Адрес: ${escHtml(orderData.address)}\n\n` +
 
         `💬 Комментарий: <i>${escHtml(orderData.comment)}</i>\n` +
+        `💳 Оплата: <b>${escHtml(orderData.payment || "—")}</b>\n` +
         `━━━━━━━━━━━━━━━━━━━━━━━━\n` +
         totalsBlock +
         `\n💰 <b>ИТОГО К ПОЛУЧЕНИЮ: ${fmt(total)} ₽</b>\n\n` +

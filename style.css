@@ -1226,3 +1226,29 @@ body[data-level="platinum"] .profile-avatar-ring { animation-duration: 4s; opaci
     animation: tabFadeIn 0.22s ease;
 }
 @keyframes tabFadeIn { from { opacity:0; transform:translateY(6px); } to { opacity:1; transform:translateY(0); } }
+
+/* ── ОПЛАТА ── */
+.payment-section { margin-top:4px; padding:16px 16px 12px; }
+.payment-section .section-title { font-size:12px; font-weight:800; color:var(--text-secondary); text-transform:uppercase; letter-spacing:0.07em; margin-bottom:12px; }
+.payment-tabs { display:flex; gap:8px; margin-bottom:12px; }
+.pay-tab { flex:1; display:flex; flex-direction:column; align-items:center; gap:4px; padding:12px 8px; border-radius:16px; border:1.5px solid rgba(255,255,255,0.08); background:rgba(255,255,255,0.04); cursor:pointer; transition:all 0.2s; font-family:inherit; }
+.pay-tab-icon { font-size:22px; line-height:1; }
+.pay-tab-label { font-size:12px; font-weight:700; color:rgba(255,255,255,0.45); }
+.pay-tab.active { background:rgba(0,240,124,0.1); border-color:rgba(0,240,124,0.45); }
+.pay-tab.active .pay-tab-label { color:var(--neon-green); }
+.pay-tab:active { transform:scale(0.97); }
+.change-row { display:flex; align-items:center; justify-content:space-between; padding:10px 0 8px; }
+.change-label { font-size:14px; font-weight:600; color:rgba(255,255,255,0.75); }
+.toggle-switch { position:relative; display:inline-block; width:46px; height:26px; flex-shrink:0; }
+.toggle-switch input { opacity:0; width:0; height:0; }
+.toggle-slider { position:absolute; inset:0; background:rgba(255,255,255,0.12); border-radius:26px; cursor:pointer; transition:.25s; }
+.toggle-slider:before { content:""; position:absolute; width:20px; height:20px; left:3px; top:3px; background:#fff; border-radius:50%; transition:.25s; }
+.toggle-switch input:checked + .toggle-slider { background:rgba(0,240,124,0.55); }
+.toggle-switch input:checked + .toggle-slider:before { transform:translateX(20px); }
+.change-hint { font-size:12px; color:rgba(255,255,255,0.4); margin-bottom:8px; }
+.change-chips { display:flex; gap:6px; flex-wrap:wrap; margin-bottom:10px; }
+.change-chip { padding:8px 14px; border-radius:12px; border:1px solid rgba(255,255,255,0.1); background:rgba(255,255,255,0.05); color:rgba(255,255,255,0.6); font-family:inherit; font-size:13px; font-weight:700; cursor:pointer; transition:all 0.18s; }
+.change-chip.sel { background:rgba(0,240,124,0.14); border-color:rgba(0,240,124,0.45); color:var(--neon-green); }
+.change-chip:active { transform:scale(0.95); }
+.change-custom-input { margin-top:0; }
+.transfer-hint { font-size:13px; color:rgba(255,255,255,0.45); background:rgba(255,255,255,0.04); border:1px solid rgba(255,255,255,0.08); border-radius:12px; padding:12px; line-height:1.5; }
