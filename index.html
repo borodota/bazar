@@ -373,40 +373,41 @@
                 </div>
             </div>
 
-            <!-- Способ оплаты -->
-            <div class="cart-section payment-section">
-                <div class="section-title">💳 Способ оплаты</div>
-                <div class="payment-tabs">
-                    <button id="payTabCash" class="pay-tab active" onclick="window.selectPayTab('cash')">
-                        <span class="pay-tab-icon">💵</span>
-                        <span class="pay-tab-label">Наличка</span>
-                    </button>
-                    <button id="payTabTransfer" class="pay-tab" onclick="window.selectPayTab('transfer')">
-                        <span class="pay-tab-icon">💳</span>
-                        <span class="pay-tab-label">Перевод</span>
-                    </button>
-                </div>
-                <div id="cashOptions">
-                    <div class="change-row">
-                        <span class="change-label">Нужна сдача?</span>
-                        <label class="toggle-switch">
-                            <input type="checkbox" id="needChange" onchange="window.toggleChange()">
-                            <span class="toggle-slider"></span>
-                        </label>
+                    <!-- Способ оплаты -->
+                    <div class="section-label">Способ оплаты</div>
+                    <div class="payment-tabs">
+                        <button id="payTabCash" class="pay-tab active" onclick="window.selectPayTab('cash')">
+                            <span class="pay-tab-icon">💵</span>
+                            <span class="pay-tab-label">Наличка</span>
+                        </button>
+                        <button id="payTabTransfer" class="pay-tab" onclick="window.selectPayTab('transfer')">
+                            <span class="pay-tab-icon">💳</span>
+                            <span class="pay-tab-label">Перевод</span>
+                        </button>
                     </div>
-                    <div id="changeBlock" style="display:none;">
-                        <div class="change-hint">С какой суммы готовить сдачу?</div>
-                        <div class="change-chips" id="changeChips">
-                            <button class="change-chip" onclick="window.pickChange(500,this)">500 ₽</button>
-                            <button class="change-chip" onclick="window.pickChange(1000,this)">1 000 ₽</button>
-                            <button class="change-chip" onclick="window.pickChange(2000,this)">2 000 ₽</button>
-                            <button class="change-chip" onclick="window.pickChange(5000,this)">5 000 ₽</button>
+                    <div id="cashOptions">
+                        <div class="change-row">
+                            <span class="change-label">Нужна сдача?</span>
+                            <label class="toggle-switch">
+                                <input type="checkbox" id="needChange" onchange="window.toggleChange()">
+                                <span class="toggle-slider"></span>
+                            </label>
                         </div>
-                        <input type="number" id="changeCustom" class="form-input change-custom-input" placeholder="Своя сумма…" oninput="window.onChangeCustom()">
+                        <div id="changeBlock" style="display:none;">
+                            <div class="change-hint">С какой суммы?</div>
+                            <div class="change-chips">
+                                <button class="change-chip" onclick="window.pickChange(500,this)">500 ₽</button>
+                                <button class="change-chip" onclick="window.pickChange(1000,this)">1 000 ₽</button>
+                                <button class="change-chip" onclick="window.pickChange(2000,this)">2 000 ₽</button>
+                                <button class="change-chip" onclick="window.pickChange(5000,this)">5 000 ₽</button>
+                            </div>
+                            <input type="number" id="changeCustom" class="form-input" placeholder="Другая сумма…" oninput="window.onChangeCustom()">
+                        </div>
                     </div>
-                </div>
-                <div id="transferInfo" style="display:none;">
-                    <div class="transfer-hint">💬 Реквизиты для перевода пришлёт менеджер после подтверждения заказа.</div>
+                    <div id="transferInfo" style="display:none;">
+                        <div class="transfer-hint">💬 Реквизиты пришлёт менеджер после подтверждения.</div>
+                    </div>
+
                 </div>
             </div>
             <div class="drawer-footer">
