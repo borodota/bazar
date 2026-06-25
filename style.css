@@ -1228,12 +1228,12 @@ body[data-level="platinum"] .profile-avatar-ring { animation-duration: 4s; opaci
 @keyframes tabFadeIn { from { opacity:0; transform:translateY(6px); } to { opacity:1; transform:translateY(0); } }
 
 /* ── ОПЛАТА ── */
-.payment-section { margin-top:4px; padding:16px 16px 12px; }
-.payment-section .section-title { font-size:12px; font-weight:800; color:var(--text-secondary); text-transform:uppercase; letter-spacing:0.07em; margin-bottom:12px; }
-.payment-tabs { display:flex; gap:8px; margin-bottom:12px; }
-.pay-tab { flex:1; display:flex; flex-direction:column; align-items:center; gap:4px; padding:12px 8px; border-radius:16px; border:1.5px solid rgba(255,255,255,0.08); background:rgba(255,255,255,0.04); cursor:pointer; transition:all 0.2s; font-family:inherit; }
-.pay-tab-icon { font-size:22px; line-height:1; }
-.pay-tab-label { font-size:12px; font-weight:700; color:rgba(255,255,255,0.45); }
+.payment-section { margin-top:4px; padding:10px 16px 8px; }
+.payment-section .section-title { font-size:12px; font-weight:800; color:var(--text-secondary); text-transform:uppercase; letter-spacing:0.07em; margin-bottom:8px; }
+.payment-tabs { display:flex; gap:8px; margin-bottom:8px; }
+.pay-tab { flex:1; display:flex; flex-direction:row; align-items:center; justify-content:center; gap:6px; padding:10px 8px; border-radius:12px; border:1.5px solid rgba(255,255,255,0.08); background:rgba(255,255,255,0.04); cursor:pointer; transition:all 0.2s; font-family:inherit; }
+.pay-tab-icon { font-size:16px; line-height:1; }
+.pay-tab-label { font-size:13px; font-weight:700; color:rgba(255,255,255,0.45); }
 .pay-tab.active { background:rgba(0,240,124,0.1); border-color:rgba(0,240,124,0.45); }
 .pay-tab.active .pay-tab-label { color:var(--neon-green); }
 .pay-tab:active { transform:scale(0.97); }
