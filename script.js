@@ -1335,6 +1335,7 @@ window.openVapeCart = function () {
             if (form) form.style.display = "block";
             if (summary) summary.style.display = "block";
             if (btn) { btn.innerText = "ОФОРМИТЬ ЗАКАЗ"; btn.onclick = window.checkoutVapeOrder; }
+            setTimeout(window.prefillCheckoutForm, 50);
             window.cart.forEach((item, idx) => {
                 const row = document.createElement("div");
                 row.className = "cart-item";
@@ -1723,27 +1724,62 @@ window.showConfetti = function () {
     });
 })();
 
+// ── ФОРМАТИРОВАНИЕ ТЕЛЕФОНА ──
+window.fmtPhone = function(el) {
+    let v = el.value.replace(/\D/g, "");
+    if (v.startsWith("8")) v = "7" + v.slice(1);
+    if (v.startsWith("7")) {
+        const d = v.slice(1);
+        let out = "+7";
+        if (d.length > 0) out += " (" + d.slice(0,3);
+        if (d.length >= 3) out += ") " + d.slice(3,6);
+        if (d.length >= 6) out += "-" + d.slice(6,8);
+        if (d.length >= 8) out += "-" + d.slice(8,10);
+        el.value = out;
+    } else if (v.length > 0) {
+        el.value = "+" + v.slice(0,15);
+    }
+};
+
+// ── АВТОЗАПОЛНЕНИЕ ФОРМЫ ──
+window.prefillCheckoutForm = function() {
+    const user = tgCurrentUser ? tgCurrentUser() : null;
+    if (!user) return;
+    const nameEl = document.getElementById("customerName");
+    if (nameEl && !nameEl.value) {
+        const fullName = [user.first_name, user.last_name].filter(Boolean).join(" ");
+        if (fullName) nameEl.value = fullName;
+    }
+    const tgEl = document.getElementById("customerTelegram");
+    const tgGroup = document.getElementById("tgUsernameGroup");
+    if (tgEl && user.username) {
+        tgEl.value = "@" + user.username;
+        if (tgGroup) tgGroup.style.display = "";
+    }
+};
+
 // ── ОФОРМЛЕНИЕ ──
 window.checkoutVapeOrder = function () {
     if (!window.cart || window.cart.length === 0) { window.closeVapeCart(); return; }
+    window.prefillCheckoutForm();
+    const name    = (document.getElementById("customerName")?.value || "").trim();
     const username = (document.getElementById("customerTelegram")?.value || "").trim();
-    const phone = (document.getElementById("customerPhone")?.value || "").trim();
+    const phone   = (document.getElementById("customerPhone")?.value || "").replace(/\D/g,"");
     const address = (document.getElementById("deliveryAddress")?.value || "").trim();
-    // #9: время доставки
     var selectedSlot = (document.querySelector('input[name="timeSlot"]:checked') || {}).value || "";
 
-    // валидация с подсветкой конкретного поля
     function shakeField(id) {
-        const el = document.getElementById(id)?.closest(".input-icon-group");
+        const el = document.getElementById(id)?.closest(".input-icon-group") || document.getElementById(id);
         if (!el) return;
         el.classList.add("error");
         setTimeout(() => el.classList.remove("error"), 800);
     }
-    if (!username) { haptic("error"); shakeField("customerTelegram"); window.showToast("Введите @username"); return; }
-    if (!phone)    { haptic("error"); shakeField("customerPhone");    window.showToast("Укажите телефон"); return; }
+    if (!name)  { haptic("error"); shakeField("customerName");  window.showToast("Введите ваше имя"); return; }
+    if (phone.length < 10) { haptic("error"); shakeField("customerPhone"); window.showToast("Введите номер телефона"); return; }
     if (window.currentDeliveryMethod === "delivery" && !address) {
         haptic("error"); shakeField("deliveryAddress"); window.showToast("Укажите адрес доставки"); return;
     }
+    const phoneFormatted = document.getElementById("customerPhone")?.value || phone;
     // #16: save delivery address to localStorage
     var addrElSave = document.getElementById("deliveryAddress");
     if (addrElSave && addrElSave.value.trim()) localStorage.setItem("vapeSavedAddr", addrElSave.value.trim());
@@ -1759,7 +1795,6 @@ window.checkoutVapeOrder = function () {
     const { subtotal, bonusableSubtotal, discount, deliveryCost, bonusUsed, total } = window.calcOrderTotals();
     if (subtotal < MIN_ORDER_AMOUNT) { haptic("error"); window.showToast(`Минимум ${MIN_ORDER_AMOUNT} ₽ (сейчас ${subtotal} ₽)`); return; }
 
-    const formattedUsername = username.startsWith("@") ? username : "@" + username;
     // нарядный список товаров для сообщений в Telegram
     const itemsList = window.cart.map(i =>
         `▪️ ${i.name} · ${i.flavor}${i.note ? ' [' + i.note + ']' : ''}\n      ${i.quantity} шт × ${fmt(i.price)} ₽  =  ${fmt(i.price * i.quantity)} ₽`
@@ -1772,8 +1807,8 @@ window.checkoutVapeOrder = function () {
     const orderData = {
         order_id: Date.now().toString().slice(-6),
         date: new Date().toLocaleString("ru-RU"),
-        name: formattedUsername,
-        phone,
+        name: name,
+        phone: phoneFormatted,
         delivery: window.currentDeliveryMethod === "pickup" ? "Самовывоз" : "Доставка",
         address: window.currentDeliveryMethod === "pickup" ? "Марчеканский переулок, 15" : address,
         products: itemsText,
@@ -1817,9 +1852,9 @@ window.checkoutVapeOrder = function () {
         `━━━━━━━━━━━━━━━━━━━━━━━━\n\n` +
 
         `👤 <b>КЛИЕНТ</b>\n` +
-        `├ Telegram: ${escHtml(usernameText)}\n` +
-        (usernameText !== formattedUsername ? `├ Указал в форме: ${escHtml(formattedUsername)}\n` : "") +
-        `├ Телефон: <code>${escHtml(phone)}</code>\n` +
+        `├ Имя: ${escHtml(name)}\n` +
+        `├ Телефон: <code>${escHtml(phoneFormatted)}</code>\n` +
+        (username ? `├ Telegram: ${escHtml(username)}\n` : "") +
         `└ ID: <code>${customerId || "не определён"}</code>\n\n` +
 
         `🛒 <b>СОСТАВ ЗАКАЗА</b>\n` +

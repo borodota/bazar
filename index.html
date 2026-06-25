@@ -328,12 +328,16 @@
 
                     <div class="section-label">Контактные данные</div>
                     <div class="input-icon-group">
-                        <span class="input-icon">@</span>
-                        <input type="text" id="customerTelegram" class="form-input" placeholder="Юзернейм в Telegram">
+                        <span class="input-icon">👤</span>
+                        <input type="text" id="customerName" class="form-input" placeholder="Ваше имя">
                     </div>
                     <div class="input-icon-group">
                         <span class="input-icon">📞</span>
-                        <input type="tel" id="customerPhone" class="form-input" placeholder="+7 (9XX) XXX-XX-XX">
+                        <input type="tel" id="customerPhone" class="form-input" placeholder="+7 (___) ___-__-__" oninput="window.fmtPhone(this)">
+                    </div>
+                    <div class="input-icon-group" id="tgUsernameGroup" style="display:none;">
+                        <span class="input-icon">✈️</span>
+                        <input type="text" id="customerTelegram" class="form-input" placeholder="@username (необязательно)" readonly style="opacity:0.6;">
                     </div>
 
                     <div class="section-label">Способ получения</div>
