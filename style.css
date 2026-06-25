@@ -1228,17 +1228,16 @@ body[data-level="platinum"] .profile-avatar-ring { animation-duration: 4s; opaci
 @keyframes tabFadeIn { from { opacity:0; transform:translateY(6px); } to { opacity:1; transform:translateY(0); } }
 
 /* ── ОПЛАТА ── */
-.payment-section { margin-top:4px; padding:10px 16px 8px; }
-.payment-section .section-title { font-size:12px; font-weight:800; color:var(--text-secondary); text-transform:uppercase; letter-spacing:0.07em; margin-bottom:8px; }
-.payment-tabs { display:flex; gap:8px; margin-bottom:8px; }
-.pay-tab { flex:1; display:flex; flex-direction:row; align-items:center; justify-content:center; gap:6px; padding:10px 8px; border-radius:12px; border:1.5px solid rgba(255,255,255,0.08); background:rgba(255,255,255,0.04); cursor:pointer; transition:all 0.2s; font-family:inherit; }
-.pay-tab-icon { font-size:16px; line-height:1; }
-.pay-tab-label { font-size:13px; font-weight:700; color:rgba(255,255,255,0.45); }
+.pay-section-label { font-size:10px; font-weight:700; text-transform:uppercase; color:rgba(255,255,255,0.35); letter-spacing:1.2px; margin:14px 0 6px; }
+.payment-tabs { display:flex; gap:6px; margin-bottom:6px; }
+.pay-tab { flex:1; display:flex; flex-direction:row; align-items:center; justify-content:center; gap:5px; padding:8px 6px; border-radius:10px; border:1.5px solid rgba(255,255,255,0.08); background:rgba(255,255,255,0.04); cursor:pointer; transition:all 0.2s; font-family:inherit; }
+.pay-tab-icon { font-size:14px; line-height:1; }
+.pay-tab-label { font-size:12px; font-weight:700; color:rgba(255,255,255,0.45); }
 .pay-tab.active { background:rgba(0,240,124,0.1); border-color:rgba(0,240,124,0.45); }
 .pay-tab.active .pay-tab-label { color:var(--neon-green); }
 .pay-tab:active { transform:scale(0.97); }
-.change-row { display:flex; align-items:center; justify-content:space-between; padding:10px 0 8px; }
-.change-label { font-size:14px; font-weight:600; color:rgba(255,255,255,0.75); }
+.change-row { display:flex; align-items:center; justify-content:space-between; padding:8px 0 6px; }
+.change-label { font-size:13px; font-weight:600; color:rgba(255,255,255,0.75); }
 .toggle-switch { position:relative; display:inline-block; width:46px; height:26px; flex-shrink:0; }
 .toggle-switch input { opacity:0; width:0; height:0; }
 .toggle-slider { position:absolute; inset:0; background:rgba(255,255,255,0.12); border-radius:26px; cursor:pointer; transition:.25s; }
