@@ -1751,9 +1751,10 @@ window.prefillCheckoutForm = function() {
         if (fullName) nameEl.value = fullName;
     }
     const tgEl = document.getElementById("customerTelegram");
-    if (tgEl && !tgEl.value) {
+    if (tgEl) {
+        // всегда подставляем из TG — username авторитетнее ручного ввода
         if (user.username) tgEl.value = "@" + user.username;
-        else if (user.first_name) tgEl.value = user.first_name + (user.id ? " (id:" + user.id + ")" : "");
+        else if (!tgEl.value && user.first_name) tgEl.value = user.first_name + (user.id ? " (id:" + user.id + ")" : "");
     }
 };
 
