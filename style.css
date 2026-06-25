@@ -1252,3 +1252,8 @@ body[data-level="platinum"] .profile-avatar-ring { animation-duration: 4s; opaci
 .change-chip:active { transform:scale(0.95); }
 .change-custom-input { margin-top:0; }
 .transfer-hint { font-size:13px; color:rgba(255,255,255,0.45); background:rgba(255,255,255,0.04); border:1px solid rgba(255,255,255,0.08); border-radius:12px; padding:12px; line-height:1.5; }
+
+/* ── БЛОК КОНТАКТНЫХ ДАННЫХ ── */
+.contact-block { background:rgba(0,240,124,0.05); border:1.5px solid rgba(0,240,124,0.2); border-radius:16px; padding:14px 14px 10px; margin-bottom:12px; }
+.contact-block-title { font-size:13px; font-weight:800; color:var(--neon-green); margin-bottom:10px; }
+.contact-required-hint { font-size:10px; color:rgba(255,255,255,0.25); text-align:right; margin-top:4px; }

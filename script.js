@@ -1772,10 +1772,13 @@ window.checkoutVapeOrder = function () {
         const el = document.getElementById(id)?.closest(".input-icon-group") || document.getElementById(id);
         if (!el) return;
         el.classList.add("error");
-        setTimeout(() => el.classList.remove("error"), 800);
+        el.scrollIntoView({ behavior: "smooth", block: "center" });
+        setTimeout(() => el.classList.remove("error"), 900);
+        const inp = document.getElementById(id);
+        if (inp) setTimeout(() => inp.focus(), 300);
     }
-    if (!name)  { haptic("error"); shakeField("customerName");  window.showToast("Введите ваше имя"); return; }
-    if (phone.length < 10) { haptic("error"); shakeField("customerPhone"); window.showToast("Введите номер телефона"); return; }
+    if (!name)  { haptic("error"); shakeField("customerName");  window.showToast("✍️ Введите ваше имя"); return; }
+    if (phone.length < 10) { haptic("error"); shakeField("customerPhone"); window.showToast("📞 Введите номер телефона"); return; }
     if (window.currentDeliveryMethod === "delivery" && !address) {
         haptic("error"); shakeField("deliveryAddress"); window.showToast("Укажите адрес доставки"); return;
     }
