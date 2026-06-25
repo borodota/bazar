@@ -1244,12 +1244,11 @@ body[data-level="platinum"] .profile-avatar-ring { animation-duration: 4s; opaci
 .toggle-slider:before { content:""; position:absolute; width:20px; height:20px; left:3px; top:3px; background:#fff; border-radius:50%; transition:.25s; }
 .toggle-switch input:checked + .toggle-slider { background:rgba(0,240,124,0.55); }
 .toggle-switch input:checked + .toggle-slider:before { transform:translateX(20px); }
-.change-hint { font-size:12px; color:rgba(255,255,255,0.4); margin-bottom:8px; }
-.change-chips { display:flex; gap:6px; flex-wrap:wrap; margin-bottom:10px; }
-.change-chip { padding:8px 14px; border-radius:12px; border:1px solid rgba(255,255,255,0.1); background:rgba(255,255,255,0.05); color:rgba(255,255,255,0.6); font-family:inherit; font-size:13px; font-weight:700; cursor:pointer; transition:all 0.18s; }
+.change-chips-row { display:flex; gap:5px; align-items:center; flex-wrap:nowrap; padding:4px 0 2px; }
+.change-chip { flex-shrink:0; padding:6px 10px; border-radius:8px; border:1px solid rgba(255,255,255,0.1); background:rgba(255,255,255,0.05); color:rgba(255,255,255,0.6); font-family:inherit; font-size:12px; font-weight:700; cursor:pointer; transition:all 0.18s; }
 .change-chip.sel { background:rgba(0,240,124,0.14); border-color:rgba(0,240,124,0.45); color:var(--neon-green); }
 .change-chip:active { transform:scale(0.95); }
-.change-custom-input { margin-top:0; }
+.change-custom-inp { flex:1; min-width:0; background:rgba(255,255,255,0.05); border:1px solid rgba(255,255,255,0.1); border-radius:8px; padding:6px 8px; font-family:inherit; font-size:12px; color:#e8e8e8; height:34px; }
 .transfer-hint { font-size:13px; color:rgba(255,255,255,0.45); background:rgba(255,255,255,0.04); border:1px solid rgba(255,255,255,0.08); border-radius:12px; padding:12px; line-height:1.5; }
 
 /* ── БЛОК КОНТАКТНЫХ ДАННЫХ ── */

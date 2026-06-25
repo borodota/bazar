@@ -1826,7 +1826,7 @@ window.checkoutVapeOrder = function () {
 
     const user = tgCurrentUser();
     const customerId = user ? user.id : "";
-    const usernameText = (user && user.username) ? "@" + user.username : formattedUsername;
+    const usernameText = (user && user.username) ? "@" + user.username : username;
 
     const isPickup = window.currentDeliveryMethod === "pickup";
     // #9: добавляем время доставки в комментарий
@@ -1938,7 +1938,7 @@ window.checkoutVapeOrder = function () {
             type: "order_log",
             order_id: orderData.order_id,
             products: itemsText,
-            name: formattedUsername,
+            name: name,
             phone: phone,
             address: orderData.address,
             total: total,

@@ -392,14 +392,13 @@
                             </label>
                         </div>
                         <div id="changeBlock" style="display:none;">
-                            <div class="change-hint">С какой суммы?</div>
-                            <div class="change-chips">
-                                <button class="change-chip" onclick="window.pickChange(500,this)">500 ₽</button>
-                                <button class="change-chip" onclick="window.pickChange(1000,this)">1 000 ₽</button>
-                                <button class="change-chip" onclick="window.pickChange(2000,this)">2 000 ₽</button>
-                                <button class="change-chip" onclick="window.pickChange(5000,this)">5 000 ₽</button>
+                            <div class="change-chips-row">
+                                <button class="change-chip" onclick="window.pickChange(500,this)">500</button>
+                                <button class="change-chip" onclick="window.pickChange(1000,this)">1000</button>
+                                <button class="change-chip" onclick="window.pickChange(2000,this)">2000</button>
+                                <button class="change-chip" onclick="window.pickChange(5000,this)">5000</button>
+                                <input type="number" id="changeCustom" class="change-custom-inp" placeholder="Другая" oninput="window.onChangeCustom()">
                             </div>
-                            <input type="number" id="changeCustom" class="form-input" placeholder="Другая сумма…" oninput="window.onChangeCustom()">
                         </div>
                     </div>
                     <div id="transferInfo" style="display:none;">
