@@ -1751,10 +1751,8 @@ window.prefillCheckoutForm = function() {
         if (fullName) nameEl.value = fullName;
     }
     const tgEl = document.getElementById("customerTelegram");
-    const tgGroup = document.getElementById("tgUsernameGroup");
-    if (tgEl && user.username) {
+    if (tgEl && !tgEl.value && user.username) {
         tgEl.value = "@" + user.username;
-        if (tgGroup) tgGroup.style.display = "";
     }
 };
 
