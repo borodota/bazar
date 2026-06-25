@@ -1751,8 +1751,9 @@ window.prefillCheckoutForm = function() {
         if (fullName) nameEl.value = fullName;
     }
     const tgEl = document.getElementById("customerTelegram");
-    if (tgEl && !tgEl.value && user.username) {
-        tgEl.value = "@" + user.username;
+    if (tgEl && !tgEl.value) {
+        if (user.username) tgEl.value = "@" + user.username;
+        else if (user.first_name) tgEl.value = user.first_name + (user.id ? " (id:" + user.id + ")" : "");
     }
 };
 
@@ -1775,8 +1776,9 @@ window.checkoutVapeOrder = function () {
         const inp = document.getElementById(id);
         if (inp) setTimeout(() => inp.focus(), 300);
     }
-    if (!name)  { haptic("error"); shakeField("customerName");  window.showToast("✍️ Введите ваше имя"); return; }
+    if (!name)     { haptic("error"); shakeField("customerName");     window.showToast("✍️ Введите ваше имя"); return; }
     if (phone.length < 10) { haptic("error"); shakeField("customerPhone"); window.showToast("📞 Введите номер телефона"); return; }
+    if (!username) { haptic("error"); shakeField("customerTelegram"); window.showToast("✈️ Введите @username в Telegram"); return; }
     if (window.currentDeliveryMethod === "delivery" && !address) {
         haptic("error"); shakeField("deliveryAddress"); window.showToast("Укажите адрес доставки"); return;
     }
