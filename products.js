@@ -195,6 +195,20 @@ window.VAPE_PRODUCTS = [
 
     // ================= ОДНОРАЗКИ =================
     {
+        id: "dis_pafos_20000",
+        name: "PAFOS 20000",
+        brand: "PAFOS",
+        category: "Одноразки",
+        price: 1700,
+        image: "dis_pafos_20000.png",
+        description: "🔥 СВЕЖИЙ ЗАВОЗ! 20000 затяжек, крепкая соль 80 мг (8%). Плотный навал, стойкий вкус и долгая автономность. Для тех, кто любит покрепче.",
+        flavors: ["Кактус Лимон [4 шт]", "Двойное Яблоко [4 шт]"],
+        tags: ["🆕 NEW", "🔥 8 шт.", "💥 80MG"],
+        isNew: true,
+        viewers: 19,
+        inStock: true
+    },
+    {
         id: "dis_lost_mary_30000",
         name: "LOST MARY MO 30000",
         brand: "LOST MARY",
