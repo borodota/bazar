@@ -182,6 +182,14 @@
                 </div>
                 <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="m9 18 6-6-6-6"/></svg>
             </div>
+            <div class="profile-card" onclick="window.openVpnStore()">
+                <div class="pc-icon" style="background:rgba(0,240,124,0.10);color:#00f07c;">🛡️</div>
+                <div class="pc-text">
+                    <div class="pc-title">VPN-подписка</div>
+                    <div class="pc-sub">Быстрый VPN без блокировок · от 50 ₽</div>
+                </div>
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="m9 18 6-6-6-6"/></svg>
+            </div>
             <div class="profile-card" onclick="window.openReferral()">
                 <div class="pc-icon" style="background:rgba(255,171,0,0.10);color:#ffab00;">🎁</div>
                 <div class="pc-text">
@@ -547,6 +555,67 @@
             </div>
             <div class="drawer-footer">
                 <button class="action-btn structural-success-btn" id="soSubmitBtn" onclick="window.submitSpecialOrder()">Оставить заявку</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- VPN-магазин -->
+    <div id="vpnStorePopup" class="overlay" onclick="if(event.target===this) window.closeVpnStore()">
+        <div class="drawer">
+            <div class="drawer-handle"></div>
+            <div class="drawer-header">
+                <div class="drawer-title">🛡️ VPN-подписка</div>
+                <div class="close-drawer-btn" onclick="window.closeVpnStore()">✕</div>
+            </div>
+            <div class="popup-scroll-content">
+                <div style="text-align:center;padding:10px 0 4px;">
+                    <div style="font-size:44px;margin-bottom:8px;">🛡️</div>
+                    <div class="ref-big-title">Быстрый VPN без блокировок</div>
+                    <div class="ref-desc">🇳🇱 Сервер в Нидерландах · без логов · безлимит трафика. Открывает YouTube, соцсети, нейросети. Работает на телефоне, ПК и ТВ. 1 устройство на подписку.</div>
+                </div>
+
+                <div class="vpn-tariffs">
+                    <div class="vpn-card wide" onclick="window.buyVpn('trial')">
+                        <div>
+                            <div class="vpn-name">🎁 Пробный — 7 дней</div>
+                            <div class="vpn-days">Попробуй перед покупкой</div>
+                        </div>
+                        <div style="text-align:right;">
+                            <div class="vpn-price" style="margin:0;">50 ₽</div>
+                            <div class="vpn-buy" style="width:auto;padding:6px 16px;margin-top:4px;">Купить</div>
+                        </div>
+                    </div>
+                    <div class="vpn-card" onclick="window.buyVpn('month')">
+                        <div class="vpn-card-top"></div>
+                        <div class="vpn-name">Месяц</div>
+                        <div class="vpn-days">30 дней</div>
+                        <div class="vpn-price">150 ₽</div>
+                        <div class="vpn-buy">Купить</div>
+                    </div>
+                    <div class="vpn-card" onclick="window.buyVpn('q')">
+                        <div class="vpn-card-top"></div>
+                        <div class="vpn-name">3 месяца</div>
+                        <div class="vpn-days">90 дней</div>
+                        <div class="vpn-price">400 ₽</div>
+                        <div class="vpn-buy">Купить</div>
+                    </div>
+                    <div class="vpn-card" onclick="window.buyVpn('half')">
+                        <div class="vpn-card-top"></div>
+                        <div class="vpn-name">Полгода</div>
+                        <div class="vpn-days">180 дней</div>
+                        <div class="vpn-price">700 ₽</div>
+                        <div class="vpn-buy">Купить</div>
+                    </div>
+                    <div class="vpn-card featured" onclick="window.buyVpn('year')">
+                        <div class="vpn-card-top"><span class="vpn-badge">🔥 Выгодно</span></div>
+                        <div class="vpn-name">Год</div>
+                        <div class="vpn-days">365 дней</div>
+                        <div class="vpn-price">1200 ₽</div>
+                        <div class="vpn-buy">Купить</div>
+                    </div>
+                </div>
+
+                <div class="vpn-note">💳 Оплата директору напрямую. После подтверждения бот пришлёт сюда ссылку-подписку и инструкцию (приложение <b>Hiddify</b>).</div>
             </div>
         </div>
     </div>

@@ -728,6 +728,65 @@ window.submitSpecialOrder = function () {
     });
 };
 
+// ── VPN-МАГАЗИН ──
+window.VPN_TARIFFS = [
+    { id: "trial", name: "Пробный",  days: 7,   price: 50 },
+    { id: "month", name: "Месяц",    days: 30,  price: 150 },
+    { id: "q",     name: "3 месяца", days: 90,  price: 400 },
+    { id: "half",  name: "Полгода",  days: 180, price: 700 },
+    { id: "year",  name: "Год",      days: 365, price: 1200 },
+];
+
+window.openVpnStore = function () {
+    haptic("light");
+    document.getElementById("vpnStorePopup").classList.add("active");
+    window.setupBackButton(window.closeVpnStore);
+};
+window.closeVpnStore = function () {
+    const popup = document.getElementById("vpnStorePopup");
+    if (popup) popup.classList.remove("active");
+    window.hideBackButton();
+};
+
+window.buyVpn = function (tariffId) {
+    const t = window.VPN_TARIFFS.find(x => x.id === tariffId);
+    if (!t) return;
+    const user = tgCurrentUser();
+    const customerId = user ? user.id : "";
+    if (!customerId) { haptic("error"); window.showToast("Открой магазин через Telegram"); return; }
+    const usernameText = (user && user.username) ? "@" + user.username : (user.first_name || "Скрыт");
+
+    const adminText =
+        `🛡️ <b>VPN-ЗАКАЗ</b>\n` +
+        `━━━━━━━━━━━━━━━━━━━━━━━━\n\n` +
+        `👤 <b>Клиент:</b> ${escHtml(usernameText)}\n` +
+        `🆔 <b>ID:</b> <code>${customerId}</code>\n\n` +
+        `📦 <b>Тариф:</b> ${t.name} (${t.days} дн., 1 устр.)\n` +
+        `💰 <b>К оплате:</b> ${t.price} ₽\n\n` +
+        `👉 Клиент платит напрямую. После оплаты жми «Оплачено — выдать».`;
+    const kb = { inline_keyboard: [
+        [{ text: "✅ Оплачено — выдать", callback_data: `vpn_give_${customerId}_${t.id}` }],
+        [{ text: "📞 Связаться", url: "tg://user?id=" + customerId }]
+    ]};
+
+    haptic("success");
+    window.showToast("Отправляем заявку…");
+    notifyAdmins(adminText, kb).then(() => {
+        tgApiSend(customerId,
+            `🛡️ <b>Заявка на VPN принята!</b>\n\n` +
+            `Тариф: <b>${t.name}</b> — ${t.price} ₽ (${t.days} дн.)\n\n` +
+            `💳 Оплати директору @${MANAGER_TG}. Как подтвердит оплату — ` +
+            `сразу пришлём сюда ссылку и инструкцию по подключению.`
+        ).catch(() => {});
+        window.showToast("Заявка отправлена ✓");
+        setTimeout(window.closeVpnStore, 800);
+    }).catch((err) => {
+        haptic("error");
+        console.error("VPN order error:", err);
+        alert(`⚠️ Не удалось отправить заявку.\n\nНапишите напрямую: @${MANAGER_TG}`);
+    });
+};
+
 // Цветовая тема карточки по категории
 function _catTheme(cat) {
     if (!cat) return "default";
@@ -2382,6 +2441,7 @@ window.initSwipeToClose = function () {
         "cartPopup":     () => window.closeVapeCart(),
         "referralPopup": () => window.closeReferral(),
         "specialOrderPopup": () => window.closeSpecialOrder(),
+        "vpnStorePopup": () => window.closeVpnStore(),
     };
     document.querySelectorAll(".overlay").forEach(overlay => {
         const drawer = overlay.querySelector(".drawer");

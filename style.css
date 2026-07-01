@@ -1251,6 +1251,20 @@ body[data-level="platinum"] .profile-avatar-ring { animation-duration: 4s; opaci
 .change-custom-inp { flex:1; min-width:0; background:rgba(255,255,255,0.05); border:1px solid rgba(255,255,255,0.1); border-radius:8px; padding:6px 8px; font-family:inherit; font-size:12px; color:#e8e8e8; height:34px; }
 .transfer-hint { font-size:13px; color:rgba(255,255,255,0.45); background:rgba(255,255,255,0.04); border:1px solid rgba(255,255,255,0.08); border-radius:12px; padding:12px; line-height:1.5; }
 
+/* ── VPN-МАГАЗИН ── */
+.vpn-tariffs { display:grid; grid-template-columns:1fr 1fr; gap:10px; margin:14px 0 4px; }
+.vpn-card { background:rgba(0,240,124,0.04); border:1.5px solid rgba(0,240,124,0.18); border-radius:16px; padding:14px 12px; text-align:center; cursor:pointer; transition:all 0.18s; }
+.vpn-card:active { transform:scale(0.97); }
+.vpn-card.featured { border-color:rgba(0,240,124,0.5); background:rgba(0,240,124,0.09); }
+.vpn-card.wide { grid-column:1 / -1; display:flex; align-items:center; justify-content:space-between; text-align:left; background:rgba(0,240,124,0.07); border-color:rgba(0,240,124,0.35); }
+.vpn-card-top { min-height:16px; margin-bottom:4px; }
+.vpn-badge { font-size:10px; font-weight:800; color:var(--neon-green); background:rgba(0,240,124,0.16); padding:2px 8px; border-radius:20px; }
+.vpn-name { font-size:15px; font-weight:800; color:#fff; }
+.vpn-days { font-size:12px; color:rgba(255,255,255,0.45); margin-top:2px; }
+.vpn-price { font-size:20px; font-weight:900; color:var(--neon-green); margin:8px 0; }
+.vpn-buy { display:block; width:100%; padding:8px; border-radius:10px; border:none; background:var(--neon-green); color:#04120a; font-family:inherit; font-size:13px; font-weight:800; cursor:pointer; }
+.vpn-note { font-size:11px; color:rgba(255,255,255,0.4); text-align:center; margin-top:12px; line-height:1.5; }
+
 /* ── БЛОК КОНТАКТНЫХ ДАННЫХ ── */
 .contact-block { background:rgba(0,240,124,0.05); border:1.5px solid rgba(0,240,124,0.2); border-radius:16px; padding:14px 14px 10px; margin-bottom:12px; }
 .contact-block-title { font-size:13px; font-weight:800; color:var(--neon-green); margin-bottom:10px; }
