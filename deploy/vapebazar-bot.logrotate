@@ -1,0 +1,11 @@
+# Ротация лога бота — чтобы bot.log больше не разрастался (был 44 МБ).
+# Скопировать в /etc/logrotate.d/vapebazar-bot
+/opt/bazar/bot.log {
+    daily
+    rotate 7
+    compress
+    delaycompress
+    missingok
+    notifempty
+    copytruncate
+}

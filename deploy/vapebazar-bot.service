@@ -1,0 +1,19 @@
+[Unit]
+Description=VapeBazar Telegram Bot
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+WorkingDirectory=/opt/bazar
+# Секреты (токен бота, пароль панели 3x-ui) лежат здесь, НЕ в git:
+EnvironmentFile=/etc/vapebazar-bot.env
+ExecStart=/opt/bazar/venv/bin/python /opt/bazar/bott.py
+Restart=always
+RestartSec=5
+User=root
+StandardOutput=journal
+StandardError=journal
+
+[Install]
+WantedBy=multi-user.target
