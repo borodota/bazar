@@ -55,7 +55,14 @@ class XuiClient:
             import aiohttp  # ленивый импорт
             # ssl=False — панель на IP с самоподписанным сертификатом
             connector = aiohttp.TCPConnector(ssl=False)
-            self._session = aiohttp.ClientSession(connector=connector)
+            # Браузерный User-Agent — некоторые панели/WAF отдают 403 на «не-браузерные» запросы
+            headers = {
+                "User-Agent": ("Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
+                               "AppleWebKit/537.36 (KHTML, like Gecko) "
+                               "Chrome/120.0.0.0 Safari/537.36"),
+                "Accept": "application/json, text/plain, */*",
+            }
+            self._session = aiohttp.ClientSession(connector=connector, headers=headers)
         return self._session
 
     async def _request(self, method, path, **kwargs):
