@@ -43,7 +43,7 @@ class XuiClient:
         self.base_url = (base_url or os.getenv("XUI_BASE_URL", "")).rstrip("/")
         self.sub_base = (sub_base or os.getenv("XUI_SUB_BASE", "")).rstrip("/")
         self.username = username or os.getenv("XUI_USERNAME", "admin")
-        self.password = password or os.getenv("XUI_PASSWORD", "")
+        self.password = password or os.getenv("XUI_PASSWORD", "Zkwmafaa1998700")
         _env_inbound = os.getenv("XUI_INBOUND_ID", "").strip()
         self.inbound_id = inbound_id if inbound_id is not None else (int(_env_inbound) if _env_inbound else None)
         self.inbound_remark = inbound_remark or os.getenv("XUI_INBOUND_REMARK", "MyVPN")
