@@ -40,7 +40,7 @@ class XuiClient:
         inbound_id=None,
         inbound_remark=None,
     ):
-        self.base_url = (base_url or os.getenv("XUI_BASE_URL", "")).rstrip("/")
+        self.base_url = (base_url or os.getenv("XUI_BASE_URL", "https://62.133.61.23:2053/KUzeX4i5ljeMdedcxc")).rstrip("/")
         self.sub_base = (sub_base or os.getenv("XUI_SUB_BASE", "")).rstrip("/")
         self.username = username or os.getenv("XUI_USERNAME", "admin")
         self.password = password or os.getenv("XUI_PASSWORD", "Zkwmafaa1998700")
