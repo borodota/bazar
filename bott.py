@@ -13,6 +13,7 @@ import json
 from datetime import datetime, timedelta, timezone
 import os
 import sys
+from xui_api import XuiClient  # модуль общения с панелью 3x-ui (VPN)
 
 # ==================== НАСТРОЙКА ЛОГИРОВАНИЯ ====================
 logging.basicConfig(
@@ -47,6 +48,16 @@ SUBSCRIBERS_FILE = os.path.join(DATA_DIR, "subscribers.json")  # кому сла
 ORDERS_FILE = os.path.join(DATA_DIR, "orders_log.json")        # журнал заказов для /orders и /stats
 BONUSES_FILE = os.path.join(DATA_DIR, "bonuses.json")          # ИСТОЧНИК ПРАВДЫ по баллам и рефералам
 NOTIFY_FILE = os.path.join(DATA_DIR, "notify_requests.json")   # запросы уведомить о поступлении товара
+VPN_SUBS_FILE = os.path.join(DATA_DIR, "vpn_subs.json")        # учёт VPN-подписок: кто, тариф, срок
+
+# ── Тарифы VPN (название / дней / цена ₽ / устройств) ──
+VPN_TARIFFS = {
+    "trial": {"name": "Пробный", "days": 7,   "price": 50,   "devices": 1},
+    "month": {"name": "Месяц",   "days": 30,  "price": 150,  "devices": 1},
+    "q":     {"name": "3 месяца","days": 90,  "price": 400,  "devices": 1},
+    "half":  {"name": "Полгода", "days": 180, "price": 700,  "devices": 1},
+    "year":  {"name": "Год",     "days": 365, "price": 1200, "devices": 1},
+}
 
 REFERRAL_REWARD = 200   # баллов пригласившему за ПЕРВЫЙ оплаченный заказ друга
 EARN_CAP_RATE = 0.15    # санити-лимит начисления: не больше 15% от суммы заказа
@@ -313,6 +324,44 @@ async def handle_web_app_order(message: types.Message):
                 except Exception as e: logger.error(f"special_order notify failed {chat_id}: {e}")
             return
 
+        if is_json and raw_data.get("type") == "vpn_order":
+            tariff_id = raw_data.get("tariff")
+            tariff = VPN_TARIFFS.get(tariff_id)
+            if not tariff:
+                await message.answer(
+                    f"⚠️ Тариф не распознан. Напишите менеджеру @{MANAGER_USERNAME}",
+                    reply_markup=get_main_keyboard()
+                )
+                return
+            username_text = f"@{message.from_user.username}" if message.from_user.username else "Скрыт"
+            subs = _load_json(VPN_SUBS_FILE, {})
+            is_renewal = str(message.from_user.id) in subs
+
+            await message.answer(
+                "🛡️ <b>Заявка на VPN принята!</b>\n\n"
+                f"Тариф: <b>{tariff['name']}</b> — {tariff['price']} ₽ ({tariff['days']} дн.)\n\n"
+                f"💳 Оплати директору @{MANAGER_USERNAME}. Как подтвердит оплату — "
+                "сразу пришлём сюда ссылку-подписку и инструкцию.",
+                reply_markup=get_main_keyboard()
+            )
+            admin_text = (
+                f"🛡️ <b>{'ПРОДЛЕНИЕ' if is_renewal else 'НОВЫЙ'} VPN-ЗАКАЗ</b>\n"
+                f"━━━━━━━━━━━━━━━━━━━━━━━━\n\n"
+                f"👤 <b>Клиент:</b> {username_text}\n"
+                f"🆔 <b>ID:</b> <code>{message.from_user.id}</code>\n\n"
+                f"📦 <b>Тариф:</b> {tariff['name']} ({tariff['days']} дн., {tariff['devices']} устр.)\n"
+                f"💰 <b>К оплате:</b> {tariff['price']} ₽\n\n"
+                f"👉 Клиент платит напрямую. После оплаты жми кнопку — выдам доступ."
+            )
+            kb_vpn = InlineKeyboardMarkup(inline_keyboard=[
+                [InlineKeyboardButton(text="✅ Оплачено — выдать", callback_data=f"vpn_give_{message.from_user.id}_{tariff_id}")],
+                [InlineKeyboardButton(text="📞 Связаться", url=f"tg://user?id={message.from_user.id}")],
+            ])
+            for chat_id in set([ADMIN_ID] + DEPUTY_ADMIN_IDS):
+                try: await bot.send_message(chat_id=chat_id, text=admin_text, reply_markup=kb_vpn)
+                except Exception as e: logger.error(f"vpn_order notify failed {chat_id}: {e}")
+            return
+
         if is_json and raw_data.get("type") == "notify_request":
             username_text = f"@{message.from_user.username}" if message.from_user.username else "Скрыт"
             prod_name = raw_data.get("product_name", "—")
@@ -463,6 +512,105 @@ async def handle_web_app_order(message: types.Message):
     except Exception as e:
         logger.error(f"Критическая ошибка хэндлера WebApp: {e}")
         await message.answer("❌ Произошла ошибка при обработке данных корзины.")
+
+@dp.callback_query(F.data.startswith("vpn_give_"))
+async def vpn_give_access(callback: types.CallbackQuery):
+    """Директор нажал «Оплачено — выдать»: создаём/продлеваем доступ в 3x-ui."""
+    if callback.from_user.id not in ADMINS:
+        await callback.answer("⛔ Нет доступа", show_alert=True)
+        return
+
+    # vpn_give_<customer_id>_<tariff_id>
+    parts = callback.data.split("_")
+    customer_id = parts[2] if len(parts) > 2 else None
+    tariff_id = parts[3] if len(parts) > 3 else None
+    tariff = VPN_TARIFFS.get(tariff_id)
+    if not customer_id or not tariff:
+        await callback.answer("⚠️ Не разобрал заказ", show_alert=True)
+        return
+
+    await callback.answer("Создаю доступ…")
+    client = XuiClient()  # все параметры из .env
+    try:
+        await client.login()
+        subs = _load_json(VPN_SUBS_FILE, {})
+        rec = subs.get(str(customer_id))
+        email = f"tg{customer_id}"
+
+        if rec and rec.get("uuid") and rec.get("sub_id"):
+            # уже был доступ → продлеваем, дни не сгорают
+            result = await client.extend_client(
+                rec["uuid"], email, rec["sub_id"], tariff["days"], tariff["devices"]
+            )
+            uuid_val, sub_id = rec["uuid"], rec["sub_id"]
+        else:
+            # новый клиент
+            result = await client.add_client(email, tariff["days"], tariff["devices"])
+            uuid_val, sub_id = result["uuid"], result["sub_id"]
+
+        sub_url = result["sub_url"]
+        expiry_ms = result["expiry_ms"]
+        expiry_str = datetime.fromtimestamp(expiry_ms / 1000).strftime("%d.%m.%Y")
+
+        subs[str(customer_id)] = {
+            "tariff": tariff_id,
+            "sub_id": sub_id,
+            "uuid": uuid_val,
+            "email": email,
+            "expiry": datetime.fromtimestamp(expiry_ms / 1000).isoformat(timespec="seconds"),
+            "created": (rec.get("created") if rec else datetime.now().isoformat(timespec="seconds")),
+        }
+        _save_json(VPN_SUBS_FILE, subs)
+
+        # Клиенту — ссылка + инструкция
+        client_text = (
+            "🛡️ <b>Ваш VPN готов!</b>\n"
+            f"Тариф: <b>{tariff['name']}</b> · активен до <b>{expiry_str}</b>\n\n"
+            "🔗 <b>Ваша ссылка-подписка</b> (скопируй целиком):\n"
+            f"<code>{sub_url}</code>\n\n"
+            "📲 <b>Как подключить:</b>\n"
+            "1️⃣ Установи приложение <b>Hiddify</b>:\n"
+            "   • iPhone / Mac — App Store\n"
+            "   • Android — Google Play\n"
+            "   • Windows — hiddify.com\n"
+            "2️⃣ Скопируй ссылку выше\n"
+            "3️⃣ В Hiddify нажми «＋» → «Добавить из буфера обмена»\n"
+            "4️⃣ Включи тумблер — готово ✅\n\n"
+            "⚠️ Если дома интернет тормозит — включи в настройках Hiddify "
+            "встроенный обход (фрагментация / WARP).\n\n"
+            f"❓ Вопросы: @{MANAGER_USERNAME}"
+        )
+        try:
+            await bot.send_message(chat_id=int(customer_id), text=client_text)
+        except Exception as e:
+            logger.error(f"Не удалось отправить VPN-доступ клиенту {customer_id}: {e}")
+            await bot.send_message(
+                callback.from_user.id,
+                f"⚠️ Доступ создан, но клиенту <code>{customer_id}</code> не доставилось "
+                f"(не запускал бота?). Ссылка:\n<code>{sub_url}</code>"
+            )
+
+        # Обновляем сообщение у директора
+        try:
+            done_text = (callback.message.html_text or callback.message.text or "") + \
+                f"\n\n✅ <b>ВЫДАНО</b> · до {expiry_str}"
+            await callback.message.edit_text(text=done_text, reply_markup=None)
+        except Exception:
+            pass
+
+    except Exception as e:
+        logger.error(f"VPN выдача не удалась (клиент {customer_id}): {e}")
+        try:
+            await bot.send_message(
+                callback.from_user.id,
+                f"⚠️ <b>Не удалось выдать VPN.</b>\nОшибка: <code>{e}</code>\n\n"
+                f"Проверь панель/доступ и попробуй ещё раз, либо выдай вручную."
+            )
+        except Exception:
+            pass
+    finally:
+        await client.close()
+
 
 @dp.callback_query(F.data.startswith("st_"))
 async def change_order_status(callback: types.CallbackQuery):
@@ -767,6 +915,31 @@ async def cmd_orders(message: types.Message):
         total = o.get("total") or 0
         total_txt = f"{_fmt_money(total)} ₽" if total else "—"
         lines.append(f"<b>#{o.get('order_id')}</b> · {total_txt}\n     {o.get('status_label', '—')}")
+    await message.answer("\n".join(lines))
+
+
+@dp.message(Command("vpn_subs"))
+async def cmd_vpn_subs(message: types.Message):
+    if message.from_user.id not in ADMINS:
+        return
+    subs = _load_json(VPN_SUBS_FILE, {})
+    if not subs:
+        await message.answer("🛡️ VPN-подписок пока нет.")
+        return
+    now = datetime.now()
+    lines = ["🛡️ <b>VPN-подписки</b>", "━━━━━━━━━━━━━━━━━━━━━━━━"]
+    # сортируем по сроку окончания (кто раньше истекает — выше)
+    for cid, rec in sorted(subs.items(), key=lambda kv: kv[1].get("expiry", "")):
+        tariff = VPN_TARIFFS.get(rec.get("tariff"), {})
+        tname = tariff.get("name", rec.get("tariff", "—"))
+        exp_str = rec.get("expiry", "")[:10]
+        active = "✅"
+        try:
+            if datetime.fromisoformat(rec.get("expiry")) < now:
+                active = "⛔"
+        except Exception:
+            pass
+        lines.append(f"{active} <code>{cid}</code> · {tname} · до {exp_str}")
     await message.answer("\n".join(lines))
 
 
