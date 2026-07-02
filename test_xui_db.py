@@ -87,7 +87,7 @@ class TestAddClient(unittest.IsolatedAsyncioTestCase):
             self.assertIn("security=reality", url)
             self.assertIn("pbk=N7ysNCfHWngtnxV56ti-XYplQYSQznPGMU1r5GryZjg", url)
             self.assertIn("sni=www.nvidia.com", url)
-            self.assertIn("flow=xtls-rprx-vision", url)
+            self.assertNotIn("flow=", url)  # flow пустой у этого инбаунда → в ссылке его нет
             self.assertIn("sid=23d96f34a9f6", url)
         finally:
             os.remove(path)

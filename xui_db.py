@@ -34,7 +34,9 @@ from urllib.parse import urlencode, quote
 logger = logging.getLogger(__name__)
 
 DAY_MS = 86_400_000  # миллисекунд в сутках (3x-ui хранит срок в мс epoch)
-FLOW = "xtls-rprx-vision"  # стандартный flow для VLESS+Reality поверх TCP
+# flow этого инбаунда — ПУСТОЙ (как у рабочего клиента "me").
+# vision тут не подключается, поэтому оставляем "".
+FLOW = ""
 
 
 class XuiError(Exception):
@@ -107,8 +109,9 @@ class XuiClient:
             "sni": server_names[0],
             "sid": short_ids[0],
             "spx": rset.get("spiderX", "/"),
-            "flow": FLOW,
         }
+        if FLOW:  # добавляем flow в ссылку только если он не пустой
+            params["flow"] = FLOW
         query = urlencode(params)
         return f"vless://{client_uuid}@{self.server_host}:{port}?{query}#{quote(label)}"
 
