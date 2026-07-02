@@ -13,7 +13,7 @@ import json
 from datetime import datetime, timedelta, timezone
 import os
 import sys
-from xui_api import XuiClient  # модуль общения с панелью 3x-ui (VPN)
+from xui_db import XuiClient  # выдача VPN через прямую запись в базу 3x-ui (вход не нужен)
 
 # ==================== НАСТРОЙКА ЛОГИРОВАНИЯ ====================
 logging.basicConfig(
