@@ -18,25 +18,38 @@ import unittest
 from xui_db import XuiClient, XuiError, DAY_MS
 
 
+STREAM = json.dumps({
+    "network": "tcp", "security": "reality",
+    "realitySettings": {
+        "serverNames": ["www.nvidia.com"],
+        "shortIds": ["23d96f34a9f6", "39"],
+        "settings": {"publicKey": "N7ysNCfHWngtnxV56ti-XYplQYSQznPGMU1r5GryZjg",
+                     "fingerprint": "chrome", "spiderX": "/"},
+    },
+})
+
+
 def make_db():
     fd, path = tempfile.mkstemp(suffix=".db")
     os.close(fd)
     con = sqlite3.connect(path)
-    con.execute("CREATE TABLE inbounds (id INTEGER PRIMARY KEY, remark TEXT, settings TEXT)")
+    con.execute("CREATE TABLE inbounds (id INTEGER PRIMARY KEY, remark TEXT, settings TEXT, "
+                "stream_settings TEXT, port INTEGER)")
     con.execute(
         "CREATE TABLE client_traffics ("
         "id INTEGER PRIMARY KEY AUTOINCREMENT, inbound_id INTEGER, enable INTEGER, "
         "email TEXT, up INTEGER, down INTEGER, expiry_time INTEGER, total INTEGER, reset INTEGER)"
     )
-    con.execute("INSERT INTO inbounds (id, remark, settings) VALUES (?,?,?)",
-                (1, "MyVPN", json.dumps({"clients": [], "decryption": "none", "fallbacks": []})))
+    con.execute("INSERT INTO inbounds (id, remark, settings, stream_settings, port) VALUES (?,?,?,?,?)",
+                (1, "MyVPN", json.dumps({"clients": [], "decryption": "none", "fallbacks": []}),
+                 STREAM, 443))
     con.commit()
     con.close()
     return path
 
 
 def client_for(path):
-    return XuiClient(db_path=path, sub_base="https://62.133.61.23:2096/sub",
+    return XuiClient(db_path=path, server_host="62.133.61.23",
                      inbound_remark="MyVPN", restart_cmd="")  # restart отключён
 
 
@@ -68,14 +81,21 @@ class TestAddClient(unittest.IsolatedAsyncioTestCase):
             self.assertEqual(traf[0][1], "tg777")
             self.assertEqual(traf[0][3], 1)
 
-            self.assertEqual(res["sub_url"], f"https://62.133.61.23:2096/sub/{res['sub_id']}")
+            # vless-ссылка собрана правильно
+            url = res["access_url"]
+            self.assertTrue(url.startswith(f"vless://{res['uuid']}@62.133.61.23:443?"))
+            self.assertIn("security=reality", url)
+            self.assertIn("pbk=N7ysNCfHWngtnxV56ti-XYplQYSQznPGMU1r5GryZjg", url)
+            self.assertIn("sni=www.nvidia.com", url)
+            self.assertIn("flow=xtls-rprx-vision", url)
+            self.assertIn("sid=23d96f34a9f6", url)
         finally:
             os.remove(path)
 
     async def test_missing_inbound_raises(self):
         path = make_db()
         try:
-            c = XuiClient(db_path=path, sub_base="https://s/sub",
+            c = XuiClient(db_path=path, server_host="62.133.61.23",
                           inbound_remark="НетТакого", restart_cmd="")
             with self.assertRaises(XuiError):
                 await c.add_client(email="tg1", days=7)
