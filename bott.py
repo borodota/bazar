@@ -34,6 +34,9 @@ MANAGER_USERNAME = 'BORO_DOTA'
 BOT_USERNAME = 'vapebazar_bot'   # для реферальных ссылок t.me/<bot>?startapp=ref_<id>
 DEPUTY_ADMIN_IDS = [5289357165, 6163521938]
 
+SHOP_OPEN_HOUR = 10   # часы работы по Магадану — синхронизировано со script.js
+SHOP_CLOSE_HOUR = 22
+
 DELIVERY_BASE_COST = 250
 FREE_DELIVERY_THRESHOLD = 2000
 
