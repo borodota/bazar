@@ -548,7 +548,7 @@ async def vpn_give_access(callback: types.CallbackQuery):
             result = await client.add_client(email, tariff["days"], tariff["devices"])
             uuid_val, sub_id = result["uuid"], result["sub_id"]
 
-        sub_url = result["sub_url"]  # ссылка-подписка (её берут Hiddify и HAPP)
+        sub_url = result["sub_url"]  # ссылка-подписка — стабильно открывается только в HAPP
         expiry_ms = result["expiry_ms"]
         expiry_str = datetime.fromtimestamp(expiry_ms / 1000).strftime("%d.%m.%Y")
 
@@ -562,22 +562,19 @@ async def vpn_give_access(callback: types.CallbackQuery):
         }
         _save_json(VPN_SUBS_FILE, subs)
 
-        # Клиенту — ссылка + инструкция
+        # Клиенту — ссылка + инструкция (только HAPP: у него ключ подключается стабильно)
         client_text = (
             "🛡️ <b>Ваш VPN готов!</b>\n"
             f"Тариф: <b>{tariff['name']}</b> · активен до <b>{expiry_str}</b>\n\n"
             "🔗 <b>Ваша ссылка-подписка</b> (скопируй целиком):\n"
             f"<code>{sub_url}</code>\n\n"
             "📲 <b>Как подключить:</b>\n"
-            "1️⃣ Установи приложение <b>Hiddify</b> (или HAPP):\n"
-            "   • iPhone / Mac — App Store\n"
+            "1️⃣ Установи приложение <b>HAPP</b>:\n"
+            "   • iPhone — App Store\n"
             "   • Android — Google Play\n"
-            "   • Windows — hiddify.com\n"
             "2️⃣ Скопируй ссылку выше\n"
-            "3️⃣ В приложении: «＋» → «Добавить из буфера обмена»\n"
+            "3️⃣ В HAPP: «＋» → «Добавить из буфера обмена»\n"
             "4️⃣ Включи тумблер — готово ✅\n\n"
-            "⚠️ Если дома интернет тормозит — включи в настройках Hiddify "
-            "встроенный обход (фрагментация / WARP).\n\n"
             f"❓ Вопросы: @{MANAGER_USERNAME}"
         )
         try:
@@ -1304,50 +1301,6 @@ async def cmd_export(message: types.Message):
     await message.answer_document(doc, caption=f"📁 Экспорт <b>{len(orders)}</b> заказов")
 
 
-# Ловит всё остальное — регистрируется последним, чтобы не перехватывать другие хэндлеры.
-@dp.message()
-async def fallback_any_message(message: types.Message):
-    remember_user(message.from_user)
-    text = message.text or ""
-    logger.info(f"Сообщение без обработчика от {message.from_user.id} (@{message.from_user.username}): {text!r}")
-
-    faq_answer = _match_faq(text)
-    if faq_answer:
-        await message.answer(faq_answer, reply_markup=get_main_keyboard())
-        return
-
-    # #25 — Автоответ вне рабочего времени (Магадан UTC+10)
-    MAGADAN = timezone(timedelta(hours=10))
-    now_local = datetime.now(MAGADAN)
-    if now_local.hour < SHOP_OPEN_HOUR or now_local.hour >= SHOP_CLOSE_HOUR:
-        opens_at = f"{SHOP_OPEN_HOUR:02d}:00"
-        await message.answer(
-            f"🌙 Магазин сейчас закрыт.\n\n"
-            f"Работаем ежедневно с <b>{SHOP_OPEN_HOUR}:00 до {SHOP_CLOSE_HOUR}:00</b> по Магадану.\n"
-            f"Откроемся в <b>{opens_at}</b> — обязательно ответим!\n\n"
-            f"Ваше сообщение сохранено, менеджер @{MANAGER_USERNAME} увидит его утром.",
-            reply_markup=get_main_keyboard()
-        )
-        # Всё равно уведомить менеджера, чтобы мог ответить раньше
-        uname = f"@{message.from_user.username}" if message.from_user.username else message.from_user.first_name
-        for cid in ADMINS:
-            try:
-                await bot.send_message(cid, f"🌙 Сообщение вне рабочего времени\n{uname}: {text[:300]}")
-            except Exception:
-                pass
-        return
-
-    await message.answer(
-        "Я не понял вопрос 🤔 Попробуй спросить иначе, или напиши менеджеру:\n"
-        f"👉 @{MANAGER_USERNAME}\n\n"
-        "Часто спрашивают:\n"
-        "• «Как оплатить?»\n"
-        "• «Сколько ждать доставку?»\n"
-        "• «Есть гарантия на iPhone?»\n"
-        "• «Как работают баллы?»",
-        reply_markup=get_main_keyboard()
-    )
-
 @dp.message(Command("birthday"))
 async def cmd_birthday(message: types.Message):
     """Пользователь сохраняет дату рождения: /birthday ДД.ММ"""
@@ -1433,6 +1386,51 @@ async def cmd_restock(message: types.Message):
         notify_reqs.pop(key, None)
     _save_json(NOTIFY_FILE, notify_reqs)
     await message.answer(f"✅ Отправлено: {sent}, не доставлено: {failed}")
+
+
+# Ловит всё остальное — регистрируется последним, чтобы не перехватывать другие хэндлеры.
+@dp.message()
+async def fallback_any_message(message: types.Message):
+    remember_user(message.from_user)
+    text = message.text or ""
+    logger.info(f"Сообщение без обработчика от {message.from_user.id} (@{message.from_user.username}): {text!r}")
+
+    faq_answer = _match_faq(text)
+    if faq_answer:
+        await message.answer(faq_answer, reply_markup=get_main_keyboard())
+        return
+
+    # #25 — Автоответ вне рабочего времени (Магадан UTC+10)
+    MAGADAN = timezone(timedelta(hours=10))
+    now_local = datetime.now(MAGADAN)
+    if now_local.hour < SHOP_OPEN_HOUR or now_local.hour >= SHOP_CLOSE_HOUR:
+        opens_at = f"{SHOP_OPEN_HOUR:02d}:00"
+        await message.answer(
+            f"🌙 Магазин сейчас закрыт.\n\n"
+            f"Работаем ежедневно с <b>{SHOP_OPEN_HOUR}:00 до {SHOP_CLOSE_HOUR}:00</b> по Магадану.\n"
+            f"Откроемся в <b>{opens_at}</b> — обязательно ответим!\n\n"
+            f"Ваше сообщение сохранено, менеджер @{MANAGER_USERNAME} увидит его утром.",
+            reply_markup=get_main_keyboard()
+        )
+        # Всё равно уведомить менеджера, чтобы мог ответить раньше
+        uname = f"@{message.from_user.username}" if message.from_user.username else message.from_user.first_name
+        for cid in ADMINS:
+            try:
+                await bot.send_message(cid, f"🌙 Сообщение вне рабочего времени\n{uname}: {text[:300]}")
+            except Exception:
+                pass
+        return
+
+    await message.answer(
+        "Я не понял вопрос 🤔 Попробуй спросить иначе, или напиши менеджеру:\n"
+        f"👉 @{MANAGER_USERNAME}\n\n"
+        "Часто спрашивают:\n"
+        "• «Как оплатить?»\n"
+        "• «Сколько ждать доставку?»\n"
+        "• «Есть гарантия на iPhone?»\n"
+        "• «Как работают баллы?»",
+        reply_markup=get_main_keyboard()
+    )
 
 
 async def birthday_check_loop():
