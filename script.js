@@ -783,12 +783,12 @@ window.buyVpn = function (tariffId) {
     if (window._vpnBuyInFlight) return; // защита от двойной заявки при быстром повторном тапе
     const t = window.VPN_TARIFFS.find(x => x.id === tariffId);
     if (!t) return;
-    window._vpnBuyInFlight = true;
     const devices = window._vpnDevices || 1;
     const price = window.vpnPriceFor(t, devices);
     const user = tgCurrentUser();
     const customerId = user ? user.id : "";
     if (!customerId) { haptic("error"); window.showToast("Открой магазин через Telegram"); return; }
+    window._vpnBuyInFlight = true;
     const usernameText = (user && user.username) ? "@" + user.username : (user.first_name || "Скрыт");
 
     // Реферал — приведи друга на VPN, независимо от того, использовал ли он
@@ -796,6 +796,10 @@ window.buyVpn = function (tariffId) {
     const referredByRaw = localStorage.getItem("vapeReferredBy");
     const vpnRefId = (referredByRaw && localStorage.getItem("vapeVpnRefUsed") !== "1"
         && /^\d+$/.test(referredByRaw) && referredByRaw !== String(customerId)) ? referredByRaw : "0";
+
+    // Уникальный ID этого заказа — нужен боту, чтобы не выдать VPN дважды,
+    // если оба админа нажмут «Оплачено» на своих копиях заявки почти одновременно.
+    const vpnOrderId = Date.now().toString().slice(-8);
 
     const adminText =
         `🛡️ <b>VPN-ЗАКАЗ</b>\n` +
@@ -806,7 +810,7 @@ window.buyVpn = function (tariffId) {
         `💰 <b>К оплате:</b> ${price} ₽\n\n` +
         `👉 Клиент платит напрямую. После оплаты жми «Оплачено — выдать».`;
     const kb = { inline_keyboard: [
-        [{ text: "✅ Оплачено — выдать", callback_data: `vpn_give_${customerId}_${t.id}_${devices}_${vpnRefId}` }],
+        [{ text: "✅ Оплачено — выдать", callback_data: `vpn_give_${customerId}_${t.id}_${devices}_${vpnRefId}_${vpnOrderId}` }],
         [{ text: "📞 Связаться", url: "tg://user?id=" + customerId }]
     ]};
 

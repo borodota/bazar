@@ -63,7 +63,8 @@ VPN_TARIFFS = {
     "year":  {"name": "Год",     "days": 365, "price": 1200, "devices": 1},
 }
 VPN_REFERRAL_BONUS_DAYS = 7   # приведи друга на VPN — оба получают эти дни бонусом
-VPN_EXPIRY_REMINDER_WINDOW_DAYS = 2   # напоминать за N дней до истечения (и ещё N дней после)
+VPN_EXPIRY_REMINDER_WINDOW_DAYS = 2   # начинаем напоминать за N дней до истечения
+VPN_EXPIRY_GRACE_DAYS = 14    # но не дольше N дней после — дальше считаем что клиент ушёл
 
 REFERRAL_REWARD = 200   # баллов пригласившему за ПЕРВЫЙ оплаченный заказ друга
 EARN_CAP_RATE = 0.15    # санити-лимит начисления: не больше 15% от суммы заказа
@@ -160,6 +161,10 @@ def _safe_int(v, default=0):
 # Все операции «прочитать-изменить-записать» с баллами идут под этим замком,
 # иначе два одновременных нажатия «Принять» могут затереть изменения друг друга.
 _bonus_lock = asyncio.Lock()
+# Тот же принцип для VPN: выдача идёт в двух местах (два админа получают одну
+# и ту же заявку отдельными сообщениями) и делает реальные await-вызовы к 3x-ui
+# между чтением и записью vpn_subs.json — без лока это гонка данных.
+_vpn_lock = asyncio.Lock()
 
 def _load_bonuses():
     data = _load_json(BONUSES_FILE, {})
@@ -526,7 +531,7 @@ async def vpn_give_access(callback: types.CallbackQuery):
         await callback.answer("⛔ Нет доступа", show_alert=True)
         return
 
-    # vpn_give_<customer_id>_<tariff_id>_<devices>_<ref_id>
+    # vpn_give_<customer_id>_<tariff_id>_<devices>_<ref_id>_<order_id>
     parts = callback.data.split("_")
     customer_id = parts[2] if len(parts) > 2 else None
     tariff_id = parts[3] if len(parts) > 3 else None
@@ -536,124 +541,158 @@ async def vpn_give_access(callback: types.CallbackQuery):
         return
     devices = int(parts[4]) if len(parts) > 4 and parts[4].isdigit() else tariff["devices"]
     ref_id = parts[5] if len(parts) > 5 else "0"
+    order_id = parts[6] if len(parts) > 6 else ""
 
-    await callback.answer("Создаю доступ…")
-    client = XuiClient()  # все параметры из .env
-    try:
-        await client.login()
+    # Заявка на один и тот же заказ уходит ОБОИМ админам отдельными сообщениями —
+    # если оба нажмут «Оплачено — выдать», без лока и проверки order_id клиенту
+    # продлится VPN дважды бесплатно. Лок нужен на весь блок: между чтением и
+    # записью vpn_subs.json тут реальные await к панели 3x-ui.
+    async with _vpn_lock:
         subs = _load_json(VPN_SUBS_FILE, {})
         rec = subs.get(str(customer_id))
-        email = f"tg{customer_id}"
-        is_first_vpn = rec is None
+        if order_id and rec and rec.get("last_processed_order_id") == order_id:
+            await callback.answer("⚠️ Этот заказ уже обработан", show_alert=True)
+            try:
+                done_text = (callback.message.html_text or callback.message.text or "") + \
+                    "\n\n✅ <b>УЖЕ ВЫДАНО РАНЕЕ</b> (обработал другой админ)"
+                await callback.message.edit_text(
+                    text=done_text, reply_markup=InlineKeyboardMarkup(inline_keyboard=[])
+                )
+            except Exception:
+                pass
+            return
 
-        # Реферальный бонус — только первому VPN-заказу клиента, приглашённому не самим собой
-        referral_applies = (is_first_vpn and ref_id not in ("0", "", str(customer_id)))
-        bonus_days = VPN_REFERRAL_BONUS_DAYS if referral_applies else 0
-        effective_days = tariff["days"] + bonus_days
+        await callback.answer("Создаю доступ…")
+        client = XuiClient()  # все параметры из .env
+        try:
+            await client.login()
+            email = f"tg{customer_id}"
+            is_first_vpn = rec is None
 
-        if rec and rec.get("uuid") and rec.get("sub_id"):
-            # уже был доступ → продлеваем, дни не сгорают
-            result = await client.extend_client(
-                rec["uuid"], email, rec["sub_id"], effective_days, devices
-            )
-            uuid_val, sub_id = rec["uuid"], rec["sub_id"]
-        else:
-            # новый клиент
-            result = await client.add_client(email, effective_days, devices)
-            uuid_val, sub_id = result["uuid"], result["sub_id"]
+            # Реферальный бонус — только первому VPN-заказу клиента, приглашённому не самим собой
+            referral_applies = (is_first_vpn and ref_id not in ("0", "", str(customer_id)))
+            bonus_days = VPN_REFERRAL_BONUS_DAYS if referral_applies else 0
+            effective_days = tariff["days"] + bonus_days
 
-        sub_url = result["sub_url"]  # ссылка-подписка — стабильно открывается только в HAPP
-        expiry_ms = result["expiry_ms"]
-        expiry_str = datetime.fromtimestamp(expiry_ms / 1000).strftime("%d.%m.%Y")
-
-        subs[str(customer_id)] = {
-            "tariff": tariff_id,
-            "devices": devices,
-            "sub_id": sub_id,
-            "uuid": uuid_val,
-            "email": email,
-            "expiry": datetime.fromtimestamp(expiry_ms / 1000).isoformat(timespec="seconds"),
-            "created": (rec.get("created") if rec else datetime.now().isoformat(timespec="seconds")),
-        }
-        _save_json(VPN_SUBS_FILE, subs)
-
-        # Реферальный бонус пригласившему — продлеваем его собственный VPN, если он у него есть
-        if referral_applies:
-            ref_rec = subs.get(str(ref_id))
-            if ref_rec and ref_rec.get("uuid") and ref_rec.get("sub_id"):
-                try:
-                    ref_result = await client.extend_client(
-                        ref_rec["uuid"], ref_rec["email"], ref_rec["sub_id"],
-                        VPN_REFERRAL_BONUS_DAYS, ref_rec.get("devices", 1)
-                    )
-                    ref_rec["expiry"] = datetime.fromtimestamp(
-                        ref_result["expiry_ms"] / 1000
-                    ).isoformat(timespec="seconds")
-                    subs[str(ref_id)] = ref_rec
-                    _save_json(VPN_SUBS_FILE, subs)
-                    ref_expiry_str = datetime.fromtimestamp(
-                        ref_result["expiry_ms"] / 1000
-                    ).strftime("%d.%m.%Y")
-                    await bot.send_message(
-                        chat_id=int(ref_id),
-                        text=(
-                            f"🎁 <b>Друг оплатил VPN по твоей ссылке!</b>\n\n"
-                            f"В подарок +{VPN_REFERRAL_BONUS_DAYS} дней к твоей подписке.\n"
-                            f"Теперь активна до <b>{ref_expiry_str}</b> 🛡️"
-                        )
-                    )
-                except Exception as e:
-                    logger.error(f"Не удалось начислить VPN-реферальный бонус {ref_id}: {e}")
+            if rec and rec.get("uuid") and rec.get("sub_id"):
+                # уже был доступ → продлеваем, дни не сгорают
+                result = await client.extend_client(
+                    rec["uuid"], email, rec["sub_id"], effective_days, devices
+                )
+                uuid_val, sub_id = rec["uuid"], rec["sub_id"]
             else:
-                logger.info(f"VPN-реферал {ref_id} без активной подписки — бонус рефереру пропущен")
+                # новый клиент
+                result = await client.add_client(email, effective_days, devices)
+                uuid_val, sub_id = result["uuid"], result["sub_id"]
 
-        # Клиенту — ссылка + инструкция (только HAPP: у него ключ подключается стабильно)
-        bonus_line = f"🎁 +{bonus_days} дней в подарок за переход по ссылке друга!\n" if referral_applies else ""
-        client_text = (
-            "🛡️ <b>Ваш VPN готов!</b>\n"
-            f"Тариф: <b>{tariff['name']}</b> · {devices} устр. · активен до <b>{expiry_str}</b>\n"
-            f"{bonus_line}\n"
-            "🔗 <b>Ваша ссылка-подписка</b> (скопируй целиком):\n"
-            f"<code>{sub_url}</code>\n\n"
-            "📲 <b>Как подключить:</b>\n"
-            "1️⃣ Установи приложение <b>HAPP</b>:\n"
-            "   • iPhone — App Store\n"
-            "   • Android — Google Play\n"
-            "2️⃣ Скопируй ссылку выше\n"
-            "3️⃣ В HAPP: «＋» → «Добавить из буфера обмена»\n"
-            "4️⃣ Включи тумблер — готово ✅\n\n"
-            f"❓ Вопросы: @{MANAGER_USERNAME}"
-        )
-        try:
-            await bot.send_message(chat_id=int(customer_id), text=client_text)
+            sub_url = result["sub_url"]  # ссылка-подписка — стабильно открывается только в HAPP
+            expiry_ms = result["expiry_ms"]
+            expiry_str = datetime.fromtimestamp(expiry_ms / 1000).strftime("%d.%m.%Y")
+
+            subs[str(customer_id)] = {
+                "tariff": tariff_id,
+                "devices": devices,
+                "sub_id": sub_id,
+                "uuid": uuid_val,
+                "email": email,
+                "expiry": datetime.fromtimestamp(expiry_ms / 1000).isoformat(timespec="seconds"),
+                "created": (rec.get("created") if rec else datetime.now().isoformat(timespec="seconds")),
+                "last_processed_order_id": order_id,
+            }
+            _save_json(VPN_SUBS_FILE, subs)
+
+            # Реферальный бонус пригласившему — продлеваем его собственный VPN, если он у него есть
+            if referral_applies:
+                ref_rec = subs.get(str(ref_id))
+                if ref_rec and ref_rec.get("uuid") and ref_rec.get("sub_id"):
+                    try:
+                        ref_result = await client.extend_client(
+                            ref_rec["uuid"], ref_rec["email"], ref_rec["sub_id"],
+                            VPN_REFERRAL_BONUS_DAYS, ref_rec.get("devices", 1)
+                        )
+                        ref_rec["expiry"] = datetime.fromtimestamp(
+                            ref_result["expiry_ms"] / 1000
+                        ).isoformat(timespec="seconds")
+                        subs[str(ref_id)] = ref_rec
+                        _save_json(VPN_SUBS_FILE, subs)
+                        ref_expiry_str = datetime.fromtimestamp(
+                            ref_result["expiry_ms"] / 1000
+                        ).strftime("%d.%m.%Y")
+                        await bot.send_message(
+                            chat_id=int(ref_id),
+                            text=(
+                                f"🎁 <b>Друг оплатил VPN по твоей ссылке!</b>\n\n"
+                                f"В подарок +{VPN_REFERRAL_BONUS_DAYS} дней к твоей подписке.\n"
+                                f"Теперь активна до <b>{ref_expiry_str}</b> 🛡️"
+                            )
+                        )
+                    except Exception as e:
+                        logger.error(f"Не удалось начислить VPN-реферальный бонус {ref_id}: {e}")
+                else:
+                    # У пригласившего нет своего VPN — бонусу некуда деться. Не молчим,
+                    # сообщаем админу, чтобы решить вручную (иначе обещание "оба получат
+                    # +7 дней" не выполняется, а никто об этом не узнаёт).
+                    logger.info(f"VPN-реферал {ref_id} без активной подписки — бонус рефереру пропущен")
+                    try:
+                        await bot.send_message(
+                            callback.from_user.id,
+                            f"ℹ️ Клиент <code>{customer_id}</code> пришёл по реферальной ссылке "
+                            f"<code>{ref_id}</code>, но у того нет активного VPN — бонус +{VPN_REFERRAL_BONUS_DAYS} "
+                            f"дней начислить некуда. Автоматически не начислено."
+                        )
+                    except Exception:
+                        pass
+
+            # Клиенту — ссылка + инструкция (только HAPP: у него ключ подключается стабильно)
+            bonus_line = f"🎁 +{bonus_days} дней в подарок за переход по ссылке друга!\n" if referral_applies else ""
+            client_text = (
+                "🛡️ <b>Ваш VPN готов!</b>\n"
+                f"Тариф: <b>{tariff['name']}</b> · {devices} устр. · активен до <b>{expiry_str}</b>\n"
+                f"{bonus_line}\n"
+                "🔗 <b>Ваша ссылка-подписка</b> (скопируй целиком):\n"
+                f"<code>{sub_url}</code>\n\n"
+                "📲 <b>Как подключить:</b>\n"
+                "1️⃣ Установи приложение <b>HAPP</b>:\n"
+                "   • iPhone — App Store\n"
+                "   • Android — Google Play\n"
+                "2️⃣ Скопируй ссылку выше\n"
+                "3️⃣ В HAPP: «＋» → «Добавить из буфера обмена»\n"
+                "4️⃣ Включи тумблер — готово ✅\n\n"
+                f"❓ Вопросы: @{MANAGER_USERNAME}"
+            )
+            try:
+                await bot.send_message(chat_id=int(customer_id), text=client_text)
+            except Exception as e:
+                logger.error(f"Не удалось отправить VPN-доступ клиенту {customer_id}: {e}")
+                await bot.send_message(
+                    callback.from_user.id,
+                    f"⚠️ Доступ создан, но клиенту <code>{customer_id}</code> не доставилось "
+                    f"(не запускал бота?). Ссылка:\n<code>{sub_url}</code>"
+                )
+
+            # Обновляем сообщение у директора (пустая клавиатура — реально убирает кнопки;
+            # reply_markup=None в aiogram просто не отправляет параметр, и старая клавиатура остаётся)
+            try:
+                done_text = (callback.message.html_text or callback.message.text or "") + \
+                    f"\n\n✅ <b>ВЫДАНО</b> · до {expiry_str}"
+                await callback.message.edit_text(
+                    text=done_text, reply_markup=InlineKeyboardMarkup(inline_keyboard=[])
+                )
+            except Exception:
+                pass
+
         except Exception as e:
-            logger.error(f"Не удалось отправить VPN-доступ клиенту {customer_id}: {e}")
-            await bot.send_message(
-                callback.from_user.id,
-                f"⚠️ Доступ создан, но клиенту <code>{customer_id}</code> не доставилось "
-                f"(не запускал бота?). Ссылка:\n<code>{sub_url}</code>"
-            )
-
-        # Обновляем сообщение у директора
-        try:
-            done_text = (callback.message.html_text or callback.message.text or "") + \
-                f"\n\n✅ <b>ВЫДАНО</b> · до {expiry_str}"
-            await callback.message.edit_text(text=done_text, reply_markup=None)
-        except Exception:
-            pass
-
-    except Exception as e:
-        logger.error(f"VPN выдача не удалась (клиент {customer_id}): {e}")
-        try:
-            await bot.send_message(
-                callback.from_user.id,
-                f"⚠️ <b>Не удалось выдать VPN.</b>\nОшибка: <code>{e}</code>\n\n"
-                f"Проверь панель/доступ и попробуй ещё раз, либо выдай вручную."
-            )
-        except Exception:
-            pass
-    finally:
-        await client.close()
+            logger.error(f"VPN выдача не удалась (клиент {customer_id}): {e}")
+            try:
+                await bot.send_message(
+                    callback.from_user.id,
+                    f"⚠️ <b>Не удалось выдать VPN.</b>\nОшибка: <code>{e}</code>\n\n"
+                    f"Проверь панель/доступ и попробуй ещё раз, либо выдай вручную."
+                )
+            except Exception:
+                pass
+        finally:
+            await client.close()
 
 
 @dp.callback_query(F.data.startswith("st_"))
@@ -852,6 +891,22 @@ async def rate_order(callback: types.CallbackQuery):
 
     customer_id = callback.from_user.id
     reviews = _load_json(REVIEWS_FILE, {})
+
+    existing = reviews.get(str(order_id))
+    if existing:
+        # reply_markup=None в aiogram не убирает клавиатуру (Telegram оставляет старую,
+        # если параметр вообще не передан) — без этой проверки можно оценивать один
+        # заказ бесконечно и заспамить админов повторными алертами.
+        old_stars = "⭐" * int(existing.get("score", 0))
+        await callback.answer("Вы уже оценили этот заказ", show_alert=True)
+        try:
+            await callback.message.edit_text(
+                text=f"Спасибо за оценку! {old_stars}", reply_markup=InlineKeyboardMarkup(inline_keyboard=[])
+            )
+        except Exception:
+            pass
+        return
+
     reviews[str(order_id)] = {
         "customer_id": str(customer_id),
         "score": score,
@@ -861,7 +916,9 @@ async def rate_order(callback: types.CallbackQuery):
 
     stars = "⭐" * score
     try:
-        await callback.message.edit_text(text=f"Спасибо за оценку! {stars}", reply_markup=None)
+        await callback.message.edit_text(
+            text=f"Спасибо за оценку! {stars}", reply_markup=InlineKeyboardMarkup(inline_keyboard=[])
+        )
     except Exception:
         pass
     await callback.answer("Спасибо!")
@@ -1661,7 +1718,10 @@ async def vpn_expiry_reminder_loop():
                 except Exception:
                     continue
                 days_left = (expiry - now).total_seconds() / 86400
-                if not (-VPN_EXPIRY_REMINDER_WINDOW_DAYS <= days_left <= VPN_EXPIRY_REMINDER_WINDOW_DAYS):
+                # Верхняя граница фиксированная («начинаем напоминать за N дней»), а нижняя —
+                # с запасом на случай простоя бота (перенос на сервер и т.п.), иначе после
+                # перезапуска days_left уже «слишком отрицательный» и клиента бы пропускало навсегда.
+                if not (-VPN_EXPIRY_GRACE_DAYS <= days_left <= VPN_EXPIRY_REMINDER_WINDOW_DAYS):
                     continue
                 if rec.get("last_expiry_reminder") == expiry_str:
                     continue  # уже напоминали про этот же срок (не после продления — expiry изменится)
