@@ -44,9 +44,11 @@ class XuiError(Exception):
 
 
 class XuiClient:
-    def __init__(self, db_path=None, server_host=None, inbound_remark=None, restart_cmd=None):
+    def __init__(self, db_path=None, server_host=None, inbound_remark=None,
+                 restart_cmd=None, sub_base=None):
         self.db_path = db_path or os.getenv("XUI_DB_PATH", "/etc/x-ui/x-ui.db")
         self.server_host = server_host or os.getenv("XUI_SERVER_HOST", "62.133.61.23")
+        self.sub_base = (sub_base or os.getenv("XUI_SUB_BASE", "https://62.133.61.23:2096/sub")).rstrip("/")
         self.inbound_remark = inbound_remark or os.getenv("XUI_INBOUND_REMARK", "MyVPN")
         self.restart_cmd = (restart_cmd if restart_cmd is not None
                             else os.getenv("XUI_RESTART_CMD", "systemctl restart x-ui"))
@@ -144,16 +146,19 @@ class XuiClient:
         sub_id = secrets.token_hex(8)
         expiry_ms = int(time.time() * 1000) + days * DAY_MS
 
+        now_ms = int(time.time() * 1000)
         self._backup()
         con = self._connect()
         try:
             cur = con.cursor()
             inbound_id, settings, stream_settings, port = self._find_inbound(cur)
             clients = settings.get("clients", [])
+            # структура полей — как у рабочего клиента (иначе сервис подписки его не видит)
             clients.append({
-                "id": client_uuid, "flow": FLOW, "email": email,
-                "limitIp": ip_limit, "totalGB": 0, "expiryTime": expiry_ms,
-                "enable": True, "tgId": "", "subId": sub_id, "reset": 0,
+                "comment": "", "created_at": now_ms, "email": email, "enable": True,
+                "expiryTime": expiry_ms, "flow": FLOW, "id": client_uuid,
+                "limitIp": ip_limit, "reset": 0, "subId": sub_id, "tgId": 0,
+                "totalGB": 0, "updated_at": now_ms,
             })
             settings["clients"] = clients
             cur.execute("UPDATE inbounds SET settings=? WHERE id=?",
@@ -165,8 +170,8 @@ class XuiClient:
 
         self._reload()
         access_url = self._build_vless(port, stream_settings, client_uuid, "VAPEBAZAR VPN")
-        return {"access_url": access_url, "sub_url": access_url, "uuid": client_uuid,
-                "sub_id": sub_id, "email": email, "expiry_ms": expiry_ms}
+        return {"sub_url": f"{self.sub_base}/{sub_id}", "access_url": access_url,
+                "uuid": client_uuid, "sub_id": sub_id, "email": email, "expiry_ms": expiry_ms}
 
     def _extend_client_sync(self, client_uuid, email, sub_id, add_days, ip_limit):
         self._backup()
@@ -175,20 +180,26 @@ class XuiClient:
             cur = con.cursor()
             inbound_id, settings, stream_settings, port = self._find_inbound(cur)
             clients = settings.get("clients", [])
+            now_ms = int(time.time() * 1000)
             target = next((c for c in clients
                            if c.get("email") == email or c.get("id") == client_uuid), None)
             if target is None:
-                target = {"id": client_uuid, "flow": FLOW, "email": email,
-                          "limitIp": ip_limit, "totalGB": 0, "expiryTime": 0,
-                          "enable": True, "tgId": "", "subId": sub_id, "reset": 0}
+                target = {"id": client_uuid, "email": email, "subId": sub_id,
+                          "created_at": now_ms}
                 clients.append(target)
                 settings["clients"] = clients
 
-            base = max(int(time.time() * 1000), int(target.get("expiryTime") or 0))
+            base = max(now_ms, int(target.get("expiryTime") or 0))
             new_expiry = base + add_days * DAY_MS
-            target["expiryTime"] = new_expiry
-            target["enable"] = True
-            target["flow"] = FLOW  # чиним flow, если клиент был создан старой версией
+            # приводим клиента к структуре рабочего (иначе подписка его не видит)
+            target.setdefault("created_at", now_ms)
+            target.update({
+                "comment": target.get("comment", ""),
+                "email": email, "enable": True, "expiryTime": new_expiry,
+                "flow": FLOW, "limitIp": ip_limit, "reset": 0,
+                "subId": target.get("subId", sub_id), "tgId": 0,
+                "totalGB": 0, "updated_at": now_ms,
+            })
             cur.execute("UPDATE inbounds SET settings=? WHERE id=?",
                         (json.dumps(settings), inbound_id))
             self._upsert_traffic(cur, inbound_id, email, new_expiry)
@@ -198,5 +209,7 @@ class XuiClient:
 
         self._reload()
         real_uuid = target.get("id", client_uuid)
+        real_sub = target.get("subId", sub_id)
         access_url = self._build_vless(port, stream_settings, real_uuid, "VAPEBAZAR VPN")
-        return {"access_url": access_url, "sub_url": access_url, "expiry_ms": new_expiry}
+        return {"sub_url": f"{self.sub_base}/{real_sub}", "access_url": access_url,
+                "expiry_ms": new_expiry}

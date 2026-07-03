@@ -548,7 +548,7 @@ async def vpn_give_access(callback: types.CallbackQuery):
             result = await client.add_client(email, tariff["days"], tariff["devices"])
             uuid_val, sub_id = result["uuid"], result["sub_id"]
 
-        sub_url = result.get("access_url") or result["sub_url"]
+        sub_url = result["sub_url"]  # ссылка-подписка (её берут Hiddify и HAPP)
         expiry_ms = result["expiry_ms"]
         expiry_str = datetime.fromtimestamp(expiry_ms / 1000).strftime("%d.%m.%Y")
 
@@ -566,15 +566,15 @@ async def vpn_give_access(callback: types.CallbackQuery):
         client_text = (
             "🛡️ <b>Ваш VPN готов!</b>\n"
             f"Тариф: <b>{tariff['name']}</b> · активен до <b>{expiry_str}</b>\n\n"
-            "🔗 <b>Ваш ключ доступа</b> (скопируй целиком):\n"
+            "🔗 <b>Ваша ссылка-подписка</b> (скопируй целиком):\n"
             f"<code>{sub_url}</code>\n\n"
             "📲 <b>Как подключить:</b>\n"
-            "1️⃣ Установи приложение <b>Hiddify</b>:\n"
+            "1️⃣ Установи приложение <b>Hiddify</b> (или HAPP):\n"
             "   • iPhone / Mac — App Store\n"
             "   • Android — Google Play\n"
             "   • Windows — hiddify.com\n"
-            "2️⃣ Скопируй ключ выше (начинается на vless://)\n"
-            "3️⃣ В Hiddify нажми «＋» → «Добавить из буфера обмена»\n"
+            "2️⃣ Скопируй ссылку выше\n"
+            "3️⃣ В приложении: «＋» → «Добавить из буфера обмена»\n"
             "4️⃣ Включи тумблер — готово ✅\n\n"
             "⚠️ Если дома интернет тормозит — включи в настройках Hiddify "
             "встроенный обход (фрагментация / WARP).\n\n"

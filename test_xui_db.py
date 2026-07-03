@@ -50,6 +50,7 @@ def make_db():
 
 def client_for(path):
     return XuiClient(db_path=path, server_host="62.133.61.23",
+                     sub_base="https://62.133.61.23:2096/sub",
                      inbound_remark="MyVPN", restart_cmd="")  # restart отключён
 
 
@@ -72,8 +73,15 @@ class TestAddClient(unittest.IsolatedAsyncioTestCase):
             self.assertEqual(cl["subId"], res["sub_id"])
             self.assertEqual(cl["id"], res["uuid"])
             self.assertTrue(cl["enable"])
+            # структура как у рабочего клиента (нужно сервису подписки)
+            self.assertEqual(cl["tgId"], 0)
+            self.assertIn("created_at", cl)
+            self.assertIn("updated_at", cl)
+            self.assertIn("comment", cl)
             self.assertGreaterEqual(cl["expiryTime"], before + 30 * DAY_MS)
             self.assertLessEqual(cl["expiryTime"], after + 30 * DAY_MS)
+            # выдаётся ссылка-подписка
+            self.assertEqual(res["sub_url"], f"https://62.133.61.23:2096/sub/{res['sub_id']}")
 
             traf = con.execute("SELECT inbound_id, email, expiry_time, enable FROM client_traffics").fetchall()
             con.close()
