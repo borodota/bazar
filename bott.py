@@ -52,6 +52,7 @@ ORDERS_FILE = os.path.join(DATA_DIR, "orders_log.json")        # журнал з
 BONUSES_FILE = os.path.join(DATA_DIR, "bonuses.json")          # ИСТОЧНИК ПРАВДЫ по баллам и рефералам
 NOTIFY_FILE = os.path.join(DATA_DIR, "notify_requests.json")   # запросы уведомить о поступлении товара
 VPN_SUBS_FILE = os.path.join(DATA_DIR, "vpn_subs.json")        # учёт VPN-подписок: кто, тариф, срок
+REVIEWS_FILE = os.path.join(DATA_DIR, "reviews.json")          # оценки клиентов после выполненного заказа
 
 # ── Тарифы VPN (название / дней / цена ₽ / устройств) ──
 VPN_TARIFFS = {
@@ -61,6 +62,8 @@ VPN_TARIFFS = {
     "half":  {"name": "Полгода", "days": 180, "price": 700,  "devices": 1},
     "year":  {"name": "Год",     "days": 365, "price": 1200, "devices": 1},
 }
+VPN_REFERRAL_BONUS_DAYS = 7   # приведи друга на VPN — оба получают эти дни бонусом
+VPN_EXPIRY_REMINDER_WINDOW_DAYS = 2   # напоминать за N дней до истечения (и ещё N дней после)
 
 REFERRAL_REWARD = 200   # баллов пригласившему за ПЕРВЫЙ оплаченный заказ друга
 EARN_CAP_RATE = 0.15    # санити-лимит начисления: не больше 15% от суммы заказа
@@ -523,7 +526,7 @@ async def vpn_give_access(callback: types.CallbackQuery):
         await callback.answer("⛔ Нет доступа", show_alert=True)
         return
 
-    # vpn_give_<customer_id>_<tariff_id>_<devices>
+    # vpn_give_<customer_id>_<tariff_id>_<devices>_<ref_id>
     parts = callback.data.split("_")
     customer_id = parts[2] if len(parts) > 2 else None
     tariff_id = parts[3] if len(parts) > 3 else None
@@ -532,6 +535,7 @@ async def vpn_give_access(callback: types.CallbackQuery):
         await callback.answer("⚠️ Не разобрал заказ", show_alert=True)
         return
     devices = int(parts[4]) if len(parts) > 4 and parts[4].isdigit() else tariff["devices"]
+    ref_id = parts[5] if len(parts) > 5 else "0"
 
     await callback.answer("Создаю доступ…")
     client = XuiClient()  # все параметры из .env
@@ -540,16 +544,22 @@ async def vpn_give_access(callback: types.CallbackQuery):
         subs = _load_json(VPN_SUBS_FILE, {})
         rec = subs.get(str(customer_id))
         email = f"tg{customer_id}"
+        is_first_vpn = rec is None
+
+        # Реферальный бонус — только первому VPN-заказу клиента, приглашённому не самим собой
+        referral_applies = (is_first_vpn and ref_id not in ("0", "", str(customer_id)))
+        bonus_days = VPN_REFERRAL_BONUS_DAYS if referral_applies else 0
+        effective_days = tariff["days"] + bonus_days
 
         if rec and rec.get("uuid") and rec.get("sub_id"):
             # уже был доступ → продлеваем, дни не сгорают
             result = await client.extend_client(
-                rec["uuid"], email, rec["sub_id"], tariff["days"], devices
+                rec["uuid"], email, rec["sub_id"], effective_days, devices
             )
             uuid_val, sub_id = rec["uuid"], rec["sub_id"]
         else:
             # новый клиент
-            result = await client.add_client(email, tariff["days"], devices)
+            result = await client.add_client(email, effective_days, devices)
             uuid_val, sub_id = result["uuid"], result["sub_id"]
 
         sub_url = result["sub_url"]  # ссылка-подписка — стабильно открывается только в HAPP
@@ -567,10 +577,42 @@ async def vpn_give_access(callback: types.CallbackQuery):
         }
         _save_json(VPN_SUBS_FILE, subs)
 
+        # Реферальный бонус пригласившему — продлеваем его собственный VPN, если он у него есть
+        if referral_applies:
+            ref_rec = subs.get(str(ref_id))
+            if ref_rec and ref_rec.get("uuid") and ref_rec.get("sub_id"):
+                try:
+                    ref_result = await client.extend_client(
+                        ref_rec["uuid"], ref_rec["email"], ref_rec["sub_id"],
+                        VPN_REFERRAL_BONUS_DAYS, ref_rec.get("devices", 1)
+                    )
+                    ref_rec["expiry"] = datetime.fromtimestamp(
+                        ref_result["expiry_ms"] / 1000
+                    ).isoformat(timespec="seconds")
+                    subs[str(ref_id)] = ref_rec
+                    _save_json(VPN_SUBS_FILE, subs)
+                    ref_expiry_str = datetime.fromtimestamp(
+                        ref_result["expiry_ms"] / 1000
+                    ).strftime("%d.%m.%Y")
+                    await bot.send_message(
+                        chat_id=int(ref_id),
+                        text=(
+                            f"🎁 <b>Друг оплатил VPN по твоей ссылке!</b>\n\n"
+                            f"В подарок +{VPN_REFERRAL_BONUS_DAYS} дней к твоей подписке.\n"
+                            f"Теперь активна до <b>{ref_expiry_str}</b> 🛡️"
+                        )
+                    )
+                except Exception as e:
+                    logger.error(f"Не удалось начислить VPN-реферальный бонус {ref_id}: {e}")
+            else:
+                logger.info(f"VPN-реферал {ref_id} без активной подписки — бонус рефереру пропущен")
+
         # Клиенту — ссылка + инструкция (только HAPP: у него ключ подключается стабильно)
+        bonus_line = f"🎁 +{bonus_days} дней в подарок за переход по ссылке друга!\n" if referral_applies else ""
         client_text = (
             "🛡️ <b>Ваш VPN готов!</b>\n"
-            f"Тариф: <b>{tariff['name']}</b> · {devices} устр. · активен до <b>{expiry_str}</b>\n\n"
+            f"Тариф: <b>{tariff['name']}</b> · {devices} устр. · активен до <b>{expiry_str}</b>\n"
+            f"{bonus_line}\n"
             "🔗 <b>Ваша ссылка-подписка</b> (скопируй целиком):\n"
             f"<code>{sub_url}</code>\n\n"
             "📲 <b>Как подключить:</b>\n"
@@ -731,6 +773,19 @@ async def change_order_status(callback: types.CallbackQuery):
             except Exception as e:
                 logger.error(f"Не удалось отправить чек клиенту {customer_id}: {e}")
 
+            # Просим оценить заказ
+            try:
+                rate_kb = InlineKeyboardMarkup(inline_keyboard=[[
+                    InlineKeyboardButton(text=str(n), callback_data=f"rate_{order_id}_{n}") for n in range(1, 6)
+                ]])
+                await bot.send_message(
+                    chat_id=int(customer_id),
+                    text="⭐ Как оцените заказ? Помогите нам стать лучше:",
+                    reply_markup=rate_kb
+                )
+            except Exception as e:
+                logger.error(f"Не удалось отправить запрос оценки клиенту {customer_id}: {e}")
+
     # Уведомляем клиента о смене статуса
     if customer_id:
         status_extra = {
@@ -783,6 +838,61 @@ async def change_order_status(callback: types.CallbackQuery):
             logger.error(f"Не удалось уведомить реферера {r['referrer_id']}: {e}")
 
     await callback.answer(f"Статус изменен: {new_status}")
+
+
+@dp.callback_query(F.data.startswith("rate_"))
+async def rate_order(callback: types.CallbackQuery):
+    """Клиент оценил заказ звёздами после «Выполнен»."""
+    parts = callback.data.split("_")
+    order_id = parts[1] if len(parts) > 1 else "?"
+    score = int(parts[2]) if len(parts) > 2 and parts[2].isdigit() else None
+    if not score or not (1 <= score <= 5):
+        await callback.answer("⚠️ Не разобрал оценку", show_alert=True)
+        return
+
+    customer_id = callback.from_user.id
+    reviews = _load_json(REVIEWS_FILE, {})
+    reviews[str(order_id)] = {
+        "customer_id": str(customer_id),
+        "score": score,
+        "ts": datetime.now().isoformat(timespec="seconds"),
+    }
+    _save_json(REVIEWS_FILE, reviews)
+
+    stars = "⭐" * score
+    try:
+        await callback.message.edit_text(text=f"Спасибо за оценку! {stars}", reply_markup=None)
+    except Exception:
+        pass
+    await callback.answer("Спасибо!")
+
+    # Низкую оценку — сразу директору, чтобы успеть решить вопрос
+    if score <= 3:
+        uname = f"@{callback.from_user.username}" if callback.from_user.username else callback.from_user.first_name
+        for admin_id in ADMINS:
+            try:
+                await bot.send_message(
+                    admin_id,
+                    f"⚠️ <b>Низкая оценка заказа #{order_id}</b>\n"
+                    f"{stars} от {uname} (<code>{customer_id}</code>)\n\n"
+                    f"Стоит написать клиенту и уточнить, что не так."
+                )
+            except Exception:
+                pass
+    # Высокую — можно использовать как отзыв для канала
+    elif score >= 4:
+        uname = f"@{callback.from_user.username}" if callback.from_user.username else callback.from_user.first_name
+        for admin_id in ADMINS:
+            try:
+                await bot.send_message(
+                    admin_id,
+                    f"🌟 <b>Хорошая оценка заказа #{order_id}</b>\n"
+                    f"{stars} от {uname}\n\n"
+                    f"Можно попросить отзыв текстом и запостить в канал 💚"
+                )
+            except Exception:
+                pass
+
 
 @dp.message(Command("start"))
 async def cmd_start(message: types.Message):
@@ -1534,11 +1644,147 @@ async def smart_reminder_loop():
         await asyncio.sleep(86400)  # раз в сутки
 
 
+async def vpn_expiry_reminder_loop():
+    """Раз в сутки напоминает клиентам, у которых VPN скоро/только что истёк, продлить подписку."""
+    await asyncio.sleep(1800)  # первый запуск через полчаса после старта бота
+    while True:
+        try:
+            now = datetime.now()
+            subs = _load_json(VPN_SUBS_FILE, {})
+            changed = False
+            for uid, rec in subs.items():
+                expiry_str = rec.get("expiry")
+                if not expiry_str:
+                    continue
+                try:
+                    expiry = datetime.fromisoformat(expiry_str)
+                except Exception:
+                    continue
+                days_left = (expiry - now).total_seconds() / 86400
+                if not (-VPN_EXPIRY_REMINDER_WINDOW_DAYS <= days_left <= VPN_EXPIRY_REMINDER_WINDOW_DAYS):
+                    continue
+                if rec.get("last_expiry_reminder") == expiry_str:
+                    continue  # уже напоминали про этот же срок (не после продления — expiry изменится)
+                tariff = VPN_TARIFFS.get(rec.get("tariff"), {})
+                tname = tariff.get("name", rec.get("tariff", "VPN"))
+                price = tariff.get("price", "—")
+                if days_left >= 0:
+                    header = (f"⏰ <b>Твой VPN скоро закончится!</b>\n\n"
+                              f"Осталось {int(days_left) + 1} дн. (до {expiry.strftime('%d.%m.%Y')}).")
+                else:
+                    header = (f"🛡️ <b>Твой VPN истёк {expiry.strftime('%d.%m.%Y')}.</b>\n\n"
+                              f"Без него сайты через блокировки могут не открываться.")
+                try:
+                    await bot.send_message(
+                        chat_id=int(uid),
+                        text=(
+                            f"{header}\n\n"
+                            f"Продли тариф «{tname}» за {price} ₽ прямо в приложении:\n"
+                            f"Профиль → 🛡️ VPN-подписка → «{tname}» → Купить."
+                        ),
+                        reply_markup=get_main_keyboard()
+                    )
+                    rec["last_expiry_reminder"] = expiry_str
+                    changed = True
+                except Exception as e:
+                    logger.error(f"VPN expiry reminder failed for {uid}: {e}")
+                await asyncio.sleep(0.05)
+            if changed:
+                _save_json(VPN_SUBS_FILE, subs)
+        except Exception as e:
+            logger.error(f"VPN expiry reminder loop error: {e}")
+        await asyncio.sleep(86400)  # раз в сутки
+
+
+async def weekly_digest_loop():
+    """Каждый понедельник в 9:00 по Магадану шлёт админам сводку за неделю."""
+    MAGADAN = timezone(timedelta(hours=10))
+    while True:
+        now = datetime.now(MAGADAN)
+        days_ahead = (0 - now.weekday()) % 7  # 0 = понедельник
+        if days_ahead == 0 and now.hour >= 9:
+            days_ahead = 7
+        next_run = (now + timedelta(days=days_ahead)).replace(hour=9, minute=0, second=0, microsecond=0)
+        await asyncio.sleep((next_run - now).total_seconds())
+        try:
+            await send_weekly_digest()
+        except Exception as e:
+            logger.error(f"Weekly digest error: {e}")
+
+
+async def send_weekly_digest():
+    """Считает выручку/топ товаров/VPN за последние 7 дней и шлёт всем админам."""
+    now = datetime.now()
+    week_ago = now - timedelta(days=7)
+
+    orders = _load_json(ORDERS_FILE, [])
+    week_orders = []
+    for o in orders:
+        try:
+            created = datetime.fromisoformat(o.get("created_at", ""))
+        except Exception:
+            continue
+        if created >= week_ago and o.get("status") != "cancel":
+            week_orders.append(o)
+    revenue = sum(int(o.get("total") or 0) for o in week_orders)
+
+    from collections import Counter
+    counter = Counter()
+    for o in week_orders:
+        for line in (o.get("items") or "").split("\n"):
+            stripped = line.strip()
+            if not stripped.startswith(("•", "▪")):
+                continue
+            clean = stripped.lstrip("•▪️️ ")
+            name = clean.split("·")[0].split("[")[0].split("—")[0].split("×")[0].strip()
+            if 3 < len(name) < 60:
+                counter[name] += 1
+    top_lines = [f"{i}. {name} — {cnt} раз" for i, (name, cnt) in enumerate(counter.most_common(3), 1)]
+
+    vpn_subs = _load_json(VPN_SUBS_FILE, {})
+    new_vpn = 0
+    expiring_soon = 0
+    for rec in vpn_subs.values():
+        try:
+            if datetime.fromisoformat(rec.get("created", "")) >= week_ago:
+                new_vpn += 1
+        except Exception:
+            pass
+        try:
+            expiry = datetime.fromisoformat(rec.get("expiry", ""))
+            if now <= expiry <= now + timedelta(days=7):
+                expiring_soon += 1
+        except Exception:
+            pass
+
+    text = (
+        f"📊 <b>Сводка за неделю</b>\n"
+        f"━━━━━━━━━━━━━━━━━━━━━━━━\n\n"
+        f"🛒 Заказов: <b>{len(week_orders)}</b>\n"
+        f"💰 Выручка: <b>{_fmt_money(revenue)} ₽</b>\n\n"
+    )
+    if top_lines:
+        text += "🏆 <b>Топ товаров недели</b>\n" + "\n".join(top_lines) + "\n\n"
+    text += (
+        f"🛡️ <b>VPN</b>\n"
+        f"├ Новых подписок: <b>{new_vpn}</b>\n"
+        f"└ Истекают в ближайшие 7 дней: <b>{expiring_soon}</b>"
+    )
+
+    for admin_id in ADMINS:
+        try:
+            await bot.send_message(chat_id=admin_id, text=text)
+        except Exception as e:
+            logger.error(f"Weekly digest send failed for {admin_id}: {e}")
+
+
 async def main():
     logger.info("Запуск сервера бота VAPEBAZAR PREMIUM...")
     await bot.delete_webhook(drop_pending_updates=False)
     asyncio.create_task(birthday_check_loop())
     asyncio.create_task(smart_reminder_loop())
+    asyncio.create_task(vpn_expiry_reminder_loop())
+    asyncio.create_task(weekly_digest_loop())
     await dp.start_polling(bot)
 
 if __name__ == "__main__":

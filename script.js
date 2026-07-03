@@ -724,7 +724,12 @@ window.submitSpecialOrder = function () {
     }).catch((err) => {
         haptic("error");
         console.error("Special order send error:", err);
-        alert(`⚠️ Не удалось отправить заявку.\n\nОшибка: ${err.message}\n\nНапишите напрямую: @${MANAGER_TG}`);
+        const msg = `Заявка не отправлена. Напишите @${MANAGER_TG} напрямую.`;
+        if (window.tg && window.tg.showPopup) {
+            window.tg.showPopup({ title: "Ошибка отправки", message: msg, buttons: [{ type: "ok" }] });
+        } else {
+            window.showToast("❌ " + msg, 5000);
+        }
     });
 };
 
@@ -737,7 +742,7 @@ window.VPN_TARIFFS = [
     { id: "year",  name: "Год",      days: 365, price: 1200 },
 ];
 
-window.VPN_MULTI_DEVICE_MARKUP = 1.5; // +50% за второе устройство
+window.VPN_DEVICE_MULTIPLIERS = { 1: 1, 2: 1.5, 3: 2, 5: 3 }; // 5 = «семейный» пакет
 window._vpnDevices = 1;
 
 window.openVpnStore = function () {
@@ -753,16 +758,17 @@ window.closeVpnStore = function () {
 };
 
 window.vpnPriceFor = function (t, devices) {
-    return devices === 2 ? Math.round(t.price * window.VPN_MULTI_DEVICE_MARKUP) : t.price;
+    const mult = window.VPN_DEVICE_MULTIPLIERS[devices] || 1;
+    return Math.round(t.price * mult);
 };
 
 window.selectVpnDevices = function (devices) {
     haptic("light");
     window._vpnDevices = devices;
-    const d1 = document.getElementById("vpnDev1");
-    const d2 = document.getElementById("vpnDev2");
-    if (d1) d1.classList.toggle("active", devices === 1);
-    if (d2) d2.classList.toggle("active", devices === 2);
+    [1, 2, 3, 5].forEach(n => {
+        const el = document.getElementById(`vpnDev${n}`);
+        if (el) el.classList.toggle("active", devices === n);
+    });
     window.VPN_TARIFFS.forEach(t => {
         const el = document.getElementById(`vpnPrice-${t.id}`);
         if (el) el.textContent = `${window.vpnPriceFor(t, devices)} ₽`;
@@ -779,6 +785,12 @@ window.buyVpn = function (tariffId) {
     if (!customerId) { haptic("error"); window.showToast("Открой магазин через Telegram"); return; }
     const usernameText = (user && user.username) ? "@" + user.username : (user.first_name || "Скрыт");
 
+    // Реферал — приведи друга на VPN, независимо от того, использовал ли он
+    // уже реферальную скидку в магазине (своя отметка, чтобы не путать флаги)
+    const referredByRaw = localStorage.getItem("vapeReferredBy");
+    const vpnRefId = (referredByRaw && localStorage.getItem("vapeVpnRefUsed") !== "1"
+        && /^\d+$/.test(referredByRaw) && referredByRaw !== String(customerId)) ? referredByRaw : "0";
+
     const adminText =
         `🛡️ <b>VPN-ЗАКАЗ</b>\n` +
         `━━━━━━━━━━━━━━━━━━━━━━━━\n\n` +
@@ -788,9 +800,21 @@ window.buyVpn = function (tariffId) {
         `💰 <b>К оплате:</b> ${price} ₽\n\n` +
         `👉 Клиент платит напрямую. После оплаты жми «Оплачено — выдать».`;
     const kb = { inline_keyboard: [
-        [{ text: "✅ Оплачено — выдать", callback_data: `vpn_give_${customerId}_${t.id}_${devices}` }],
+        [{ text: "✅ Оплачено — выдать", callback_data: `vpn_give_${customerId}_${t.id}_${devices}_${vpnRefId}` }],
         [{ text: "📞 Связаться", url: "tg://user?id=" + customerId }]
     ]};
+
+    // Показ ошибки — alert() заблокирован в Telegram Mobile, используем showPopup/showToast.
+    function showVpnError(err) {
+        haptic("error");
+        console.error("VPN order error:", err);
+        const msg = `Заявка на VPN не отправлена. Напишите @${MANAGER_TG} напрямую.`;
+        if (window.tg && window.tg.showPopup) {
+            window.tg.showPopup({ title: "Ошибка отправки", message: msg, buttons: [{ type: "ok" }] });
+        } else {
+            window.showToast("❌ " + msg, 5000);
+        }
+    }
 
     haptic("success");
     window.showToast("Отправляем заявку…");
@@ -801,13 +825,10 @@ window.buyVpn = function (tariffId) {
             `💳 Оплати директору @${MANAGER_TG}. Как подтвердит оплату — ` +
             `сразу пришлём сюда ссылку и инструкцию по подключению.`
         ).catch(() => {});
+        if (vpnRefId !== "0") localStorage.setItem("vapeVpnRefUsed", "1");
         window.showToast("Заявка отправлена ✓");
         setTimeout(window.closeVpnStore, 800);
-    }).catch((err) => {
-        haptic("error");
-        console.error("VPN order error:", err);
-        alert(`⚠️ Не удалось отправить заявку.\n\nНапишите напрямую: @${MANAGER_TG}`);
-    });
+    }).catch(showVpnError);
 };
 
 // Цветовая тема карточки по категории
