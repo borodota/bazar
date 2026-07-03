@@ -1252,7 +1252,12 @@ body[data-level="platinum"] .profile-avatar-ring { animation-duration: 4s; opaci
 .transfer-hint { font-size:13px; color:rgba(255,255,255,0.45); background:rgba(255,255,255,0.04); border:1px solid rgba(255,255,255,0.08); border-radius:12px; padding:12px; line-height:1.5; }
 
 /* ── VPN-МАГАЗИН ── */
-.vpn-tariffs { display:grid; grid-template-columns:1fr 1fr; gap:10px; margin:14px 0 4px; }
+.vpn-devices-toggle { display:flex; gap:8px; margin:14px 0 4px; }
+.vpn-dev-chip { flex:1; padding:9px 8px; border-radius:12px; border:1.5px solid rgba(255,255,255,0.08); background:rgba(255,255,255,0.04); color:rgba(255,255,255,0.5); font-family:inherit; font-size:12px; font-weight:700; cursor:pointer; transition:all 0.18s; }
+.vpn-dev-chip.active { background:rgba(0,240,124,0.1); border-color:rgba(0,240,124,0.45); color:var(--neon-green); }
+.vpn-dev-chip .vpn-dev-plus { opacity:0.6; font-weight:600; }
+.vpn-dev-chip.active .vpn-dev-plus { color:var(--neon-green); opacity:0.85; }
+.vpn-tariffs { display:grid; grid-template-columns:1fr 1fr; gap:10px; margin:10px 0 4px; }
 .vpn-card { background:rgba(0,240,124,0.04); border:1.5px solid rgba(0,240,124,0.18); border-radius:16px; padding:14px 12px; text-align:center; cursor:pointer; transition:all 0.18s; }
 .vpn-card:active { transform:scale(0.97); }
 .vpn-card.featured { border-color:rgba(0,240,124,0.5); background:rgba(0,240,124,0.09); }

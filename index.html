@@ -571,7 +571,12 @@
                 <div style="text-align:center;padding:10px 0 4px;">
                     <div style="font-size:44px;margin-bottom:8px;">🛡️</div>
                     <div class="ref-big-title">Быстрый VPN без блокировок</div>
-                    <div class="ref-desc">🇳🇱 Сервер в Нидерландах · без логов · безлимит трафика. Открывает YouTube, соцсети, нейросети. Работает на телефоне, ПК и ТВ. 1 устройство на подписку.</div>
+                    <div class="ref-desc">🇳🇱 Сервер в Нидерландах · без логов · безлимит трафика. Открывает YouTube, соцсети, нейросети. Работает на телефоне, ПК и ТВ.</div>
+                </div>
+
+                <div class="vpn-devices-toggle">
+                    <button id="vpnDev1" class="vpn-dev-chip active" onclick="window.selectVpnDevices(1)">📱 1 устройство</button>
+                    <button id="vpnDev2" class="vpn-dev-chip" onclick="window.selectVpnDevices(2)">📱📱 2 устройства <span class="vpn-dev-plus">+50%</span></button>
                 </div>
 
                 <div class="vpn-tariffs">
@@ -581,7 +586,7 @@
                             <div class="vpn-days">Попробуй перед покупкой</div>
                         </div>
                         <div style="text-align:right;">
-                            <div class="vpn-price" style="margin:0;">50 ₽</div>
+                            <div class="vpn-price" id="vpnPrice-trial" style="margin:0;">50 ₽</div>
                             <div class="vpn-buy" style="width:auto;padding:6px 16px;margin-top:4px;">Купить</div>
                         </div>
                     </div>
@@ -589,28 +594,28 @@
                         <div class="vpn-card-top"></div>
                         <div class="vpn-name">Месяц</div>
                         <div class="vpn-days">30 дней</div>
-                        <div class="vpn-price">150 ₽</div>
+                        <div class="vpn-price" id="vpnPrice-month">150 ₽</div>
                         <div class="vpn-buy">Купить</div>
                     </div>
                     <div class="vpn-card" onclick="window.buyVpn('q')">
                         <div class="vpn-card-top"></div>
                         <div class="vpn-name">3 месяца</div>
                         <div class="vpn-days">90 дней</div>
-                        <div class="vpn-price">400 ₽</div>
+                        <div class="vpn-price" id="vpnPrice-q">400 ₽</div>
                         <div class="vpn-buy">Купить</div>
                     </div>
                     <div class="vpn-card" onclick="window.buyVpn('half')">
                         <div class="vpn-card-top"></div>
                         <div class="vpn-name">Полгода</div>
                         <div class="vpn-days">180 дней</div>
-                        <div class="vpn-price">700 ₽</div>
+                        <div class="vpn-price" id="vpnPrice-half">700 ₽</div>
                         <div class="vpn-buy">Купить</div>
                     </div>
                     <div class="vpn-card featured" onclick="window.buyVpn('year')">
                         <div class="vpn-card-top"><span class="vpn-badge">🔥 Выгодно</span></div>
                         <div class="vpn-name">Год</div>
                         <div class="vpn-days">365 дней</div>
-                        <div class="vpn-price">1200 ₽</div>
+                        <div class="vpn-price" id="vpnPrice-year">1200 ₽</div>
                         <div class="vpn-buy">Купить</div>
                     </div>
                 </div>

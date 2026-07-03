@@ -523,7 +523,7 @@ async def vpn_give_access(callback: types.CallbackQuery):
         await callback.answer("⛔ Нет доступа", show_alert=True)
         return
 
-    # vpn_give_<customer_id>_<tariff_id>
+    # vpn_give_<customer_id>_<tariff_id>_<devices>
     parts = callback.data.split("_")
     customer_id = parts[2] if len(parts) > 2 else None
     tariff_id = parts[3] if len(parts) > 3 else None
@@ -531,6 +531,7 @@ async def vpn_give_access(callback: types.CallbackQuery):
     if not customer_id or not tariff:
         await callback.answer("⚠️ Не разобрал заказ", show_alert=True)
         return
+    devices = int(parts[4]) if len(parts) > 4 and parts[4].isdigit() else tariff["devices"]
 
     await callback.answer("Создаю доступ…")
     client = XuiClient()  # все параметры из .env
@@ -543,12 +544,12 @@ async def vpn_give_access(callback: types.CallbackQuery):
         if rec and rec.get("uuid") and rec.get("sub_id"):
             # уже был доступ → продлеваем, дни не сгорают
             result = await client.extend_client(
-                rec["uuid"], email, rec["sub_id"], tariff["days"], tariff["devices"]
+                rec["uuid"], email, rec["sub_id"], tariff["days"], devices
             )
             uuid_val, sub_id = rec["uuid"], rec["sub_id"]
         else:
             # новый клиент
-            result = await client.add_client(email, tariff["days"], tariff["devices"])
+            result = await client.add_client(email, tariff["days"], devices)
             uuid_val, sub_id = result["uuid"], result["sub_id"]
 
         sub_url = result["sub_url"]  # ссылка-подписка — стабильно открывается только в HAPP
@@ -557,6 +558,7 @@ async def vpn_give_access(callback: types.CallbackQuery):
 
         subs[str(customer_id)] = {
             "tariff": tariff_id,
+            "devices": devices,
             "sub_id": sub_id,
             "uuid": uuid_val,
             "email": email,
@@ -568,7 +570,7 @@ async def vpn_give_access(callback: types.CallbackQuery):
         # Клиенту — ссылка + инструкция (только HAPP: у него ключ подключается стабильно)
         client_text = (
             "🛡️ <b>Ваш VPN готов!</b>\n"
-            f"Тариф: <b>{tariff['name']}</b> · активен до <b>{expiry_str}</b>\n\n"
+            f"Тариф: <b>{tariff['name']}</b> · {devices} устр. · активен до <b>{expiry_str}</b>\n\n"
             "🔗 <b>Ваша ссылка-подписка</b> (скопируй целиком):\n"
             f"<code>{sub_url}</code>\n\n"
             "📲 <b>Как подключить:</b>\n"
@@ -939,7 +941,8 @@ async def cmd_vpn_subs(message: types.Message):
                 active = "⛔"
         except Exception:
             pass
-        lines.append(f"{active} <code>{cid}</code> · {tname} · до {exp_str}")
+        dev_str = f" · {rec['devices']} устр." if rec.get("devices") else ""
+        lines.append(f"{active} <code>{cid}</code> · {tname}{dev_str} · до {exp_str}")
     await message.answer("\n".join(lines))
 
 

@@ -737,10 +737,14 @@ window.VPN_TARIFFS = [
     { id: "year",  name: "Год",      days: 365, price: 1200 },
 ];
 
+window.VPN_MULTI_DEVICE_MARKUP = 1.5; // +50% за второе устройство
+window._vpnDevices = 1;
+
 window.openVpnStore = function () {
     haptic("light");
     document.getElementById("vpnStorePopup").classList.add("active");
     window.setupBackButton(window.closeVpnStore);
+    window.selectVpnDevices(1);
 };
 window.closeVpnStore = function () {
     const popup = document.getElementById("vpnStorePopup");
@@ -748,9 +752,28 @@ window.closeVpnStore = function () {
     window.hideBackButton();
 };
 
+window.vpnPriceFor = function (t, devices) {
+    return devices === 2 ? Math.round(t.price * window.VPN_MULTI_DEVICE_MARKUP) : t.price;
+};
+
+window.selectVpnDevices = function (devices) {
+    haptic("light");
+    window._vpnDevices = devices;
+    const d1 = document.getElementById("vpnDev1");
+    const d2 = document.getElementById("vpnDev2");
+    if (d1) d1.classList.toggle("active", devices === 1);
+    if (d2) d2.classList.toggle("active", devices === 2);
+    window.VPN_TARIFFS.forEach(t => {
+        const el = document.getElementById(`vpnPrice-${t.id}`);
+        if (el) el.textContent = `${window.vpnPriceFor(t, devices)} ₽`;
+    });
+};
+
 window.buyVpn = function (tariffId) {
     const t = window.VPN_TARIFFS.find(x => x.id === tariffId);
     if (!t) return;
+    const devices = window._vpnDevices || 1;
+    const price = window.vpnPriceFor(t, devices);
     const user = tgCurrentUser();
     const customerId = user ? user.id : "";
     if (!customerId) { haptic("error"); window.showToast("Открой магазин через Telegram"); return; }
@@ -761,11 +784,11 @@ window.buyVpn = function (tariffId) {
         `━━━━━━━━━━━━━━━━━━━━━━━━\n\n` +
         `👤 <b>Клиент:</b> ${escHtml(usernameText)}\n` +
         `🆔 <b>ID:</b> <code>${customerId}</code>\n\n` +
-        `📦 <b>Тариф:</b> ${t.name} (${t.days} дн., 1 устр.)\n` +
-        `💰 <b>К оплате:</b> ${t.price} ₽\n\n` +
+        `📦 <b>Тариф:</b> ${t.name} (${t.days} дн., ${devices} устр.)\n` +
+        `💰 <b>К оплате:</b> ${price} ₽\n\n` +
         `👉 Клиент платит напрямую. После оплаты жми «Оплачено — выдать».`;
     const kb = { inline_keyboard: [
-        [{ text: "✅ Оплачено — выдать", callback_data: `vpn_give_${customerId}_${t.id}` }],
+        [{ text: "✅ Оплачено — выдать", callback_data: `vpn_give_${customerId}_${t.id}_${devices}` }],
         [{ text: "📞 Связаться", url: "tg://user?id=" + customerId }]
     ]};
 
@@ -774,7 +797,7 @@ window.buyVpn = function (tariffId) {
     notifyAdmins(adminText, kb).then(() => {
         tgApiSend(customerId,
             `🛡️ <b>Заявка на VPN принята!</b>\n\n` +
-            `Тариф: <b>${t.name}</b> — ${t.price} ₽ (${t.days} дн.)\n\n` +
+            `Тариф: <b>${t.name}</b> — ${price} ₽ (${t.days} дн., ${devices} устр.)\n\n` +
             `💳 Оплати директору @${MANAGER_TG}. Как подтвердит оплату — ` +
             `сразу пришлём сюда ссылку и инструкцию по подключению.`
         ).catch(() => {});
