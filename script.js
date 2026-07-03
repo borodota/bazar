@@ -661,6 +661,7 @@ window.toggleSpecialPrepay = function () {
     haptic("select");
 };
 window.submitSpecialOrder = function () {
+    if (window._specialOrderInFlight) return; // защита от двойной заявки при быстром повторном тапе
     const name = (document.getElementById("soName").value || "").trim();
     const link = (document.getElementById("soLink").value || "").trim();
     const details = (document.getElementById("soDetails").value || "").trim();
@@ -701,6 +702,7 @@ window.submitSpecialOrder = function () {
         `⚠️ Клиент согласен на предоплату.`;
     const kbSo = customerId ? { inline_keyboard: [[{ text: "📞 Связаться", url: "tg://user?id=" + customerId }]] } : undefined;
 
+    window._specialOrderInFlight = true;
     window.showToast("Отправляем заявку…");
     notifyAdmins(adminText, kbSo).then(() => {
         if (customerId) {
@@ -711,6 +713,7 @@ window.submitSpecialOrder = function () {
             ).catch(() => {});
         }
         window.showToast("Заявка отправлена ✓");
+        window._specialOrderInFlight = false;
         setTimeout(() => {
             window.closeSpecialOrder();
             document.getElementById("soName").value = "";
@@ -722,6 +725,7 @@ window.submitSpecialOrder = function () {
             document.getElementById("prepayCheck").classList.remove("checked");
         }, 800);
     }).catch((err) => {
+        window._specialOrderInFlight = false;
         haptic("error");
         console.error("Special order send error:", err);
         const msg = `Заявка не отправлена. Напишите @${MANAGER_TG} напрямую.`;
@@ -776,8 +780,10 @@ window.selectVpnDevices = function (devices) {
 };
 
 window.buyVpn = function (tariffId) {
+    if (window._vpnBuyInFlight) return; // защита от двойной заявки при быстром повторном тапе
     const t = window.VPN_TARIFFS.find(x => x.id === tariffId);
     if (!t) return;
+    window._vpnBuyInFlight = true;
     const devices = window._vpnDevices || 1;
     const price = window.vpnPriceFor(t, devices);
     const user = tgCurrentUser();
@@ -827,8 +833,12 @@ window.buyVpn = function (tariffId) {
         ).catch(() => {});
         if (vpnRefId !== "0") localStorage.setItem("vapeVpnRefUsed", "1");
         window.showToast("Заявка отправлена ✓");
+        window._vpnBuyInFlight = false;
         setTimeout(window.closeVpnStore, 800);
-    }).catch(showVpnError);
+    }).catch((err) => {
+        window._vpnBuyInFlight = false;
+        showVpnError(err);
+    });
 };
 
 // Цветовая тема карточки по категории
@@ -1417,8 +1427,27 @@ window.calcOrderTotals = function () {
 };
 
 // ── КОРЗИНА ──
+// Корзина может лежать в localStorage днями — подтягиваем актуальные цены
+// из каталога перед показом, чтобы в заказ не ушла случайно устаревшая цена.
+window.refreshCartPrices = function () {
+    if (!window.cart || !window.products) return false;
+    let changed = false;
+    window.cart.forEach(item => {
+        const p = window.products.find(pr => pr.id === item.id);
+        if (p && typeof p.price === "number" && p.price !== item.price) {
+            item.price = p.price;
+            changed = true;
+        }
+    });
+    if (changed) window.updateCartCounters();
+    return changed;
+};
+
 window.openVapeCart = function () {
     if (window._swipeCloseTimer) { clearTimeout(window._swipeCloseTimer); window._swipeCloseTimer = null; }
+    if (window.refreshCartPrices()) {
+        window.showToast("Цены на некоторые товары обновились");
+    }
     const _popup = document.getElementById("cartPopup");
     const _drawer = _popup && _popup.querySelector(".drawer");
     if (_drawer) _drawer.style.transform = "";
@@ -2007,6 +2036,10 @@ window.checkoutVapeOrder = function () {
         }
     }
 
+    // Блокируем кнопку на время отправки — защита от двойного заказа при повторном тапе
+    const checkoutBtnEl = document.getElementById("checkoutBtn");
+    if (checkoutBtnEl) { checkoutBtnEl.disabled = true; checkoutBtnEl.style.opacity = "0.6"; }
+
     window.showToast("Отправляем заказ…");
     notifyAdmins(adminText, kb).then(() => {
         // подтверждение клиенту в чат с ботом (если клиент запускал бота)
@@ -2048,7 +2081,10 @@ window.checkoutVapeOrder = function () {
             total: total,
             earn: bonusEarned
         };
-    }).catch(_showError);
+    }).catch((err) => {
+        if (checkoutBtnEl) { checkoutBtnEl.disabled = false; checkoutBtnEl.style.opacity = ""; }
+        _showError(err);
+    });
 };
 
 // ==========================================================================
