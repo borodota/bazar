@@ -3,9 +3,16 @@ xui_db.py — выдача VPN через ПРЯМУЮ запись в базу 
 
 Зачем: панель 3x-ui отдаёт 403 на автоматический вход по HTTP (защита),
 а подписочный сервис (/sub/) выключен. Бот и панель на одном сервере,
-поэтому надёжнее писать клиента прямо в SQLite-базу панели и отдавать
-клиенту готовую vless://…-ссылку (Reality), собранную из настроек инбаунда —
-она работает всегда и без подписочного сервиса.
+поэтому пишем клиента прямо в SQLite-базу панели и отдаём готовую
+vless://…-ссылку (Reality), собранную из настроек инбаунда.
+
+3x-ui 3.4.x хранит клиента в НЕСКОЛЬКИХ местах одновременно, и все нужно
+держать в синхроне (иначе клиент invisible в UI и/или не работает в Xray):
+  - inbounds.settings.clients (JSON)  — из этого Xray строит живой конфиг
+  - client_traffics                   — лимиты и статистика трафика
+  - clients + client_inbounds         — новая нормализованная схема панели
+                                         (список «Клиенты» в UI читается
+                                          отсюда; связь клиент↔инбаунд)
 
 Класс XuiClient повторяет интерфейс модуля xui_api (login/add_client/
 extend_client/close), поэтому в bott.py достаточно поменять только импорт.
@@ -13,6 +20,8 @@ extend_client/close), поэтому в bott.py достаточно помен�
 Параметры из окружения (.env на сервере):
     XUI_DB_PATH        — путь к базе (по умолчанию /etc/x-ui/x-ui.db)
     XUI_SERVER_HOST    — адрес сервера для ссылки (по умолчанию 62.133.61.23)
+    XUI_SUB_BASE       — базовый адрес подписок (не используется для vless,
+                         оставлен для совместимости)
     XUI_INBOUND_REMARK — имя инбаунда (по умолчанию MyVPN)
     XUI_RESTART_CMD    — команда перезагрузки Xray
                          (по умолчанию "systemctl restart x-ui";
@@ -34,8 +43,8 @@ from urllib.parse import urlencode, quote
 logger = logging.getLogger(__name__)
 
 DAY_MS = 86_400_000  # миллисекунд в сутках (3x-ui хранит срок в мс epoch)
-# flow этого инбаунда — ПУСТОЙ (как у рабочего клиента "me").
-# vision тут не подключается, поэтому оставляем "".
+# flow этого инбаунда — ПУСТОЙ (как у рабочих клиентов "me"/"mac").
+# xtls-rprx-vision на нём не подключался, поэтому оставляем "".
 FLOW = ""
 
 
@@ -58,17 +67,17 @@ class XuiClient:
         return True  # вход не нужен — пишем прямо в базу
 
     async def add_client(self, email, days, ip_limit=1):
-        return await asyncio.to_thread(self._add_client_sync, email, int(days), int(ip_limit))
+        return await asyncio.to_thread(self._upsert_client_sync, email, int(days), int(ip_limit), None, None)
 
     async def extend_client(self, client_uuid, email, sub_id, add_days, ip_limit=1):
         return await asyncio.to_thread(
-            self._extend_client_sync, client_uuid, email, sub_id, int(add_days), int(ip_limit)
+            self._upsert_client_sync, email, int(add_days), int(ip_limit), client_uuid, sub_id
         )
 
     async def close(self):
         return None
 
-    # ── внутреннее ───────────────────────────────────────────────────────────
+    # ── внутреннее ─────────────────────────────────────────────────────────
     def _backup(self):
         try:
             shutil.copy2(self.db_path, self.db_path + ".autobak")
@@ -97,7 +106,6 @@ class XuiClient:
         return row[0], json.loads(row[1] or "{}"), (row[2] or "{}"), row[3]
 
     def _build_vless(self, port, stream_settings_json, client_uuid, label):
-        """Собирает vless://…-ссылку Reality из настроек инбаунда."""
         ss = json.loads(stream_settings_json or "{}")
         reality = ss.get("realitySettings", {}) or {}
         rset = reality.get("settings", {}) or {}
@@ -112,11 +120,12 @@ class XuiClient:
             "sid": short_ids[0],
             "spx": rset.get("spiderX", "/"),
         }
-        if FLOW:  # добавляем flow в ссылку только если он не пустой
+        if FLOW:
             params["flow"] = FLOW
         query = urlencode(params)
         return f"vless://{client_uuid}@{self.server_host}:{port}?{query}#{quote(label)}"
 
+    # ── таблица client_traffics (лимиты/статистика) ─────────────────────────
     def _traffic_columns(self, cur):
         return {c[1] for c in cur.execute("PRAGMA table_info(client_traffics)").fetchall()}
 
@@ -141,29 +150,84 @@ class XuiClient:
             ph = ",".join("?" * len(use))
             cur.execute(f"INSERT INTO client_traffics ({names}) VALUES ({ph})", tuple(use.values()))
 
-    def _add_client_sync(self, email, days, ip_limit):
-        client_uuid = str(uuid.uuid4())
-        sub_id = secrets.token_hex(8)
-        expiry_ms = int(time.time() * 1000) + days * DAY_MS
+    # ── inbounds.settings.clients (то, что реально консьюмит Xray) ──────────
+    def _upsert_settings_client(self, cur, inbound_id, settings, email, client_uuid,
+                                 sub_id, expiry_ms, ip_limit, now_ms):
+        clients = settings.get("clients", [])
+        target = next((c for c in clients if c.get("email") == email), None)
+        if target is None:
+            target = {}
+            clients.append(target)
+            settings["clients"] = clients
+        target.update({
+            "id": client_uuid, "email": email, "subId": sub_id,
+            "comment": target.get("comment", ""), "created_at": target.get("created_at", now_ms),
+            "enable": True, "expiryTime": expiry_ms, "flow": FLOW,
+            "limitIp": ip_limit, "reset": 0, "tgId": 0, "totalGB": 0, "updated_at": now_ms,
+        })
+        cur.execute("UPDATE inbounds SET settings=? WHERE id=?", (json.dumps(settings), inbound_id))
 
+    # ── новая нормализованная схема панели (clients + client_inbounds) ──────
+    def _upsert_clients_table(self, cur, email, client_uuid, sub_id, expiry_ms, ip_limit, now_ms):
+        existing = cur.execute("SELECT id FROM clients WHERE email=?", (email,)).fetchone()
+        if existing:
+            client_id = existing[0]
+            cur.execute(
+                "UPDATE clients SET uuid=?, sub_id=?, expiry_time=?, limit_ip=?, enable=1, updated_at=? "
+                "WHERE id=?",
+                (client_uuid, sub_id, expiry_ms, ip_limit, now_ms, client_id),
+            )
+        else:
+            password = secrets.token_hex(8)
+            auth = secrets.token_hex(8)
+            cur.execute(
+                "INSERT INTO clients (email, sub_id, uuid, password, auth, flow, security, reverse, "
+                "limit_ip, total_gb, expiry_time, enable, tg_id, group_name, comment, reset, "
+                "created_at, updated_at) VALUES (?,?,?,?,?,?,?,?,?,?,?,1,0,?,?,0,?,?)",
+                (email, sub_id, client_uuid, password, auth, FLOW, "auto", "",
+                 ip_limit, 0, expiry_ms, "", "", now_ms, now_ms),
+            )
+            client_id = cur.lastrowid
+        return client_id
+
+    def _ensure_client_inbound_link(self, cur, client_id, inbound_id, now_ms):
+        cur.execute(
+            "INSERT OR IGNORE INTO client_inbounds (client_id, inbound_id, flow_override, created_at) "
+            "VALUES (?,?,?,?)",
+            (client_id, inbound_id, "", now_ms),
+        )
+
+    # ── основная операция: создать или продлить (в одном месте) ─────────────
+    def _upsert_client_sync(self, email, days, ip_limit, existing_uuid, existing_sub_id):
         now_ms = int(time.time() * 1000)
         self._backup()
         con = self._connect()
         try:
             cur = con.cursor()
             inbound_id, settings, stream_settings, port = self._find_inbound(cur)
-            clients = settings.get("clients", [])
-            # структура полей — как у рабочего клиента (иначе сервис подписки его не видит)
-            clients.append({
-                "comment": "", "created_at": now_ms, "email": email, "enable": True,
-                "expiryTime": expiry_ms, "flow": FLOW, "id": client_uuid,
-                "limitIp": ip_limit, "reset": 0, "subId": sub_id, "tgId": 0,
-                "totalGB": 0, "updated_at": now_ms,
-            })
-            settings["clients"] = clients
-            cur.execute("UPDATE inbounds SET settings=? WHERE id=?",
-                        (json.dumps(settings), inbound_id))
-            self._upsert_traffic(cur, inbound_id, email, expiry_ms)
+
+            row = cur.execute(
+                "SELECT uuid, sub_id, expiry_time FROM clients WHERE email=?", (email,)
+            ).fetchone()
+            if row:
+                client_uuid, sub_id, current_expiry = row[0], row[1], row[2] or 0
+            else:
+                client_uuid = existing_uuid or str(uuid.uuid4())
+                sub_id = existing_sub_id or secrets.token_hex(8)
+                current_expiry = 0
+
+            base = max(now_ms, int(current_expiry or 0))
+            new_expiry = base + days * DAY_MS
+
+            client_id = self._upsert_clients_table(
+                cur, email, client_uuid, sub_id, new_expiry, ip_limit, now_ms
+            )
+            self._ensure_client_inbound_link(cur, client_id, inbound_id, now_ms)
+            self._upsert_settings_client(
+                cur, inbound_id, settings, email, client_uuid, sub_id, new_expiry, ip_limit, now_ms
+            )
+            self._upsert_traffic(cur, inbound_id, email, new_expiry)
+
             con.commit()
         finally:
             con.close()
@@ -171,45 +235,4 @@ class XuiClient:
         self._reload()
         access_url = self._build_vless(port, stream_settings, client_uuid, "VAPEBAZAR VPN")
         return {"sub_url": f"{self.sub_base}/{sub_id}", "access_url": access_url,
-                "uuid": client_uuid, "sub_id": sub_id, "email": email, "expiry_ms": expiry_ms}
-
-    def _extend_client_sync(self, client_uuid, email, sub_id, add_days, ip_limit):
-        self._backup()
-        con = self._connect()
-        try:
-            cur = con.cursor()
-            inbound_id, settings, stream_settings, port = self._find_inbound(cur)
-            clients = settings.get("clients", [])
-            now_ms = int(time.time() * 1000)
-            target = next((c for c in clients
-                           if c.get("email") == email or c.get("id") == client_uuid), None)
-            if target is None:
-                target = {"id": client_uuid, "email": email, "subId": sub_id,
-                          "created_at": now_ms}
-                clients.append(target)
-                settings["clients"] = clients
-
-            base = max(now_ms, int(target.get("expiryTime") or 0))
-            new_expiry = base + add_days * DAY_MS
-            # приводим клиента к структуре рабочего (иначе подписка его не видит)
-            target.setdefault("created_at", now_ms)
-            target.update({
-                "comment": target.get("comment", ""),
-                "email": email, "enable": True, "expiryTime": new_expiry,
-                "flow": FLOW, "limitIp": ip_limit, "reset": 0,
-                "subId": target.get("subId", sub_id), "tgId": 0,
-                "totalGB": 0, "updated_at": now_ms,
-            })
-            cur.execute("UPDATE inbounds SET settings=? WHERE id=?",
-                        (json.dumps(settings), inbound_id))
-            self._upsert_traffic(cur, inbound_id, email, new_expiry)
-            con.commit()
-        finally:
-            con.close()
-
-        self._reload()
-        real_uuid = target.get("id", client_uuid)
-        real_sub = target.get("subId", sub_id)
-        access_url = self._build_vless(port, stream_settings, real_uuid, "VAPEBAZAR VPN")
-        return {"sub_url": f"{self.sub_base}/{real_sub}", "access_url": access_url,
-                "expiry_ms": new_expiry}
+                "uuid": client_uuid, "sub_id": sub_id, "email": email, "expiry_ms": new_expiry}
