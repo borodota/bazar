@@ -98,10 +98,16 @@ body::after {
    в отличие от background-attachment:fixed на самом body.
    ══════════════════════════════════════════════════════════════════════════ */
 body.has-wallpaper::before {
+    /* Картинка низкого разрешения (720×1280) — на retina-экранах при масштабировании
+       будет мыльной. Вместо попытки "спасти" резкость — намеренный мягкий блюр
+       (как размытая обложка альбома в Apple Music/Spotify): смотрится как стиль,
+       а не как дефект, и заодно полностью прячет артефакты растягивания.
+       inset:-40px + blur — чтобы блюр не давал прозрачные края на границе экрана. */
+    inset: -40px;
+    filter: blur(20px) brightness(0.85) saturate(1.15);
     background:
-        linear-gradient(rgba(4,5,10,0.45) 0%, rgba(4,5,10,0.65) 55%, rgba(4,5,10,0.85) 100%),
+        linear-gradient(rgba(4,5,10,0.35) 0%, rgba(4,5,10,0.55) 55%, rgba(4,5,10,0.78) 100%),
         radial-gradient(ellipse 900px 420px at 50% -8%, rgba(var(--accent-rgb),0.18), transparent 65%),
-        radial-gradient(ellipse 120% 100% at 50% 45%, transparent 50%, rgba(0,0,0,0.5) 100%),
         url("img/wallpaper.jpg") center top / cover no-repeat;
 }
 
