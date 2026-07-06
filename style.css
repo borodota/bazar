@@ -65,18 +65,22 @@ body[data-level="platinum"] { --ring-grad: conic-gradient(from 0deg, #00f07c, #0
 }
 
 body {
+    /* Обычный (без фото) фон — просто градиенты поверх цвета, скроллятся с контентом.
+       Никакого background-attachment:fixed — на мобильных WebView (в т.ч. Telegram)
+       это заставляет браузер пересчитывать фон на каждом кадре скролла и лагает. */
     background:
         radial-gradient(ellipse 900px 420px at 50% -8%, rgba(var(--accent-rgb),0.16), transparent 65%),
         radial-gradient(ellipse 700px 340px at 96% 6%, rgba(var(--accent-2-rgb),0.09), transparent 70%),
         radial-gradient(ellipse 800px 500px at 6% 96%, rgba(var(--accent-rgb),0.08), transparent 70%),
         var(--bg);
-    background-attachment: fixed;
     color: var(--text-primary);
     padding-bottom: 120px; overflow-x: hidden;
     -webkit-font-smoothing: antialiased; -moz-osx-font-smoothing: grayscale;
     position: relative;
 }
-/* Виньетка по краям — премиальная глубина, тёмный градиент к периметру экрана */
+/* Виньетка по краям — премиальная глубина, тёмный градиент к периметру экрана.
+   position:fixed на псевдоэлементе — не то же самое, что background-attachment:fixed:
+   это отдельный композитный слой, браузер не пересчитывает его при скролле. */
 body::before {
     content: ""; position: fixed; inset: 0; z-index: -2; pointer-events: none;
     background: radial-gradient(ellipse 120% 100% at 50% 45%, transparent 50%, rgba(0,0,0,0.5) 100%);
@@ -89,16 +93,16 @@ body::after {
 }
 
 /* ══════════════════════════════════════════════════════════════════════════
-   ФОТО-ОБОИ (опционально) — как только загрузишь картинку в img/wallpaper.jpg,
-   добавь класс "has-wallpaper" на <body> в index.html (<body class="has-wallpaper">).
-   Тёмная дымка поверх фото сохраняет читаемость текста и карточек товаров.
+   ФОТО-ОБОИ — картинка в img/wallpaper.jpg, включена классом "has-wallpaper" на <body>.
+   Рендерится через body::before (уже position:fixed) — так фото не лагает при скролле,
+   в отличие от background-attachment:fixed на самом body.
    ══════════════════════════════════════════════════════════════════════════ */
-body.has-wallpaper {
+body.has-wallpaper::before {
     background:
         linear-gradient(rgba(4,5,10,0.45) 0%, rgba(4,5,10,0.65) 55%, rgba(4,5,10,0.85) 100%),
         radial-gradient(ellipse 900px 420px at 50% -8%, rgba(var(--accent-rgb),0.18), transparent 65%),
-        url("img/wallpaper.jpg") center top / cover no-repeat fixed,
-        var(--bg);
+        radial-gradient(ellipse 120% 100% at 50% 45%, transparent 50%, rgba(0,0,0,0.5) 100%),
+        url("img/wallpaper.jpg") center top / cover no-repeat;
 }
 
 /* ── ШАПКА ── */
