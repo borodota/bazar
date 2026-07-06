@@ -222,14 +222,12 @@ function spentSyncFromCloud(cb) {
 // ── ТЕМА: localStorage как быстрый кэш + зеркало в Telegram CloudStorage ──
 function themeGet() {
     const t = localStorage.getItem(THEME_KEY);
-    return VALID_THEMES.includes(t) ? t : "green";
+    return VALID_THEMES.includes(t) ? t : "purple";
 }
 // Применяет тему к интерфейсу (атрибут на <body> + подсветка выбранного свотча).
 window.applyTheme = function (t) {
-    if (!VALID_THEMES.includes(t)) t = "green";
-    // green = дефолт из :root, атрибут не нужен (и не мешает)
-    if (t === "green") document.body.removeAttribute("data-theme");
-    else document.body.dataset.theme = t;
+    if (!VALID_THEMES.includes(t)) t = "purple";
+    document.body.dataset.theme = t;
     document.querySelectorAll(".theme-swatch").forEach(function (s) {
         s.classList.toggle("active", s.dataset.theme === t);
     });

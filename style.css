@@ -8,9 +8,10 @@
     --bg-input: #0e1220;
     --bg-elevated: #121828;
     /* ── ИСТОЧНИК АКЦЕНТНОГО ЦВЕТА (меняется темой через body[data-theme]) ── */
-    --accent-rgb: 0,240,124;       /* основной неон, RGB-компоненты для rgba() */
-    --accent-2: #00c9ff;           /* вторичный цвет градиента */
-    --accent-2-rgb: 0,201,255;     /* вторичный, RGB-компоненты */
+    /* Фирменный VAPEBAZAR — глубокий фиолетовый + маджента (japanese cyberpunk) */
+    --accent-rgb: 123,46,255;      /* основной неон, RGB-компоненты для rgba() */
+    --accent-2: #ff2ec7;           /* вторичный цвет градиента (маджента) */
+    --accent-2-rgb: 255,46,199;    /* вторичный, RGB-компоненты */
     /* кольцо аватара — по умолчанию из акцента, переопределяется уровнем */
     --ring-grad: conic-gradient(from 0deg, rgb(var(--accent-rgb)), var(--accent-2), rgb(var(--accent-rgb)));
     --neon-green: rgb(var(--accent-rgb));
@@ -39,9 +40,11 @@
 
 /* ══════════════════════════════════════════════════════════════════════════
    ТЕМЫ ОФОРМЛЕНИЯ — переопределяют только акцент, фон остаётся тёмным.
-   Зелёная тема — значение по умолчанию из :root.
+   Фиолетовая (purple) тема — фирменный цвет VAPEBAZAR, значение по умолчанию из :root.
+   Зелёная (green) — прежний цвет, оставлен как опция для тех, кто его выбрал раньше.
    ══════════════════════════════════════════════════════════════════════════ */
-body[data-theme="purple"] { --accent-rgb: 160,107,255; --accent-2: #c78bff; --accent-2-rgb: 199,139,255; }
+body[data-theme="green"]  { --accent-rgb: var(--accent-rgb);   --accent-2: #00c9ff;  --accent-2-rgb: 0,201,255; }
+body[data-theme="purple"] { --accent-rgb: 123,46,255;  --accent-2: #ff2ec7;  --accent-2-rgb: 255,46,199; }
 body[data-theme="pink"]   { --accent-rgb: 255,77,148;  --accent-2: #ff8fc0; --accent-2-rgb: 255,143,192; }
 body[data-theme="blue"]   { --accent-rgb: 0,170,255;   --accent-2: #5ad1ff; --accent-2-rgb: 90,209,255; }
 body[data-theme="gold"]   { --accent-rgb: 255,176,0;   --accent-2: #ffd23f; --accent-2-rgb: 255,210,63; }
@@ -62,7 +65,12 @@ body[data-level="platinum"] { --ring-grad: conic-gradient(from 0deg, #00f07c, #0
 }
 
 body {
-    background: var(--bg); color: var(--text-primary);
+    background:
+        radial-gradient(ellipse 900px 420px at 50% -8%, rgba(var(--accent-rgb),0.16), transparent 65%),
+        radial-gradient(ellipse 700px 340px at 96% 6%, rgba(var(--accent-2-rgb),0.09), transparent 70%),
+        var(--bg);
+    background-attachment: fixed;
+    color: var(--text-primary);
     padding-bottom: 120px; overflow-x: hidden;
     -webkit-font-smoothing: antialiased; -moz-osx-font-smoothing: grayscale;
 }
@@ -78,7 +86,9 @@ header.scrolled { border-bottom-color: var(--border); }
 
 .brand-title {
     font-size: 20px; font-weight: 900; letter-spacing: -0.2px;
-    color: #ffffff;
+    background: linear-gradient(135deg, #ffffff 0%, #d9c9ff 45%, rgb(var(--accent-rgb)) 100%);
+    -webkit-background-clip: text; background-clip: text; color: transparent;
+    filter: drop-shadow(0 0 12px rgba(var(--accent-rgb),0.35));
 }
 .brand-subtitle {
     font-size: 8px; font-weight: 800; letter-spacing: 4px;
@@ -601,9 +611,9 @@ header.scrolled { border-bottom-color: var(--border); }
 .hi-status-accept { background: rgba(255,200,0,0.15); color: #ffd000; }
 .hi-status-pack { background: rgba(0,180,255,0.15); color: #00c4ff; }
 .hi-status-ship { background: rgba(100,130,255,0.15); color: #8899ff; }
-.hi-status-done { background: rgba(0,240,124,0.15); color: var(--neon-green); }
+.hi-status-done { background: rgba(var(--accent-rgb),0.15); color: var(--neon-green); }
 .hi-status-cancel { background: rgba(255,60,60,0.12); color: #ff6060; }
-.hi-done { border-color: rgba(0,240,124,0.25); }
+.hi-done { border-color: rgba(var(--accent-rgb),0.25); }
 .hi-cancelled { opacity: 0.6; }
 
 /* ── FILTER BAR ── */
@@ -1155,14 +1165,28 @@ body[data-level="platinum"] .profile-avatar-ring { animation-duration: 4s; opaci
 /* ── SPLASH SCREEN (#4) ── */
 .splash-screen {
     position: fixed; inset: 0; z-index: 9999;
-    background: var(--bg);
+    background:
+        radial-gradient(ellipse 700px 500px at 50% 30%, rgba(var(--accent-rgb),0.20), transparent 65%),
+        radial-gradient(ellipse 500px 400px at 85% 75%, rgba(var(--accent-2-rgb),0.10), transparent 70%),
+        var(--bg);
     display: flex; flex-direction: column; align-items: center; justify-content: center;
     transition: opacity var(--t-slow);
 }
 .splash-screen.hidden { opacity: 0; pointer-events: none; }
-.splash-logo { font-size: 64px; animation: splashPulse 0.6s ease both; }
-.splash-title { font-size: 28px; font-weight: 900; color: var(--neon-green); letter-spacing: 3px; margin-top: 16px; }
-.splash-sub { font-size: 13px; color: var(--text-secondary); margin-top: 8px; }
+.splash-logo {
+    font-size: 64px; animation: splashPulse 0.6s ease both;
+    filter: drop-shadow(0 0 22px rgba(var(--accent-rgb),0.45));
+}
+.splash-title {
+    font-size: 28px; font-weight: 900; letter-spacing: 3px; margin-top: 16px;
+    background: linear-gradient(135deg, #ffffff 0%, #d9c9ff 45%, rgb(var(--accent-rgb)) 100%);
+    -webkit-background-clip: text; background-clip: text; color: transparent;
+    filter: drop-shadow(0 0 16px rgba(var(--accent-rgb),0.4));
+}
+.splash-sub {
+    font-size: 12px; font-weight: 700; letter-spacing: 2px; text-transform: uppercase;
+    color: var(--text-secondary); margin-top: 8px;
+}
 @keyframes splashPulse {
     0%   { transform: scale(0.8); }
     70%  { transform: scale(1.05); }
@@ -1202,19 +1226,19 @@ body[data-level="platinum"] .profile-avatar-ring { animation-duration: 4s; opaci
 .brand-filter-row::-webkit-scrollbar { display:none; }
 
 /* ── #6 КНОПКА НАВЕРХ ── */
-.scroll-top-btn { position:fixed; bottom:80px; right:16px; width:40px; height:40px; border-radius:50%; background:rgba(0,240,124,0.15); border:1.5px solid var(--neon-green); color:var(--neon-green); font-size:18px; font-weight:900; cursor:pointer; z-index:400; backdrop-filter:blur(10px); transition:opacity 0.3s, transform 0.3s; }
+.scroll-top-btn { position:fixed; bottom:80px; right:16px; width:40px; height:40px; border-radius:50%; background:rgba(var(--accent-rgb),0.15); border:1.5px solid var(--neon-green); color:var(--neon-green); font-size:18px; font-weight:900; cursor:pointer; z-index:400; backdrop-filter:blur(10px); transition:opacity 0.3s, transform 0.3s; }
 
 /* ── #8 СОХРАНЁННЫЕ АДРЕСА ── */
 .saved-addrs-row { display:flex; gap:6px; flex-wrap:wrap; margin-bottom:8px; }
 .saved-addr-chip { background:rgba(255,255,255,0.06); border:1px solid var(--border); border-radius:20px; padding:4px 10px; font-size:11px; font-weight:600; color:var(--text-secondary); cursor:pointer; white-space:nowrap; }
-.saved-addr-chip:active { background:rgba(0,240,124,0.1); }
+.saved-addr-chip:active { background:rgba(var(--accent-rgb),0.1); }
 
 /* ── #9 СЛОТ ДОСТАВКИ ── */
 .time-slot-label { font-size:11px; font-weight:700; color:var(--text-secondary); margin:10px 0 6px; text-transform:uppercase; letter-spacing:0.06em; }
 .time-slot-row { display:flex; gap:6px; }
 .ts-opt { flex:1; display:flex; align-items:center; justify-content:center; background:rgba(255,255,255,0.04); border:1px solid var(--border); border-radius:12px; padding:8px 4px; font-size:11px; font-weight:700; cursor:pointer; transition:all 0.2s; }
 .ts-opt input { display:none; }
-.ts-opt:has(input:checked) { background:rgba(0,240,124,0.12); border-color:var(--neon-green); color:var(--neon-green); }
+.ts-opt:has(input:checked) { background:rgba(var(--accent-rgb),0.12); border-color:var(--neon-green); color:var(--neon-green); }
 
 /* ── #11 КОММЕНТАРИЙ К ТОВАРУ В КОРЗИНЕ ── */
 .cart-item-note-row { width:100%; margin-top:4px; }
@@ -1233,7 +1257,7 @@ body[data-level="platinum"] .profile-avatar-ring { animation-duration: 4s; opaci
 .pay-tab { flex:1; display:flex; flex-direction:row; align-items:center; justify-content:center; gap:5px; padding:8px 6px; border-radius:10px; border:1.5px solid rgba(255,255,255,0.08); background:rgba(255,255,255,0.04); cursor:pointer; transition:all 0.2s; font-family:inherit; }
 .pay-tab-icon { font-size:14px; line-height:1; }
 .pay-tab-label { font-size:12px; font-weight:700; color:rgba(255,255,255,0.45); }
-.pay-tab.active { background:rgba(0,240,124,0.1); border-color:rgba(0,240,124,0.45); }
+.pay-tab.active { background:rgba(var(--accent-rgb),0.1); border-color:rgba(var(--accent-rgb),0.45); }
 .pay-tab.active .pay-tab-label { color:var(--neon-green); }
 .pay-tab:active { transform:scale(0.97); }
 .change-row { display:flex; align-items:center; justify-content:space-between; padding:8px 0 6px; }
@@ -1242,11 +1266,11 @@ body[data-level="platinum"] .profile-avatar-ring { animation-duration: 4s; opaci
 .toggle-switch input { opacity:0; width:0; height:0; }
 .toggle-slider { position:absolute; inset:0; background:rgba(255,255,255,0.12); border-radius:26px; cursor:pointer; transition:.25s; }
 .toggle-slider:before { content:""; position:absolute; width:20px; height:20px; left:3px; top:3px; background:#fff; border-radius:50%; transition:.25s; }
-.toggle-switch input:checked + .toggle-slider { background:rgba(0,240,124,0.55); }
+.toggle-switch input:checked + .toggle-slider { background:rgba(var(--accent-rgb),0.55); }
 .toggle-switch input:checked + .toggle-slider:before { transform:translateX(20px); }
 .change-chips-row { display:flex; gap:5px; align-items:center; flex-wrap:nowrap; padding:4px 0 2px; }
 .change-chip { flex-shrink:0; padding:6px 10px; border-radius:8px; border:1px solid rgba(255,255,255,0.1); background:rgba(255,255,255,0.05); color:rgba(255,255,255,0.6); font-family:inherit; font-size:12px; font-weight:700; cursor:pointer; transition:all 0.18s; }
-.change-chip.sel { background:rgba(0,240,124,0.14); border-color:rgba(0,240,124,0.45); color:var(--neon-green); }
+.change-chip.sel { background:rgba(var(--accent-rgb),0.14); border-color:rgba(var(--accent-rgb),0.45); color:var(--neon-green); }
 .change-chip:active { transform:scale(0.95); }
 .change-custom-inp { flex:1; min-width:0; background:rgba(255,255,255,0.05); border:1px solid rgba(255,255,255,0.1); border-radius:8px; padding:6px 8px; font-family:inherit; font-size:12px; color:#e8e8e8; height:34px; }
 .transfer-hint { font-size:13px; color:rgba(255,255,255,0.45); background:rgba(255,255,255,0.04); border:1px solid rgba(255,255,255,0.08); border-radius:12px; padding:12px; line-height:1.5; }
@@ -1254,16 +1278,16 @@ body[data-level="platinum"] .profile-avatar-ring { animation-duration: 4s; opaci
 /* ── VPN-МАГАЗИН ── */
 .vpn-devices-toggle { display:flex; gap:6px; margin:14px 0 4px; }
 .vpn-dev-chip { flex:1; min-width:0; padding:8px 4px; border-radius:11px; border:1.5px solid rgba(255,255,255,0.08); background:rgba(255,255,255,0.04); color:rgba(255,255,255,0.5); font-family:inherit; font-size:10.5px; font-weight:700; line-height:1.35; cursor:pointer; transition:all 0.18s; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
-.vpn-dev-chip.active { background:rgba(0,240,124,0.1); border-color:rgba(0,240,124,0.45); color:var(--neon-green); }
+.vpn-dev-chip.active { background:rgba(var(--accent-rgb),0.1); border-color:rgba(var(--accent-rgb),0.45); color:var(--neon-green); }
 .vpn-dev-chip .vpn-dev-plus { display:block; opacity:0.6; font-weight:600; font-size:9.5px; }
 .vpn-dev-chip.active .vpn-dev-plus { color:var(--neon-green); opacity:0.85; }
 .vpn-tariffs { display:grid; grid-template-columns:1fr 1fr; gap:10px; margin:10px 0 4px; }
-.vpn-card { background:rgba(0,240,124,0.04); border:1.5px solid rgba(0,240,124,0.18); border-radius:16px; padding:14px 12px; text-align:center; cursor:pointer; transition:all 0.18s; }
+.vpn-card { background:rgba(var(--accent-rgb),0.04); border:1.5px solid rgba(var(--accent-rgb),0.18); border-radius:16px; padding:14px 12px; text-align:center; cursor:pointer; transition:all 0.18s; }
 .vpn-card:active { transform:scale(0.97); }
-.vpn-card.featured { border-color:rgba(0,240,124,0.5); background:rgba(0,240,124,0.09); }
-.vpn-card.wide { grid-column:1 / -1; display:flex; align-items:center; justify-content:space-between; text-align:left; background:rgba(0,240,124,0.07); border-color:rgba(0,240,124,0.35); }
+.vpn-card.featured { border-color:rgba(var(--accent-rgb),0.5); background:rgba(var(--accent-rgb),0.09); }
+.vpn-card.wide { grid-column:1 / -1; display:flex; align-items:center; justify-content:space-between; text-align:left; background:rgba(var(--accent-rgb),0.07); border-color:rgba(var(--accent-rgb),0.35); }
 .vpn-card-top { min-height:16px; margin-bottom:4px; }
-.vpn-badge { font-size:10px; font-weight:800; color:var(--neon-green); background:rgba(0,240,124,0.16); padding:2px 8px; border-radius:20px; }
+.vpn-badge { font-size:10px; font-weight:800; color:var(--neon-green); background:rgba(var(--accent-rgb),0.16); padding:2px 8px; border-radius:20px; }
 .vpn-name { font-size:15px; font-weight:800; color:#fff; }
 .vpn-days { font-size:12px; color:rgba(255,255,255,0.45); margin-top:2px; }
 .vpn-price { font-size:20px; font-weight:900; color:var(--neon-green); margin:8px 0; }
@@ -1271,6 +1295,6 @@ body[data-level="platinum"] .profile-avatar-ring { animation-duration: 4s; opaci
 .vpn-note { font-size:11px; color:rgba(255,255,255,0.4); text-align:center; margin-top:12px; line-height:1.5; }
 
 /* ── БЛОК КОНТАКТНЫХ ДАННЫХ ── */
-.contact-block { background:rgba(0,240,124,0.05); border:1.5px solid rgba(0,240,124,0.2); border-radius:16px; padding:14px 14px 10px; margin-bottom:12px; }
+.contact-block { background:rgba(var(--accent-rgb),0.05); border:1.5px solid rgba(var(--accent-rgb),0.2); border-radius:16px; padding:14px 14px 10px; margin-bottom:12px; }
 .contact-block-title { font-size:13px; font-weight:800; color:var(--neon-green); margin-bottom:10px; }
 .contact-required-hint { font-size:10px; color:rgba(255,255,255,0.25); text-align:right; margin-top:4px; }
