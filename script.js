@@ -1614,7 +1614,7 @@ window.updateLevelUI = function () {
         if (hintEl) hintEl.innerText = `Ещё ${fmt(next.min - spent)} ₽ до уровня «${next.name}»`;
     } else {
         if (barEl) { barEl.style.width = "100%"; barEl.style.background = lvl.color; }
-        if (hintEl) hintEl.innerText = "Максимальный уровень — спасибо! 💚";
+        if (hintEl) hintEl.innerText = "Максимальный уровень — спасибо! 💜";
     }
 };
 

@@ -804,7 +804,7 @@ async def change_order_status(callback: types.CallbackQuery):
                 f"💰 <b>Итого: {receipt_total} ₽</b>\n"
                 f"━━━━━━━━━━━━━━━━━━━━━━━━\n"
                 f"✅ <b>ОПЛАЧЕН И ВЫДАН</b>\n\n"
-                f"Спасибо за покупку! Возвращайтесь 💚\n"
+                f"Спасибо за покупку! Возвращайтесь 💜\n"
                 f"📞 По вопросам: @{MANAGER_USERNAME}"
             )
             try:
@@ -831,7 +831,7 @@ async def change_order_status(callback: types.CallbackQuery):
             "accept": "Мы уже начали обработку вашего заказа!",
             "pack": "Собираем ваш заказ — скоро будет готов!",
             "ship": "Заказ в пути! Курьер скоро будет у вас.",
-            "done": "Спасибо за покупку! Будем рады видеть вас снова 💚",
+            "done": "Спасибо за покупку! Будем рады видеть вас снова 💜",
             "cancel": f"Если возникли вопросы — напишите @{MANAGER_USERNAME}"
         }
         # При «Принять» дописываем клиенту реальные баллы из нашего леджера
@@ -870,7 +870,7 @@ async def change_order_status(callback: types.CallbackQuery):
                     f"🎁 <b>Реферальная награда!</b>\n"
                     f"Твой друг сделал первый заказ — тебе начислено <b>+{r['reward']}</b> баллов.\n"
                     f"💼 Баланс: <b>{_fmt_money(r['referrer_balance'])}</b> баллов.\n\n"
-                    f"Спасибо, что зовёшь друзей в VAPEBAZAR 💚"
+                    f"Спасибо, что зовёшь друзей в VAPEBAZAR 💜"
                 )
             )
         except Exception as e:
@@ -945,7 +945,7 @@ async def rate_order(callback: types.CallbackQuery):
                     admin_id,
                     f"🌟 <b>Хорошая оценка заказа #{order_id}</b>\n"
                     f"{stars} от {uname}\n\n"
-                    f"Можно попросить отзыв текстом и запостить в канал 💚"
+                    f"Можно попросить отзыв текстом и запостить в канал 💜"
                 )
             except Exception:
                 pass
@@ -1634,7 +1634,7 @@ async def birthday_check_loop():
                             f"🎂 <b>С Днём Рождения, {name}!</b>\n\n"
                             f"Вся команда VAPEBAZAR поздравляет тебя! 🥳\n"
                             f"В подарок — <b>+100 баллов</b> на твой счёт 💎\n\n"
-                            f"Трать с удовольствием 💚"
+                            f"Трать с удовольствием 💜"
                         ),
                         reply_markup=get_main_keyboard()
                     )
