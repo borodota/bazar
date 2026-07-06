@@ -68,11 +68,37 @@ body {
     background:
         radial-gradient(ellipse 900px 420px at 50% -8%, rgba(var(--accent-rgb),0.16), transparent 65%),
         radial-gradient(ellipse 700px 340px at 96% 6%, rgba(var(--accent-2-rgb),0.09), transparent 70%),
+        radial-gradient(ellipse 800px 500px at 6% 96%, rgba(var(--accent-rgb),0.08), transparent 70%),
         var(--bg);
     background-attachment: fixed;
     color: var(--text-primary);
     padding-bottom: 120px; overflow-x: hidden;
     -webkit-font-smoothing: antialiased; -moz-osx-font-smoothing: grayscale;
+    position: relative;
+}
+/* Виньетка по краям — премиальная глубина, тёмный градиент к периметру экрана */
+body::before {
+    content: ""; position: fixed; inset: 0; z-index: -2; pointer-events: none;
+    background: radial-gradient(ellipse 120% 100% at 50% 45%, transparent 50%, rgba(0,0,0,0.5) 100%);
+}
+/* Лёгкое кинематографичное зерно — премиальная текстура вместо плоского чёрного фона */
+body::after {
+    content: ""; position: fixed; inset: 0; z-index: -1; pointer-events: none;
+    opacity: 0.035; mix-blend-mode: overlay;
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='120' height='120'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='2' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
+}
+
+/* ══════════════════════════════════════════════════════════════════════════
+   ФОТО-ОБОИ (опционально) — как только загрузишь картинку в img/wallpaper.jpg,
+   добавь класс "has-wallpaper" на <body> в index.html (<body class="has-wallpaper">).
+   Тёмная дымка поверх фото сохраняет читаемость текста и карточек товаров.
+   ══════════════════════════════════════════════════════════════════════════ */
+body.has-wallpaper {
+    background:
+        linear-gradient(rgba(4,5,10,0.82), rgba(4,5,10,0.90)),
+        radial-gradient(ellipse 900px 420px at 50% -8%, rgba(var(--accent-rgb),0.18), transparent 65%),
+        url("img/wallpaper.jpg") center top / cover no-repeat fixed,
+        var(--bg);
 }
 
 /* ── ШАПКА ── */
