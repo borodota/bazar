@@ -95,7 +95,7 @@ body::after {
    ══════════════════════════════════════════════════════════════════════════ */
 body.has-wallpaper {
     background:
-        linear-gradient(rgba(4,5,10,0.82), rgba(4,5,10,0.90)),
+        linear-gradient(rgba(4,5,10,0.45) 0%, rgba(4,5,10,0.65) 55%, rgba(4,5,10,0.85) 100%),
         radial-gradient(ellipse 900px 420px at 50% -8%, rgba(var(--accent-rgb),0.18), transparent 65%),
         url("img/wallpaper.jpg") center top / cover no-repeat fixed,
         var(--bg);
