@@ -84,7 +84,7 @@ window.VAPE_PRODUCTS = [
         flavors: ["Space Grey", "Carbon Fiber", "Premium Leather"],
         tags: ["HOT"],
         isNew: false,
-        inStock: true
+        inStock: false
     },
 
     // ================= ЖИДКОСТИ =================
