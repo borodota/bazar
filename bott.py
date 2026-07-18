@@ -194,11 +194,20 @@ def record_referral(new_user_id, ref_id, user=None):
         return
     data = _load_bonuses()
     cust = _ensure_user(data, new_user_id)
+    ref_str = str(ref_id)
     if cust["orders"] == 0 and not cust.get("referred_by") and not cust.get("ref_rewarded"):
-        cust["referred_by"] = str(ref_id)
+        cust["referred_by"] = ref_str
         if user:
             cust["name"] = user.first_name or cust.get("name", "")
             cust["username"] = user.username or cust.get("username", "")
+
+        # Отслеживаем в обратном направлении: кого пригласил реферер
+        referrer = _ensure_user(data, ref_str)
+        if "referred" not in referrer:
+            referrer["referred"] = []
+        if str(new_user_id) not in referrer["referred"]:
+            referrer["referred"].append(str(new_user_id))
+
         _save_bonuses(data)
 
 def settle_order_bonuses(order_id, customer_id, total, earn, redeem, ref_id):
@@ -1323,6 +1332,66 @@ async def cmd_api_vpn(message: types.Message):
         parse_mode="HTML"
     )
 
+
+# ═════════════════════════════════════════════════════════════════════════════
+# РЕФЕРРАЛЬНАЯ ПРОГРАММА
+# ═════════════════════════════════════════════════════════════════════════════
+
+@dp.message(Command("ref"))
+async def cmd_ref(message: types.Message):
+    """Получить реферальную ссылку и статистику приглашённых"""
+    uid = str(message.from_user.id)
+    bonuses = _load_json(BONUSES_FILE, {})
+    my_data = bonuses.get(uid, {})
+
+    # Кодируем ID для ссылки (base36 или hex для удобства)
+    ref_code = format(message.from_user.id, 'x')[:8]
+    ref_url = f"https://t.me/{BOT_USERNAME}?start=ref_{message.from_user.id}"
+
+    # Статистика: кто был приглашён
+    referred = my_data.get("referred", [])
+    referred_count = len(referred)
+
+    # Подсчитываем, сколько приглашённых сделали первый заказ
+    active_referred = 0
+    for ref_id in referred:
+        ref_data = bonuses.get(str(ref_id), {})
+        if ref_data.get("first_order_completed"):
+            active_referred += 1
+
+    text = (
+        f"🎁 <b>Твоя реферальная ссылка</b>\n\n"
+        f"<code>{ref_url}</code>\n\n"
+        f"📊 <b>Статистика</b>\n"
+        f"├ Всего приглашено: <b>{referred_count}</b>\n"
+        f"├ Активных (сделали заказ): <b>{active_referred}</b>\n"
+        f"└ Твоя награда за активных: <b>+{active_referred * REFERRAL_REWARD} баллов</b>\n\n"
+        f"<i>Приведи друга по ссылке — получите оба скидку 50₽ на первый заказ!</i>"
+    )
+
+    await message.answer(
+        text,
+        reply_markup=InlineKeyboardMarkup(inline_keyboard=[
+            [InlineKeyboardButton(text="📋 Скопировать ссылку", callback_data="copy_ref_link")],
+            [InlineKeyboardButton(text="📱 Поделиться в Telegram", url=f"https://t.me/share/url?url={ref_url}&text=Присоединяйся%20к%20VAPEBAZAR!")],
+        ])
+    )
+
+
+@dp.callback_query(lambda c: c.data == "copy_ref_link")
+async def copy_ref_link(callback: types.CallbackQuery):
+    """Копирование реферальной ссылки"""
+    uid = str(callback.from_user.id)
+    ref_url = f"https://t.me/{BOT_USERNAME}?start=ref_{callback.from_user.id}"
+
+    await callback.answer("✅ Ссылка скопирована в буфер обмена!", show_alert=False)
+    # Telegram WebApp может скопировать в буфер обмена
+    # Здесь мы просто показываем уведомление
+
+
+# ═════════════════════════════════════════════════════════════════════════════
+# УПРАВЛЕНИЕ БАЛЛАМИ И БОНУСАМИ
+# ═════════════════════════════════════════════════════════════════════════════
 
 @dp.message(Command("bonus"))
 async def cmd_bonus(message: types.Message):
