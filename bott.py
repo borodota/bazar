@@ -1150,6 +1150,180 @@ async def cmd_stats(message: types.Message):
     )
 
 
+# ═════════════════════════════════════════════════════════════════════════════
+# АНАЛИТИКА И ДАШБОРД (для админ-панели)
+# ═════════════════════════════════════════════════════════════════════════════
+
+@dp.message(Command("api_analytics"))
+async def cmd_api_analytics(message: types.Message):
+    """API для админ-панели: полная статистика в JSON (последние 30 дней)"""
+    if message.from_user.id not in ADMINS:
+        return
+
+    orders = _load_json(ORDERS_FILE, [])
+    now = datetime.now()
+    start_date = now - timedelta(days=30)
+
+    def _created(o):
+        try:
+            return datetime.fromisoformat(o.get("created_at"))
+        except (TypeError, ValueError):
+            return None
+
+    recent_orders = [o for o in orders
+                     if _created(o) and _created(o) >= start_date
+                     and o.get("status") != "cancel"]
+
+    # Группируем по датам
+    by_date = {}
+    for o in recent_orders:
+        date_str = _created(o).date().isoformat()
+        if date_str not in by_date:
+            by_date[date_str] = {"orders": 0, "revenue": 0}
+        by_date[date_str]["orders"] += 1
+        by_date[date_str]["revenue"] += int(o.get("total") or 0)
+
+    # Топ товаров
+    product_sales = {}
+    for o in recent_orders:
+        items_text = o.get("items", "")
+        for line in items_text.split("\n"):
+            if line.strip().startswith(("•", "▪")):
+                # Парсим: "• ТОВАР · 1 000₽ × 2 = 2 000₽"
+                clean = line.lstrip("•▪️ ").strip()
+                parts = clean.split("·")
+                if len(parts) > 0:
+                    name = parts[0].strip()
+                    if name not in product_sales:
+                        product_sales[name] = 0
+                    product_sales[name] += 1
+
+    top_products = sorted(product_sales.items(), key=lambda x: x[1], reverse=True)[:10]
+
+    # Статистика клиентов
+    customer_stats = {}
+    for o in recent_orders:
+        uid = str(o.get("user_id", "unknown"))
+        if uid not in customer_stats:
+            customer_stats[uid] = {"orders": 0, "spent": 0}
+        customer_stats[uid]["orders"] += 1
+        customer_stats[uid]["spent"] += int(o.get("total") or 0)
+
+    top_customers = sorted(customer_stats.items(),
+                          key=lambda x: x[1]["spent"],
+                          reverse=True)[:10]
+
+    # Подготавливаем ответ
+    total_revenue = sum(int(o.get("total") or 0) for o in recent_orders)
+    avg_check = total_revenue // len(recent_orders) if recent_orders else 0
+
+    response = {
+        "status": "ok",
+        "period": "30d",
+        "summary": {
+            "total_orders": len(recent_orders),
+            "total_revenue": total_revenue,
+            "avg_check": avg_check,
+            "unique_customers": len(customer_stats),
+        },
+        "by_date": by_date,
+        "top_products": [{"name": p[0], "sales": p[1]} for p in top_products],
+        "top_customers": [{"id": c[0], "orders": c[1]["orders"], "spent": c[1]["spent"]} for c in top_customers],
+    }
+
+    # Отправляем JSON
+    await message.answer(
+        f"<code>{json.dumps(response, ensure_ascii=False, indent=2)}</code>",
+        parse_mode="HTML"
+    )
+
+
+@dp.message(Command("api_daily"))
+async def cmd_api_daily(message: types.Message):
+    """API: графические данные по дням (последние 30 дней)"""
+    if message.from_user.id not in ADMINS:
+        return
+
+    orders = _load_json(ORDERS_FILE, [])
+    now = datetime.now()
+    start_date = now - timedelta(days=30)
+
+    def _created(o):
+        try:
+            return datetime.fromisoformat(o.get("created_at"))
+        except (TypeError, ValueError):
+            return None
+
+    recent_orders = [o for o in orders
+                     if _created(o) and _created(o) >= start_date
+                     and o.get("status") != "cancel"]
+
+    # Заполняем все дни (даже с нулями)
+    data = []
+    for i in range(30, -1, -1):
+        date = (now - timedelta(days=i)).date()
+        date_str = date.isoformat()
+
+        day_orders = [o for o in recent_orders
+                     if _created(o).date() == date]
+        revenue = sum(int(o.get("total") or 0) for o in day_orders)
+
+        data.append({
+            "date": date_str,
+            "orders": len(day_orders),
+            "revenue": revenue,
+        })
+
+    response = {"status": "ok", "data": data}
+
+    await message.answer(
+        f"<code>{json.dumps(response, ensure_ascii=False, indent=2)}</code>",
+        parse_mode="HTML"
+    )
+
+
+@dp.message(Command("api_vpn"))
+async def cmd_api_vpn(message: types.Message):
+    """API: статистика VPN-подписок"""
+    if message.from_user.id not in ADMINS:
+        return
+
+    vpn_subs = _load_json(VPN_SUBS_FILE, {})
+    now = datetime.now()
+
+    active = []
+    expiring = []
+    expired = []
+
+    for email, sub in vpn_subs.items():
+        try:
+            expiry = datetime.fromisoformat(sub.get("expiry"))
+        except (TypeError, ValueError):
+            continue
+
+        if expiry > now:
+            active.append(email)
+            if expiry <= now + timedelta(days=7):
+                expiring.append({"email": email, "days_left": (expiry - now).days})
+        else:
+            expired.append(email)
+
+    response = {
+        "status": "ok",
+        "summary": {
+            "active": len(active),
+            "expiring_soon": len(expiring),
+            "expired": len(expired),
+        },
+        "expiring": expiring,
+    }
+
+    await message.answer(
+        f"<code>{json.dumps(response, ensure_ascii=False, indent=2)}</code>",
+        parse_mode="HTML"
+    )
+
+
 @dp.message(Command("bonus"))
 async def cmd_bonus(message: types.Message):
     if message.from_user.id not in ADMINS:
