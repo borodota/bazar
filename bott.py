@@ -26,6 +26,14 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
+# ==================== ВРЕМЕННАЯ ЗОНА ====================
+# Магадан находится в зоне UTC+11 (стандартное время, без перевода)
+MAGADAN_TZ = timezone(timedelta(hours=11))
+
+def now_magadan():
+    """Получить текущее время в магаданской зоне"""
+    return datetime.now(MAGADAN_TZ)
+
 # ==================== КОНФИГУРАЦИЯ ====================
 # Токен лучше хранить в переменной окружения BOT_TOKEN (см. README)
 SHOP_BOT_TOKEN = os.getenv("BOT_TOKEN", "8687110031:AAE9E430W55aRQQuUwDI8hEMjaVliq_gbG4")
@@ -102,7 +110,7 @@ def remember_user(user):
     subs[str(user.id)] = {
         "name": user.first_name or "",
         "username": user.username or "",
-        "ts": datetime.now().isoformat(timespec="seconds"),
+        "ts": now_magadan().isoformat(timespec="seconds"),
     }
     _save_json(SUBSCRIBERS_FILE, subs)
 
@@ -110,7 +118,7 @@ def log_order(order_id, customer_id, total, action, status_label, items=None, na
     """Создаёт/обновляет запись заказа в журнале. Вызывается при создании заказа
     (путь sendData) и при каждой смене статуса кнопкой (путь Bot API из браузера)."""
     orders = _load_json(ORDERS_FILE, [])
-    now = datetime.now().isoformat(timespec="seconds")
+    now = now_magadan().isoformat(timespec="seconds")
     rec = next((o for o in orders if str(o.get("order_id")) == str(order_id)), None)
     if rec is None:
         rec = {
@@ -236,7 +244,7 @@ def settle_order_bonuses(order_id, customer_id, total, earn, redeem, ref_id):
     cust["balance"] = max(0, cust["balance"] - actual_redeem + earn)
     cust["spent"] += total
     cust["orders"] += 1
-    cust["last_order_ts"] = datetime.now().isoformat(timespec="seconds")
+    cust["last_order_ts"] = now_magadan().isoformat(timespec="seconds")
 
     # 3. Реферальная связь: серверной нет — берём из заказа (по факту покупки)
     referrer_id = cust.get("referred_by")
@@ -423,8 +431,8 @@ async def handle_web_app_order(message: types.Message):
             return
 
         if is_json:
-            order_id = raw_data.get("order_id") or raw_data.get("Order ID") or raw_data.get("id") or datetime.now().strftime("%M%S")
-            date_str = raw_data.get("date") or raw_data.get("Date") or datetime.now().strftime("%d.%m.%Y %H:%M")
+            order_id = raw_data.get("order_id") or raw_data.get("Order ID") or raw_data.get("id") or now_magadan().strftime("%M%S")
+            date_str = raw_data.get("date") or raw_data.get("Date") or now_magadan().strftime("%d.%m.%Y %H:%M")
             name = raw_data.get("name") or raw_data.get("Name") or "Не указано"
             phone = raw_data.get("phone") or raw_data.get("Phone") or "Не указан"
             delivery_type = raw_data.get("delivery") or raw_data.get("Delivery type") or "Самовывоз"
@@ -445,8 +453,8 @@ async def handle_web_app_order(message: types.Message):
             order_redeem = _safe_int(raw_data.get("redeem") or raw_data.get("bonusUsed"), 0)
             order_ref_id = str(raw_data.get("ref_id") or "0")
         else:
-            order_id = datetime.now().strftime("%M%S")
-            date_str = datetime.now().strftime("%d.%m.%Y %H:%M")
+            order_id = now_magadan().strftime("%M%S")
+            date_str = now_magadan().strftime("%d.%m.%Y %H:%M")
             name = message.from_user.first_name if message.from_user.first_name else "Не указано"
             phone = "Указан внутри текста"
             delivery_type = "Проверь текст ниже"
@@ -605,7 +613,7 @@ async def vpn_give_access(callback: types.CallbackQuery):
                 "uuid": uuid_val,
                 "email": email,
                 "expiry": datetime.fromtimestamp(expiry_ms / 1000).isoformat(timespec="seconds"),
-                "created": (rec.get("created") if rec else datetime.now().isoformat(timespec="seconds")),
+                "created": (rec.get("created") if rec else now_magadan().isoformat(timespec="seconds")),
                 "last_processed_order_id": order_id,
             }
             _save_json(VPN_SUBS_FILE, subs)
@@ -751,7 +759,7 @@ async def change_order_status(callback: types.CallbackQuery):
             _subs = _load_json(SUBSCRIBERS_FILE, {})
             if _cid not in _subs:
                 _name_val = _name_m.group(1).strip() if _name_m else ""
-                _subs[_cid] = {"name": _name_val, "username": "", "ts": datetime.now().isoformat(timespec="seconds")}
+                _subs[_cid] = {"name": _name_val, "username": "", "ts": now_magadan().isoformat(timespec="seconds")}
                 _save_json(SUBSCRIBERS_FILE, _subs)
         except Exception:
             pass
@@ -803,7 +811,7 @@ async def change_order_status(callback: types.CallbackQuery):
         if rec:
             receipt_items = rec.get("items") or "—"
             receipt_total = _fmt_money(rec.get("total") or total)
-            receipt_date = rec.get("created_at", datetime.now().isoformat())[:10]
+            receipt_date = rec.get("created_at", now_magadan().isoformat())[:10]
             receipt_text = (
                 f"🧾 <b>ВАШ ЧЕК — VAPEBAZAR PREMIUM</b>\n"
                 f"━━━━━━━━━━━━━━━━━━━━━━━━\n"
@@ -919,7 +927,7 @@ async def rate_order(callback: types.CallbackQuery):
     reviews[str(order_id)] = {
         "customer_id": str(customer_id),
         "score": score,
-        "ts": datetime.now().isoformat(timespec="seconds"),
+        "ts": now_magadan().isoformat(timespec="seconds"),
     }
     _save_json(REVIEWS_FILE, reviews)
 
@@ -1104,7 +1112,7 @@ async def cmd_vpn_subs(message: types.Message):
     if not subs:
         await message.answer("🛡️ VPN-подписок пока нет.")
         return
-    now = datetime.now()
+    now = now_magadan()
     lines = ["🛡️ <b>VPN-подписки</b>", "━━━━━━━━━━━━━━━━━━━━━━━━"]
     # сортируем по сроку окончания (кто раньше истекает — выше)
     for cid, rec in sorted(subs.items(), key=lambda kv: kv[1].get("expiry", "")):
@@ -1128,7 +1136,7 @@ async def cmd_stats(message: types.Message):
         return
     orders = _load_json(ORDERS_FILE, [])
     subs = _load_json(SUBSCRIBERS_FILE, {})
-    now = datetime.now()
+    now = now_magadan()
     today = now.date()
     week_ago = now - timedelta(days=7)
 
@@ -1170,7 +1178,7 @@ async def cmd_api_analytics(message: types.Message):
         return
 
     orders = _load_json(ORDERS_FILE, [])
-    now = datetime.now()
+    now = now_magadan()
     start_date = now - timedelta(days=30)
 
     def _created(o):
@@ -1254,7 +1262,7 @@ async def cmd_api_daily(message: types.Message):
         return
 
     orders = _load_json(ORDERS_FILE, [])
-    now = datetime.now()
+    now = now_magadan()
     start_date = now - timedelta(days=30)
 
     def _created(o):
@@ -1298,7 +1306,7 @@ async def cmd_api_vpn(message: types.Message):
         return
 
     vpn_subs = _load_json(VPN_SUBS_FILE, {})
-    now = datetime.now()
+    now = now_magadan()
 
     active = []
     expiring = []
@@ -1712,7 +1720,7 @@ async def cmd_export(message: types.Message):
         row = {f: str(o.get(f, "")).replace("\n", " | ") for f in fields}
         writer.writerow(row)
     csv_bytes = ("﻿" + output.getvalue()).encode("utf-8")  # BOM для Excel
-    fname = f"orders_{datetime.now().strftime('%Y%m%d_%H%M')}.csv"
+    fname = f"orders_{now_magadan().strftime('%Y%m%d_%H%M')}.csv"
     doc = types.BufferedInputFile(csv_bytes, filename=fname)
     await message.answer_document(doc, caption=f"📁 Экспорт <b>{len(orders)}</b> заказов")
 
@@ -1741,7 +1749,7 @@ async def cmd_birthday(message: types.Message):
     subs = _load_json(SUBSCRIBERS_FILE, {})
     uid = str(message.from_user.id)
     if uid not in subs:
-        subs[uid] = {"name": message.from_user.first_name or "", "username": message.from_user.username or "", "ts": datetime.now().isoformat(timespec="seconds")}
+        subs[uid] = {"name": message.from_user.first_name or "", "username": message.from_user.username or "", "ts": now_magadan().isoformat(timespec="seconds")}
     subs[uid]["birthday"] = formatted
     _save_json(SUBSCRIBERS_FILE, subs)
     await message.answer(f"🎂 День рождения сохранён: <b>{formatted}</b>\nВ этот день тебя ждёт подарок от VAPEBAZAR! 🎁")
@@ -1816,9 +1824,8 @@ async def fallback_any_message(message: types.Message):
         await message.answer(faq_answer, reply_markup=get_main_keyboard())
         return
 
-    # #25 — Автоответ вне рабочего времени (Магадан UTC+10)
-    MAGADAN = timezone(timedelta(hours=10))
-    now_local = datetime.now(MAGADAN)
+    # #25 — Автоответ вне рабочего времени (Магадан UTC+11)
+    now_local = now_magadan()
     if now_local.hour < SHOP_OPEN_HOUR or now_local.hour >= SHOP_CLOSE_HOUR:
         opens_at = f"{SHOP_OPEN_HOUR:02d}:00"
         await message.answer(
@@ -1853,7 +1860,7 @@ async def birthday_check_loop():
     """Ежедневно проверяет дни рождения и начисляет +100 баллов."""
     while True:
         try:
-            now = datetime.now()
+            now = now_magadan()
             today_str = f"{now.day:02d}.{now.month:02d}"
             subs = _load_json(SUBSCRIBERS_FILE, {})
             changed = False
@@ -1888,7 +1895,7 @@ async def birthday_check_loop():
         except Exception as e:
             logger.error(f"Birthday loop error: {e}")
         # Следующий запуск в 10:00 следующего дня
-        now = datetime.now()
+        now = now_magadan()
         tomorrow = (now + timedelta(days=1)).replace(hour=10, minute=0, second=0, microsecond=0)
         await asyncio.sleep((tomorrow - now).total_seconds())
 
@@ -1898,7 +1905,7 @@ async def smart_reminder_loop():
     await asyncio.sleep(3600)  # первый запуск через час после старта бота
     while True:
         try:
-            now = datetime.now()
+            now = now_magadan()
             cutoff = now - timedelta(days=14)
             data = _load_bonuses()
             for uid, u in data["users"].items():
@@ -1949,7 +1956,7 @@ async def vpn_expiry_reminder_loop():
     await asyncio.sleep(1800)  # первый запуск через полчаса после старта бота
     while True:
         try:
-            now = datetime.now()
+            now = now_magadan()
             subs = _load_json(VPN_SUBS_FILE, {})
             changed = False
             for uid, rec in subs.items():
@@ -2001,9 +2008,8 @@ async def vpn_expiry_reminder_loop():
 
 async def weekly_digest_loop():
     """Каждый понедельник в 9:00 по Магадану шлёт админам сводку за неделю."""
-    MAGADAN = timezone(timedelta(hours=10))
     while True:
-        now = datetime.now(MAGADAN)
+        now = now_magadan()
         days_ahead = (0 - now.weekday()) % 7  # 0 = понедельник
         if days_ahead == 0 and now.hour >= 9:
             days_ahead = 7
@@ -2017,7 +2023,7 @@ async def weekly_digest_loop():
 
 async def send_weekly_digest():
     """Считает выручку/топ товаров/VPN за последние 7 дней и шлёт всем админам."""
-    now = datetime.now()
+    now = now_magadan()
     week_ago = now - timedelta(days=7)
 
     orders = _load_json(ORDERS_FILE, [])
