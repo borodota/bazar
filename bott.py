@@ -400,13 +400,35 @@ def get_main_keyboard():
     web_app_url = "https://borodota.github.io/bazar/"
     return ReplyKeyboardMarkup(
         keyboard=[
-            [KeyboardButton(text="📱 Открыть Магазин / Корзину", web_app=types.WebAppInfo(url=web_app_url))],
-            [KeyboardButton(text="💎 Мои баллы"), KeyboardButton(text="🎁 Пригласить друга")],
-            [KeyboardButton(text="🛍️ Мои заказы"), KeyboardButton(text="📞 Контакты")],
-            [KeyboardButton(text="ℹ️ О магазине")]
+            [KeyboardButton(text="🛍️ Открыть Магазин", web_app=types.WebAppInfo(url=web_app_url))],
+            [KeyboardButton(text="💎 Баллы"), KeyboardButton(text="👑 VIP"), KeyboardButton(text="🎁 Рефереллы")],
+            [KeyboardButton(text="🏆 Бейджи"), KeyboardButton(text="🎯 Скидки"), KeyboardButton(text="🎂 День рождения")],
+            [KeyboardButton(text="🎪 Вызовы"), KeyboardButton(text="❓ FAQ"), KeyboardButton(text="📦 Мои заказы")],
+            [KeyboardButton(text="📞 Контакты")]
         ],
         resize_keyboard=True
     )
+
+def get_features_menu():
+    """Меню с инлайн кнопками для фич"""
+    return InlineKeyboardMarkup(inline_keyboard=[
+        [
+            InlineKeyboardButton(text="💎 Баллы (/bonus)", callback_data="cmd_bonus"),
+            InlineKeyboardButton(text="👑 VIP (/vip)", callback_data="cmd_vip")
+        ],
+        [
+            InlineKeyboardButton(text="🏆 Бейджи (/badges)", callback_data="cmd_badges"),
+            InlineKeyboardButton(text="🎯 Скидки (/discount)", callback_data="cmd_discount")
+        ],
+        [
+            InlineKeyboardButton(text="🎁 Рефереллы (/ref)", callback_data="cmd_ref"),
+            InlineKeyboardButton(text="🎪 Вызовы (/challenges)", callback_data="cmd_challenges")
+        ],
+        [
+            InlineKeyboardButton(text="❓ FAQ (/faq)", callback_data="cmd_faq"),
+            InlineKeyboardButton(text="🎂 День рождения (/birthday)", callback_data="cmd_birthday")
+        ]
+    ])
 
 @dp.message(F.web_app_data)
 async def handle_web_app_order(message: types.Message):
@@ -1086,17 +1108,14 @@ async def cmd_start(message: types.Message):
         except Exception as e:
             logger.error(f"Не удалось записать реферала из /start: {e}")
     await message.answer(
-        f"Привет, {message.from_user.first_name}! Добро пожаловать в магазин <b>VAPEBAZAR PREMIUM</b>.\n\n"
-        f"Нажми кнопку ниже, чтобы войти в каталог 🛍️\n\n"
-        f"<b>Полезные команды:</b>\n"
-        f"├ /ref — реферальная ссылка и статистика\n"
-        f"├ /vip — статус VIP подписки\n"
-        f"├ /badges — твои достижения\n"
-        f"├ /discount — текущие скидки и бонусы\n"
-        f"├ /challenges — ежемесячные вызовы\n"
-        f"├ /faq — часто задаваемые вопросы\n"
-        f"├ /bonus — баланс баллов\n"
-        f"└ /birthday — сохранить день рождения",
+        f"Привет, {message.from_user.first_name}! 👋\n\n"
+        f"Добро пожаловать в <b>VAPEBAZAR PREMIUM</b> 💜\n\n"
+        f"Нажми кнопки ниже чтобы посмотреть статус и управлять скидками:",
+        reply_markup=get_features_menu()
+    )
+
+    await message.answer(
+        f"<b>Основное меню:</b>",
         reply_markup=get_main_keyboard()
     )
     if message.from_user.id in ADMINS:
@@ -2214,6 +2233,109 @@ async def cmd_restock(message: types.Message):
         notify_reqs.pop(key, None)
     _save_json(NOTIFY_FILE, notify_reqs)
     await message.answer(f"✅ Отправлено: {sent}, не доставлено: {failed}")
+
+
+# ═════════════════════════════════════════════════════════════════════════════
+# ИНЛАЙН КНОПКИ МЕНЮ (cmd_bonus, cmd_vip, и т.д.)
+# ═════════════════════════════════════════════════════════════════════════════
+
+@dp.callback_query(lambda c: c.data.startswith("cmd_"))
+async def handle_menu_buttons(callback: types.CallbackQuery):
+    """Обработчик инлайн кнопок меню"""
+    uid = callback.from_user.id
+
+    # Инлайн кнопки для быстрого доступа к командам
+    cmd_map = {
+        "cmd_bonus": cmd_bonus,
+        "cmd_vip": cmd_vip,
+        "cmd_badges": cmd_badges,
+        "cmd_discount": cmd_discount,
+        "cmd_ref": cmd_ref,
+        "cmd_challenges": cmd_challenges,
+        "cmd_faq": cmd_faq,
+        "cmd_birthday": cmd_birthday,
+    }
+
+    cmd_name = callback.data
+    if cmd_name in cmd_map:
+        # Создаём fake message object для вызова функции команды
+        fake_msg = types.Message(
+            message_id=0,
+            date=0,
+            chat=types.Chat(id=uid, type="private"),
+            from_user=callback.from_user,
+            text=f"/{cmd_name.replace('cmd_', '')}"
+        )
+        try:
+            await cmd_map[cmd_name](fake_msg)
+        except Exception as e:
+            logger.error(f"Error in menu button {cmd_name}: {e}")
+            await callback.answer("❌ Ошибка при выполнении команды", show_alert=True)
+
+    await callback.answer()
+
+
+# ── ОБРАБОТЧИК ТЕКСТОВЫХ КНОПОК ──
+@dp.message(F.text)
+async def handle_text_buttons(message: types.Message):
+    """Обработчик текстовых кнопок главного меню"""
+    remember_user(message.from_user)
+    text = message.text or ""
+
+    # Маппирование текстовых кнопок на команды
+    button_map = {
+        "💎 Баллы": "/bonus",
+        "👑 VIP": "/vip",
+        "🏆 Бейджи": "/badges",
+        "🎯 Скидки": "/discount",
+        "🎁 Рефереллы": "/ref",
+        "🎪 Вызовы": "/challenges",
+        "❓ FAQ": "/faq",
+        "🎂 День рождения": "/birthday",
+        "📦 Мои заказы": "/orders",
+        "📞 Контакты": "/contacts",
+    }
+
+    if text in button_map:
+        # Создаём fake message с командой
+        fake_msg = types.Message(
+            message_id=0,
+            date=0,
+            chat=types.Chat(id=message.from_user.id, type="private"),
+            from_user=message.from_user,
+            text=button_map[text]
+        )
+        # Перенаправляем на обработчик команды
+        if button_map[text] == "/bonus":
+            await cmd_bonus(fake_msg)
+        elif button_map[text] == "/vip":
+            await cmd_vip(fake_msg)
+        elif button_map[text] == "/badges":
+            await cmd_badges(fake_msg)
+        elif button_map[text] == "/discount":
+            await cmd_discount(fake_msg)
+        elif button_map[text] == "/ref":
+            await cmd_ref(fake_msg)
+        elif button_map[text] == "/challenges":
+            await cmd_challenges(fake_msg)
+        elif button_map[text] == "/faq":
+            await cmd_faq(fake_msg)
+        elif button_map[text] == "/birthday":
+            await cmd_birthday(fake_msg)
+        elif button_map[text] == "/orders":
+            await show_my_orders(fake_msg)
+        elif button_map[text] == "/contacts":
+            await message.answer(
+                f"📞 <b>Контакты VAPEBAZAR</b>\n\n"
+                f"📱 Telegram: @{MANAGER_USERNAME}\n"
+                f"🕐 Работаем ежедневно 10:00-22:00 (МСК+8)\n"
+                f"❓ Вопросы: /faq или напиши в чат",
+                reply_markup=get_main_keyboard()
+            )
+        return
+
+    # Если не кнопка - продолжаем в fallback_any_message
+    await fallback_any_message(message)
 
 
 # Ловит всё остальное — регистрируется последним, чтобы не перехватывать другие хэндлеры.
