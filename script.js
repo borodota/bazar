@@ -2791,6 +2791,100 @@ window.preloadImages = function(urls) {
     });
 };
 
+// ── GUIDE / TUTORIAL ДЛЯ НОВЫХ ПОЛЬЗОВАТЕЛЕЙ ──
+window.showOnboardingGuide = function() {
+    // Показываем гайд только при первом визите
+    const hasSeenGuide = localStorage.getItem('vapeSeenGuide');
+    if (hasSeenGuide) return;
+
+    const guide = document.createElement('div');
+    guide.className = 'onboarding-guide';
+    guide.innerHTML = `
+        <div class="onboarding-overlay"></div>
+        <div class="onboarding-container">
+            <button class="onboarding-close" onclick="this.closest('.onboarding-guide').remove();localStorage.setItem('vapeSeenGuide','1')">✕</button>
+            <div class="onboarding-steps">
+                <div class="onboarding-step active" data-step="1">
+                    <div class="onboarding-emoji">🛍️</div>
+                    <h2>Добро пожаловать в VAPEBAZAR!</h2>
+                    <p>Выбирай товары, собирай баллы и становись VIP. Начни с каталога →</p>
+                </div>
+                <div class="onboarding-step" data-step="2">
+                    <div class="onboarding-emoji">💎</div>
+                    <h2>Копи баллы</h2>
+                    <p><b>+5%</b> баллов за каждый заказ. Минимум 100 баллов = 100₽ скидка</p>
+                </div>
+                <div class="onboarding-step" data-step="3">
+                    <div class="onboarding-emoji">👑</div>
+                    <h2>Стань VIP</h2>
+                    <p>Сделай 10 заказов = VIP бесплатно. Или 299₽/месяц. Скидка -5% на всё!</p>
+                </div>
+                <div class="onboarding-step" data-step="4">
+                    <div class="onboarding-emoji">🎁</div>
+                    <h2>Приглаши друзей</h2>
+                    <p>По реф. ссылке: друг получит -50₽, ты получишь +200 баллов</p>
+                </div>
+            </div>
+            <div class="onboarding-nav">
+                <button class="onboarding-prev" onclick="window._guidePrev()">← Назад</button>
+                <div class="onboarding-dots">
+                    <span class="dot active" data-step="1" onclick="window._guideGo(1)"></span>
+                    <span class="dot" data-step="2" onclick="window._guideGo(2)"></span>
+                    <span class="dot" data-step="3" onclick="window._guideGo(3)"></span>
+                    <span class="dot" data-step="4" onclick="window._guideGo(4)"></span>
+                </div>
+                <button class="onboarding-next" onclick="window._guideNext()">Далее →</button>
+            </div>
+            <button class="onboarding-done" onclick="this.closest('.onboarding-guide').remove();localStorage.setItem('vapeSeenGuide','1')">Начать!</button>
+        </div>
+    `;
+
+    document.body.appendChild(guide);
+    requestAnimationFrame(() => guide.classList.add('active'));
+
+    window._currentGuideStep = 1;
+};
+
+window._guideNext = function() {
+    if (window._currentGuideStep < 4) {
+        window._guideGo(window._currentGuideStep + 1);
+    }
+};
+
+window._guidePrev = function() {
+    if (window._currentGuideStep > 1) {
+        window._guideGo(window._currentGuideStep - 1);
+    }
+};
+
+window._guideGo = function(step) {
+    const guide = document.querySelector('.onboarding-guide');
+    if (!guide) return;
+
+    guide.querySelectorAll('.onboarding-step').forEach(s => s.classList.remove('active'));
+    guide.querySelectorAll('.onboarding-step[data-step="' + step + '"]').forEach(s => s.classList.add('active'));
+
+    guide.querySelectorAll('.dot').forEach(d => d.classList.remove('active'));
+    guide.querySelectorAll('.dot[data-step="' + step + '"]').forEach(d => d.classList.add('active'));
+
+    window._currentGuideStep = step;
+};
+
+// ── TIPS И TOOLTIPS ──
+window.showTip = function(text, duration = 3000) {
+    const tip = document.createElement('div');
+    tip.className = 'floating-tip';
+    tip.innerHTML = `<div class="tip-icon">💡</div><div class="tip-text">${text}</div>`;
+    document.body.appendChild(tip);
+
+    requestAnimationFrame(() => tip.classList.add('show'));
+
+    setTimeout(() => {
+        tip.classList.remove('show');
+        setTimeout(() => tip.remove(), 300);
+    }, duration);
+};
+
 // Инициализация интерактивных функций при загрузке
 document.addEventListener('DOMContentLoaded', () => {
     window.initImageZoom();
@@ -2798,4 +2892,6 @@ document.addEventListener('DOMContentLoaded', () => {
     // Preload избранные товары
     const featured = window.products.filter(p => ["pod_aegis_hero_5", "pod_xros_5_mini", "dis_lost_mary_30000", "liq_anarhia_v2_brand"].includes(p.id));
     window.preloadImages(featured.map(p => p.imageUrl));
+    // Показать гайд для новых пользователей
+    window.showOnboardingGuide();
 });

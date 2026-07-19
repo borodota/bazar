@@ -2213,39 +2213,72 @@ async def fallback_any_message(message: types.Message):
 
 
 async def birthday_check_loop():
-    """Ежедневно проверяет дни рождения и начисляет +100 баллов."""
+    """Ежедневно проверяет дни рождения и начисляет +100 баллов. Напоминает за неделю."""
     while True:
         try:
             now = now_magadan()
             today_str = f"{now.day:02d}.{now.month:02d}"
+            week_ahead = (now + timedelta(days=7)).strftime("%d.%m")
             subs = _load_json(SUBSCRIBERS_FILE, {})
             changed = False
+
             for uid, data in subs.items():
-                if data.get("birthday") != today_str:
+                birthday = data.get("birthday")
+                if not birthday:
                     continue
-                if data.get("last_birthday_bonus") == now.year:
-                    continue
-                async with _bonus_lock:
-                    bonuses = _load_bonuses()
-                    u = _ensure_user(bonuses, uid)
-                    u["balance"] += 100
-                    _save_bonuses(bonuses)
-                subs[uid]["last_birthday_bonus"] = now.year
-                changed = True
-                name = data.get("name") or "друг"
-                try:
-                    await bot.send_message(
-                        chat_id=int(uid),
-                        text=(
-                            f"🎂 <b>С Днём Рождения, {name}!</b>\n\n"
-                            f"Вся команда VAPEBAZAR поздравляет тебя! 🥳\n"
-                            f"В подарок — <b>+100 баллов</b> на твой счёт 💎\n\n"
-                            f"Трать с удовольствием 💜"
-                        ),
-                        reply_markup=get_main_keyboard()
-                    )
-                except Exception as e:
-                    logger.error(f"Birthday message failed for {uid}: {e}")
+
+                # ── Напоминание за неделю ──
+                if birthday == week_ahead:
+                    reminder_sent_key = f"birthday_reminder_week_{now.year}"
+                    if data.get(reminder_sent_key) != now.year:
+                        name = data.get("name") or "друг"
+                        try:
+                            await bot.send_message(
+                                chat_id=int(uid),
+                                text=(
+                                    f"🎂 <b>Через неделю День Рождения!</b>\n\n"
+                                    f"Привет, {name}! 👋\n"
+                                    f"Через 7 дней у тебя День Рождения 🎉\n\n"
+                                    f"Подготовь свой заказ — в день рождения ты получишь:\n"
+                                    f"├ <b>-30%</b> скидку на любой товар\n"
+                                    f"├ <b>+100 баллов</b> в подарок\n"
+                                    f"└ <b>Бесплатная доставка</b>\n\n"
+                                    f"Спеши, предложение действует только в этот день! 💜"
+                                ),
+                                reply_markup=get_main_keyboard()
+                            )
+                            subs[uid][reminder_sent_key] = now.year
+                            changed = True
+                        except Exception as e:
+                            logger.error(f"Birthday reminder (week before) failed for {uid}: {e}")
+
+                # ── День рождения — начисляем баллы ──
+                if birthday == today_str:
+                    if data.get("last_birthday_bonus") == now.year:
+                        continue
+                    async with _bonus_lock:
+                        bonuses = _load_bonuses()
+                        u = _ensure_user(bonuses, uid)
+                        u["balance"] += 100
+                        _save_bonuses(bonuses)
+                    subs[uid]["last_birthday_bonus"] = now.year
+                    changed = True
+                    name = data.get("name") or "друг"
+                    try:
+                        await bot.send_message(
+                            chat_id=int(uid),
+                            text=(
+                                f"🎂 <b>С Днём Рождения, {name}!</b>\n\n"
+                                f"Вся команда VAPEBAZAR поздравляет тебя! 🥳\n"
+                                f"В подарок — <b>+100 баллов</b> на твой счёт 💎\n\n"
+                                f"<b>Ещё подарок:</b> -30% на любой товар в этот день! 🎁\n\n"
+                                f"Спеши, скидка действует только сегодня 💜"
+                            ),
+                            reply_markup=get_main_keyboard()
+                        )
+                    except Exception as e:
+                        logger.error(f"Birthday message failed for {uid}: {e}")
+
             if changed:
                 _save_json(SUBSCRIBERS_FILE, subs)
         except Exception as e:
