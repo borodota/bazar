@@ -1,0 +1,720 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>VAPEBAZAR Admin Dashboard 2.0</title>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    html { scroll-behavior: smooth; }
+    body {
+      background: linear-gradient(135deg, #0d0d0f 0%, #1a1a1e 100%);
+      color: #e8e8e8;
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+      min-height: 100vh;
+    }
+
+    /* Layout */
+    .container { display: grid; grid-template-columns: 280px 1fr; gap: 0; min-height: 100vh; }
+    .sidebar {
+      background: rgba(0, 0, 0, 0.3);
+      border-right: 1px solid rgba(255, 255, 255, 0.05);
+      padding: 24px 16px;
+      position: sticky;
+      top: 0;
+      overflow-y: auto;
+      max-height: 100vh;
+    }
+    .main { padding: 32px; overflow-y: auto; }
+
+    /* Sidebar */
+    .logo { font-size: 20px; font-weight: 900; color: #00f07c; margin-bottom: 32px; letter-spacing: 0.05em; }
+    .nav { display: flex; flex-direction: column; gap: 8px; }
+    .nav-item {
+      padding: 12px 16px;
+      border-radius: 10px;
+      cursor: pointer;
+      font-size: 14px;
+      font-weight: 500;
+      transition: all 0.2s;
+      border: 1px solid transparent;
+      color: rgba(255, 255, 255, 0.6);
+    }
+    .nav-item:hover { background: rgba(255, 255, 255, 0.05); color: #e8e8e8; }
+    .nav-item.active {
+      background: rgba(0, 240, 124, 0.15);
+      border-color: rgba(0, 240, 124, 0.4);
+      color: #00f07c;
+    }
+
+    /* Header */
+    .header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 32px; }
+    .header h1 { font-size: 28px; font-weight: 900; }
+    .header-controls { display: flex; gap: 12px; }
+
+    /* Tabs */
+    .tabs { display: flex; gap: 8px; margin-bottom: 24px; border-bottom: 1px solid rgba(255, 255, 255, 0.05); }
+    .tab-btn {
+      padding: 12px 20px;
+      border: none;
+      background: none;
+      color: rgba(255, 255, 255, 0.5);
+      cursor: pointer;
+      font-size: 14px;
+      font-weight: 600;
+      border-bottom: 2px solid transparent;
+      transition: all 0.2s;
+      position: relative;
+      top: 1px;
+    }
+    .tab-btn.active {
+      color: #00f07c;
+      border-bottom-color: #00f07c;
+    }
+    .tab-btn:hover { color: #e8e8e8; }
+
+    /* Cards */
+    .card {
+      background: rgba(255, 255, 255, 0.04);
+      border: 1px solid rgba(255, 255, 255, 0.08);
+      border-radius: 16px;
+      padding: 20px;
+      margin-bottom: 16px;
+      transition: all 0.2s;
+    }
+    .card:hover { background: rgba(255, 255, 255, 0.06); border-color: rgba(255, 255, 255, 0.12); }
+
+    /* Grid */
+    .grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+      gap: 16px;
+      margin-bottom: 24px;
+    }
+
+    /* Stat Card */
+    .stat-card {
+      background: linear-gradient(135deg, rgba(0, 240, 124, 0.1) 0%, rgba(0, 200, 100, 0.05) 100%);
+      border: 1px solid rgba(0, 240, 124, 0.2);
+      border-radius: 12px;
+      padding: 20px;
+      text-align: center;
+    }
+    .stat-label { font-size: 12px; color: rgba(255, 255, 255, 0.5); text-transform: uppercase; letter-spacing: 0.05em; }
+    .stat-value { font-size: 28px; font-weight: 900; color: #00f07c; margin-top: 8px; }
+    .stat-subtext { font-size: 12px; color: rgba(255, 255, 255, 0.3); margin-top: 4px; }
+
+    /* Chart Container */
+    .chart-container {
+      position: relative;
+      width: 100%;
+      height: 300px;
+      background: rgba(0, 0, 0, 0.2);
+      border-radius: 12px;
+      padding: 16px;
+      border: 1px solid rgba(255, 255, 255, 0.05);
+    }
+
+    /* Table */
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 13px;
+    }
+    th {
+      text-align: left;
+      padding: 12px 16px;
+      background: rgba(0, 0, 0, 0.2);
+      border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+      font-weight: 600;
+      color: rgba(255, 255, 255, 0.6);
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+      font-size: 11px;
+    }
+    td {
+      padding: 12px 16px;
+      border-bottom: 1px solid rgba(255, 255, 255, 0.03);
+    }
+    tr:hover { background: rgba(255, 255, 255, 0.02); }
+
+    /* Buttons */
+    .btn {
+      padding: 10px 16px;
+      border-radius: 8px;
+      border: none;
+      cursor: pointer;
+      font-size: 13px;
+      font-weight: 600;
+      transition: all 0.2s;
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+    }
+    .btn-primary {
+      background: rgba(0, 240, 124, 0.15);
+      border: 1.5px solid rgba(0, 240, 124, 0.4);
+      color: #00f07c;
+    }
+    .btn-primary:hover { background: rgba(0, 240, 124, 0.25); }
+    .btn-secondary {
+      background: rgba(255, 255, 255, 0.06);
+      border: 1px solid rgba(255, 255, 255, 0.1);
+      color: rgba(255, 255, 255, 0.7);
+    }
+    .btn-secondary:hover { background: rgba(255, 255, 255, 0.1); }
+
+    /* Badge */
+    .badge {
+      display: inline-block;
+      padding: 4px 10px;
+      border-radius: 20px;
+      font-size: 11px;
+      font-weight: 700;
+    }
+    .badge-green { background: rgba(0, 240, 124, 0.15); color: #00f07c; }
+    .badge-red { background: rgba(255, 60, 60, 0.15); color: #ff6b6b; }
+    .badge-yellow { background: rgba(255, 180, 0, 0.15); color: #ffd700; }
+
+    /* Modal */
+    .modal {
+      display: none;
+      position: fixed;
+      top: 0;
+      left: 0;
+      right: 0;
+      bottom: 0;
+      background: rgba(0, 0, 0, 0.5);
+      z-index: 1000;
+      align-items: center;
+      justify-content: center;
+    }
+    .modal.active { display: flex; }
+    .modal-content {
+      background: #1a1a1e;
+      border: 1px solid rgba(255, 255, 255, 0.1);
+      border-radius: 16px;
+      padding: 32px;
+      max-width: 500px;
+      width: 90%;
+      max-height: 90vh;
+      overflow-y: auto;
+    }
+    .modal-header { font-size: 20px; font-weight: 900; margin-bottom: 16px; }
+    .modal-body { font-size: 14px; line-height: 1.6; margin-bottom: 24px; }
+    .modal-footer { display: flex; gap: 12px; justify-content: flex-end; }
+
+    /* Loading */
+    .loading { color: rgba(255, 255, 255, 0.4); font-size: 14px; text-align: center; padding: 20px; }
+    .spinner {
+      display: inline-block;
+      width: 20px;
+      height: 20px;
+      border: 2px solid rgba(0, 240, 124, 0.2);
+      border-top-color: #00f07c;
+      border-radius: 50%;
+      animation: spin 0.8s linear infinite;
+    }
+    @keyframes spin { to { transform: rotate(360deg); } }
+
+    /* Responsive */
+    @media (max-width: 1024px) {
+      .container { grid-template-columns: 1fr; }
+      .sidebar { display: none; }
+    }
+  </style>
+</head>
+<body>
+
+<div class="container">
+  <!-- Sidebar -->
+  <div class="sidebar">
+    <div class="logo">💨 VAPEBAZAR</div>
+    <nav class="nav">
+      <div class="nav-item active" onclick="switchPage('dashboard')">📊 Dashboard</div>
+      <div class="nav-item" onclick="switchPage('customers')">👥 Клиенты</div>
+      <div class="nav-item" onclick="switchPage('products')">📦 Товары</div>
+      <div class="nav-item" onclick="switchPage('vpn')">🛡️ VPN</div>
+      <div class="nav-item" onclick="switchPage('manage')">⚙️ Управление</div>
+    </nav>
+  </div>
+
+  <!-- Main Content -->
+  <div class="main">
+    <div class="header">
+      <div>
+        <h1 id="pageTitle">📊 Dashboard</h1>
+        <p style="color: rgba(255, 255, 255, 0.4); font-size: 13px; margin-top: 4px;">Последние 30 дней</p>
+      </div>
+      <div class="header-controls">
+        <button class="btn btn-secondary" onclick="refreshData()">🔄 Обновить</button>
+        <button class="btn btn-primary" onclick="toggleSettings()">⚙️ Настройки</button>
+      </div>
+    </div>
+
+    <!-- Dashboard Tab -->
+    <div id="dashboard" class="tab-content">
+      <!-- Stats Cards -->
+      <div class="grid">
+        <div class="stat-card">
+          <div class="stat-label">Всего заказов</div>
+          <div class="stat-value" id="stat-orders">—</div>
+          <div class="stat-subtext" id="stat-orders-change"></div>
+        </div>
+        <div class="stat-card">
+          <div class="stat-label">Выручка</div>
+          <div class="stat-value" id="stat-revenue" style="font-size: 24px;">—</div>
+          <div class="stat-subtext" id="stat-revenue-change"></div>
+        </div>
+        <div class="stat-card">
+          <div class="stat-label">Средний чек</div>
+          <div class="stat-value" id="stat-avg-check" style="font-size: 24px;">—</div>
+          <div class="stat-subtext">по заказам</div>
+        </div>
+        <div class="stat-card">
+          <div class="stat-label">Активных клиентов</div>
+          <div class="stat-value" id="stat-customers">—</div>
+          <div class="stat-subtext">покупали за 30 дней</div>
+        </div>
+      </div>
+
+      <!-- Chart -->
+      <div class="card">
+        <h2 style="margin-bottom: 16px;">📈 Выручка по дням</h2>
+        <div class="chart-container">
+          <canvas id="revenueChart"></canvas>
+        </div>
+      </div>
+
+      <!-- Top Products -->
+      <div class="card">
+        <h2 style="margin-bottom: 16px;">🏆 Топ товаров</h2>
+        <table>
+          <thead>
+            <tr>
+              <th>Товар</th>
+              <th style="text-align: right;">Продано</th>
+            </tr>
+          </thead>
+          <tbody id="topProductsTable">
+            <tr><td colspan="2" class="loading">Загрузка...</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+
+    <!-- Customers Tab -->
+    <div id="customers" class="tab-content" style="display: none;">
+      <div class="card">
+        <h2 style="margin-bottom: 16px;">👥 Топ клиентов (по потратам)</h2>
+        <table>
+          <thead>
+            <tr>
+              <th>ID</th>
+              <th style="text-align: right;">Заказов</th>
+              <th style="text-align: right;">Потратил</th>
+            </tr>
+          </thead>
+          <tbody id="topCustomersTable">
+            <tr><td colspan="3" class="loading">Загрузка...</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+
+    <!-- Products Tab -->
+    <div id="products" class="tab-content" style="display: none;">
+      <div class="card">
+        <h2 style="margin-bottom: 16px;">📊 Статистика товаров</h2>
+        <p style="color: rgba(255, 255, 255, 0.5); margin-bottom: 16px;">Анализ популярности и продаж за последние 30 дней</p>
+        <div id="productStats"></div>
+      </div>
+    </div>
+
+    <!-- VPN Tab -->
+    <div id="vpn" class="tab-content" style="display: none;">
+      <div class="grid">
+        <div class="stat-card">
+          <div class="stat-label">Активных подписок</div>
+          <div class="stat-value" id="vpn-active">—</div>
+        </div>
+        <div class="stat-card">
+          <div class="stat-label">Истекают скоро</div>
+          <div class="stat-value" id="vpn-expiring">—</div>
+        </div>
+        <div class="stat-card">
+          <div class="stat-label">Истекли</div>
+          <div class="stat-value" id="vpn-expired">—</div>
+        </div>
+      </div>
+
+      <div class="card">
+        <h2 style="margin-bottom: 16px;">⏰ Истекают в ближайшие 7 дней</h2>
+        <table>
+          <thead>
+            <tr>
+              <th>Email</th>
+              <th style="text-align: right;">Дней осталось</th>
+            </tr>
+          </thead>
+          <tbody id="expiringVpnTable">
+            <tr><td colspan="2" class="loading">Загрузка...</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+
+    <!-- Manage Tab -->
+    <div id="manage" class="tab-content" style="display: none;">
+      <div class="card">
+        <h2 style="margin-bottom: 16px;">📣 Рассылка</h2>
+        <textarea id="broadcastText" placeholder="Текст рассылки…" style="
+          width: 100%;
+          background: rgba(255, 255, 255, 0.05);
+          border: 1px solid rgba(255, 255, 255, 0.1);
+          border-radius: 10px;
+          padding: 12px;
+          font-family: inherit;
+          font-size: 14px;
+          color: #e8e8e8;
+          resize: vertical;
+          min-height: 100px;
+          margin-bottom: 12px;
+        "></textarea>
+        <div style="display: flex; gap: 12px;">
+          <button class="btn btn-primary" onclick="doBroadcast('all')">📣 Всем</button>
+          <button class="btn btn-secondary" onclick="doBroadcast('buyers')">🎯 Только покупателям</button>
+        </div>
+      </div>
+
+      <div class="card">
+        <h2 style="margin-bottom: 16px;">🔧 Другие функции</h2>
+        <div style="display: flex; flex-direction: column; gap: 8px;">
+          <button class="btn btn-secondary" onclick="sendCmd('/stats')">📊 Статистика</button>
+          <button class="btn btn-secondary" onclick="sendCmd('/orders')">📋 Заказы</button>
+          <button class="btn btn-secondary" onclick="sendCmd('/export')">📥 Экспорт CSV</button>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Settings Modal -->
+<div id="settingsModal" class="modal">
+  <div class="modal-content">
+    <div class="modal-header">Настройки</div>
+    <div class="modal-body">
+      <div style="margin-bottom: 16px;">
+        <label style="display: block; margin-bottom: 8px; font-size: 12px; color: rgba(255, 255, 255, 0.5);">
+          Telegram Bot Username
+        </label>
+        <input type="text" id="botUsername" style="
+          width: 100%;
+          background: rgba(255, 255, 255, 0.05);
+          border: 1px solid rgba(255, 255, 255, 0.1);
+          border-radius: 8px;
+          padding: 10px;
+          color: #e8e8e8;
+        " value="vapebazar_bot">
+      </div>
+      <div>
+        <label style="display: block; margin-bottom: 8px; font-size: 12px; color: rgba(255, 255, 255, 0.5);">
+          Refresh Interval (сек)
+        </label>
+        <input type="number" id="refreshInterval" style="
+          width: 100%;
+          background: rgba(255, 255, 255, 0.05);
+          border: 1px solid rgba(255, 255, 255, 0.1);
+          border-radius: 8px;
+          padding: 10px;
+          color: #e8e8e8;
+        " value="60" min="10" max="600">
+      </div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-secondary" onclick="closeSettings()">Отмена</button>
+      <button class="btn btn-primary" onclick="saveSettings()">Сохранить</button>
+    </div>
+  </div>
+</div>
+
+<script>
+// ────────────────────────────────────────────────────────────────────────────
+// Глобальное состояние
+// ────────────────────────────────────────────────────────────────────────────
+let analyticsData = null;
+let dailyData = null;
+let vpnData = null;
+let currentPage = 'dashboard';
+let refreshTimer = null;
+
+// Загружаются из localStorage
+let settings = {
+  botUsername: 'vapebazar_bot',
+  refreshInterval: 60,
+};
+
+// ────────────────────────────────────────────────────────────────────────────
+// Инициализация
+// ────────────────────────────────────────────────────────────────────────────
+document.addEventListener('DOMContentLoaded', () => {
+  loadSettings();
+  updatePageTitle();
+  refreshData();
+
+  // Auto-refresh
+  if (settings.refreshInterval > 0) {
+    setRefreshTimer();
+  }
+});
+
+function loadSettings() {
+  const saved = localStorage.getItem('adminSettings');
+  if (saved) {
+    settings = JSON.parse(saved);
+  }
+  document.getElementById('botUsername').value = settings.botUsername;
+  document.getElementById('refreshInterval').value = settings.refreshInterval;
+}
+
+function saveSettings() {
+  settings.botUsername = document.getElementById('botUsername').value;
+  settings.refreshInterval = parseInt(document.getElementById('refreshInterval').value);
+  localStorage.setItem('adminSettings', JSON.stringify(settings));
+  closeSettings();
+  setRefreshTimer();
+}
+
+function setRefreshTimer() {
+  if (refreshTimer) clearInterval(refreshTimer);
+  if (settings.refreshInterval > 0) {
+    refreshTimer = setInterval(refreshData, settings.refreshInterval * 1000);
+  }
+}
+
+// ────────────────────────────────────────────────────────────────────────────
+// Загрузка данных
+// ────────────────────────────────────────────────────────────────────────────
+async function refreshData() {
+  try {
+    // Загружаем аналитику (будут эмулироваться, т.к. это клиент)
+    // В реальности эти данные приходили бы с API
+    loadAnalytics();
+    loadDailyData();
+    loadVpnData();
+  } catch (e) {
+    console.error('Error loading data:', e);
+  }
+}
+
+function loadAnalytics() {
+  // TODO: подключить реальный API (/api_analytics из bott.py)
+  // Сейчас используется mock data для демонстрации
+  analyticsData = {
+    summary: {
+      total_orders: 42,
+      total_revenue: 125400,
+      avg_check: 2985,
+      unique_customers: 28,
+    },
+    top_products: [
+      { name: "VAPORESSO XROS 5", sales: 12 },
+      { name: "Lost Mary 30000", sales: 8 },
+      { name: "Жидкость Anarhia v2", sales: 15 },
+    ],
+    top_customers: [
+      { id: "123456", orders: 5, spent: 25000 },
+      { id: "234567", orders: 3, spent: 18500 },
+    ],
+  };
+  renderDashboard();
+}
+
+function loadDailyData() {
+  // TODO: подключить /api_daily
+  dailyData = {
+    data: [
+      { date: '2024-01-01', orders: 3, revenue: 8900 },
+      { date: '2024-01-02', orders: 5, revenue: 14200 },
+      { date: '2024-01-03', orders: 2, revenue: 5500 },
+      { date: '2024-01-04', orders: 8, revenue: 24000 },
+      { date: '2024-01-05', orders: 4, revenue: 11800 },
+      { date: '2024-01-06', orders: 6, revenue: 18900 },
+      { date: '2024-01-07', orders: 10, revenue: 29100 },
+    ]
+  };
+  renderChart();
+}
+
+function loadVpnData() {
+  // TODO: подключить /api_vpn
+  vpnData = {
+    summary: {
+      active: 42,
+      expiring_soon: 8,
+      expired: 15,
+    },
+    expiring: [
+      { email: 'user1@example.com', days_left: 2 },
+      { email: 'user2@example.com', days_left: 5 },
+    ]
+  };
+  renderVpnStats();
+}
+
+// ────────────────────────────────────────────────────────────────────────────
+// Рендеринг
+// ────────────────────────────────────────────────────────────────────────────
+function renderDashboard() {
+  if (!analyticsData) return;
+
+  const fmt = (n) => Math.round(n).toLocaleString('ru-RU');
+
+  document.getElementById('stat-orders').textContent = analyticsData.summary.total_orders;
+  document.getElementById('stat-revenue').textContent = `${fmt(analyticsData.summary.total_revenue)} ₽`;
+  document.getElementById('stat-avg-check').textContent = `${fmt(analyticsData.summary.avg_check)} ₽`;
+  document.getElementById('stat-customers').textContent = analyticsData.summary.unique_customers;
+
+  // Top Products
+  const html = analyticsData.top_products.map(p => `
+    <tr>
+      <td>${p.name}</td>
+      <td style="text-align: right;"><strong>${p.sales}</strong> шт</td>
+    </tr>
+  `).join('');
+  document.getElementById('topProductsTable').innerHTML = html;
+
+  // Top Customers
+  const custHtml = analyticsData.top_customers.map(c => `
+    <tr>
+      <td><code>${c.id}</code></td>
+      <td style="text-align: right;">${c.orders}</td>
+      <td style="text-align: right; font-weight: bold;">${fmt(c.spent)} ₽</td>
+    </tr>
+  `).join('');
+  document.getElementById('topCustomersTable').innerHTML = custHtml;
+}
+
+function renderChart() {
+  if (!dailyData) return;
+
+  const canvas = document.getElementById('revenueChart');
+  if (!canvas) return;
+
+  const ctx = canvas.getContext('2d');
+  const width = canvas.parentElement.offsetWidth - 32;
+  const height = 250;
+
+  canvas.width = width;
+  canvas.height = height;
+
+  // Простой SVG график вместо Chart.js
+  const maxRevenue = Math.max(...dailyData.data.map(d => d.revenue));
+  const barWidth = width / dailyData.data.length;
+  const padding = 40;
+
+  ctx.fillStyle = 'rgba(0, 240, 124, 0.1)';
+  dailyData.data.forEach((d, i) => {
+    const barHeight = (d.revenue / maxRevenue) * (height - padding);
+    const x = i * barWidth + 10;
+    const y = height - barHeight - 30;
+    ctx.fillRect(x, y, barWidth - 15, barHeight);
+
+    // Labels
+    ctx.fillStyle = 'rgba(255, 255, 255, 0.3)';
+    ctx.font = '10px sans-serif';
+    ctx.textAlign = 'center';
+    ctx.fillText(new Date(d.date).toLocaleDateString('ru-RU', {month:'short', day:'numeric'}), x + barWidth/2 - 7, height - 10);
+  });
+
+  // Y-axis label
+  ctx.fillStyle = 'rgba(255, 255, 255, 0.3)';
+  ctx.font = '10px sans-serif';
+  ctx.textAlign = 'right';
+  ctx.fillText(`${Math.round(maxRevenue/1000)}k`, 30, 20);
+}
+
+function renderVpnStats() {
+  if (!vpnData) return;
+
+  const fmt = (n) => Math.round(n).toLocaleString('ru-RU');
+
+  document.getElementById('vpn-active').textContent = vpnData.summary.active;
+  document.getElementById('vpn-expiring').textContent = vpnData.summary.expiring_soon;
+  document.getElementById('vpn-expired').textContent = vpnData.summary.expired;
+
+  const html = vpnData.expiring.map(v => `
+    <tr>
+      <td><code>${v.email}</code></td>
+      <td style="text-align: right;"><span class="badge badge-yellow">${v.days_left} дней</span></td>
+    </tr>
+  `).join('') || '<tr><td colspan="2" style="color: rgba(255, 255, 255, 0.4); text-align: center;">Нет подписок, истекающих скоро</td></tr>';
+
+  document.getElementById('expiringVpnTable').innerHTML = html;
+}
+
+// ────────────────────────────────────────────────────────────────────────────
+// Навигация
+// ────────────────────────────────────────────────────────────────────────────
+function switchPage(page) {
+  currentPage = page;
+  document.querySelectorAll('.tab-content').forEach(el => el.style.display = 'none');
+  document.getElementById(page).style.display = 'block';
+
+  document.querySelectorAll('.nav-item').forEach((el, i) => {
+    el.classList.toggle('active', el.textContent.toLowerCase().includes(page.split(/(?=[A-Z])/).join(' ').toLowerCase()));
+  });
+
+  updatePageTitle();
+}
+
+function updatePageTitle() {
+  const titles = {
+    dashboard: '📊 Dashboard',
+    customers: '👥 Клиенты',
+    products: '📦 Товары',
+    vpn: '🛡️ VPN Подписки',
+    manage: '⚙️ Управление',
+  };
+  document.getElementById('pageTitle').textContent = titles[currentPage] || 'Dashboard';
+}
+
+// ────────────────────────────────────────────────────────────────────────────
+// Модальное окно
+// ────────────────────────────────────────────────────────────────────────────
+function toggleSettings() {
+  document.getElementById('settingsModal').classList.toggle('active');
+}
+
+function closeSettings() {
+  document.getElementById('settingsModal').classList.remove('active');
+}
+
+// ────────────────────────────────────────────────────────────────────────────
+// Интеграция с ботом (отправка команд)
+// ────────────────────────────────────────────────────────────────────────────
+function sendCmd(cmd) {
+  const url = `https://t.me/${settings.botUsername}?text=` + encodeURIComponent(cmd);
+  window.open(url, '_blank');
+}
+
+function doBroadcast(type) {
+  const text = document.getElementById('broadcastText').value.trim();
+  if (!text) {
+    alert('Введите текст рассылки');
+    return;
+  }
+  const cmd = type === 'buyers' ? `/broadcast_buyers ${text}` : `/broadcast ${text}`;
+  sendCmd(cmd);
+}
+
+// Клавиша Escape закрывает модаль
+document.addEventListener('keydown', (e) => {
+  if (e.key === 'Escape') {
+    document.getElementById('settingsModal').classList.remove('active');
+  }
+});
+</script>
+
+</body>
+</html>

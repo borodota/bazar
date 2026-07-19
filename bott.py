@@ -26,6 +26,14 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
+# ==================== ВРЕМЕННАЯ ЗОНА ====================
+# Магадан находится в зоне UTC+11 (стандартное время, без перевода)
+MAGADAN_TZ = timezone(timedelta(hours=11))
+
+def now_magadan():
+    """Получить текущее время в магаданской зоне"""
+    return datetime.now(MAGADAN_TZ)
+
 # ==================== КОНФИГУРАЦИЯ ====================
 # Токен лучше хранить в переменной окружения BOT_TOKEN (см. README)
 SHOP_BOT_TOKEN = os.getenv("BOT_TOKEN", "8687110031:AAE9E430W55aRQQuUwDI8hEMjaVliq_gbG4")
@@ -53,6 +61,7 @@ BONUSES_FILE = os.path.join(DATA_DIR, "bonuses.json")          # ИСТОЧНИ�
 NOTIFY_FILE = os.path.join(DATA_DIR, "notify_requests.json")   # запросы уведомить о поступлении товара
 VPN_SUBS_FILE = os.path.join(DATA_DIR, "vpn_subs.json")        # учёт VPN-подписок: кто, тариф, срок
 REVIEWS_FILE = os.path.join(DATA_DIR, "reviews.json")          # оценки клиентов после выполненного заказа
+CHALLENGES_FILE = os.path.join(DATA_DIR, "challenges.json")    # ежемесячные вызовы и прогресс
 
 # ── Тарифы VPN (название / дней / цена ₽ / устройств) ──
 VPN_TARIFFS = {
@@ -68,6 +77,27 @@ VPN_EXPIRY_GRACE_DAYS = 14    # но не дольше N дней после —
 
 REFERRAL_REWARD = 200   # баллов пригласившему за ПЕРВЫЙ оплаченный заказ друга
 EARN_CAP_RATE = 0.15    # санити-лимит начисления: не больше 15% от суммы заказа
+
+# ── VIP ПОДПИСКА И УРОВНИ ЛОЯЛЬНОСТИ ──
+VIP_MONTHLY_PRICE = 299  # цена VIP на месяц
+VIP_ORDERS_TO_FREE = 10  # бесплатный VIP за 10 заказов
+
+# Уровни лояльности (название / заказов / скидка / описание)
+LOYALTY_TIERS = {
+    "bronze": {"name": "🥉 Bronze", "orders": 10, "discount": 0.03, "perks": "Скидка 3% на каждый заказ"},
+    "silver": {"name": "🥈 Silver", "orders": 20, "discount": 0.05, "perks": "Скидка 5% + приоритет доставки"},
+    "gold": {"name": "🥇 Gold", "orders": 50, "discount": 0.07, "perks": "Скидка 7% + бесплатная доставка"},
+    "platinum": {"name": "👑 Platinum", "orders": 100, "discount": 0.10, "perks": "Скидка 10% + персональный менеджер"},
+}
+
+# Бейджи за действия
+BADGES = {
+    "first_order": {"emoji": "🎯", "name": "Первый заказ", "desc": "Сделал первый заказ"},
+    "fast_buyer": {"emoji": "⚡", "name": "На маршруте", "desc": "Заказ в течение часа после открытия"},
+    "sponsor": {"emoji": "💰", "name": "Спонсор", "desc": "Потратил 100k₽"},
+    "referrer": {"emoji": "🎁", "name": "Дарующий", "desc": "Пригласил 10 друзей"},
+    "reviewer": {"emoji": "⭐", "name": "Критик", "desc": "Оставил 5+ отзывов"},
+}
 
 ADMINS = set([ADMIN_ID] + DEPUTY_ADMIN_IDS)
 
@@ -102,7 +132,7 @@ def remember_user(user):
     subs[str(user.id)] = {
         "name": user.first_name or "",
         "username": user.username or "",
-        "ts": datetime.now().isoformat(timespec="seconds"),
+        "ts": now_magadan().isoformat(timespec="seconds"),
     }
     _save_json(SUBSCRIBERS_FILE, subs)
 
@@ -110,7 +140,7 @@ def log_order(order_id, customer_id, total, action, status_label, items=None, na
     """Создаёт/обновляет запись заказа в журнале. Вызывается при создании заказа
     (путь sendData) и при каждой смене статуса кнопкой (путь Bot API из браузера)."""
     orders = _load_json(ORDERS_FILE, [])
-    now = datetime.now().isoformat(timespec="seconds")
+    now = now_magadan().isoformat(timespec="seconds")
     rec = next((o for o in orders if str(o.get("order_id")) == str(order_id)), None)
     if rec is None:
         rec = {
@@ -194,11 +224,20 @@ def record_referral(new_user_id, ref_id, user=None):
         return
     data = _load_bonuses()
     cust = _ensure_user(data, new_user_id)
+    ref_str = str(ref_id)
     if cust["orders"] == 0 and not cust.get("referred_by") and not cust.get("ref_rewarded"):
-        cust["referred_by"] = str(ref_id)
+        cust["referred_by"] = ref_str
         if user:
             cust["name"] = user.first_name or cust.get("name", "")
             cust["username"] = user.username or cust.get("username", "")
+
+        # Отслеживаем в обратном направлении: кого пригласил реферер
+        referrer = _ensure_user(data, ref_str)
+        if "referred" not in referrer:
+            referrer["referred"] = []
+        if str(new_user_id) not in referrer["referred"]:
+            referrer["referred"].append(str(new_user_id))
+
         _save_bonuses(data)
 
 def settle_order_bonuses(order_id, customer_id, total, earn, redeem, ref_id):
@@ -227,7 +266,7 @@ def settle_order_bonuses(order_id, customer_id, total, earn, redeem, ref_id):
     cust["balance"] = max(0, cust["balance"] - actual_redeem + earn)
     cust["spent"] += total
     cust["orders"] += 1
-    cust["last_order_ts"] = datetime.now().isoformat(timespec="seconds")
+    cust["last_order_ts"] = now_magadan().isoformat(timespec="seconds")
 
     # 3. Реферальная связь: серверной нет — берём из заказа (по факту покупки)
     referrer_id = cust.get("referred_by")
@@ -272,6 +311,90 @@ def referral_stats(uid):
                 rewarded += 1
     bal = data["users"].get(uid, {}).get("balance", 0)
     return {"invited": invited, "rewarded": rewarded, "balance": bal}
+
+def get_loyalty_tier(orders_count):
+    """Определить уровень лояльности по количеству заказов"""
+    for tier_key in ["platinum", "gold", "silver", "bronze"]:
+        tier = LOYALTY_TIERS[tier_key]
+        if orders_count >= tier["orders"]:
+            return tier_key, tier
+    return None, {}
+
+def get_user_badges(uid):
+    """Получить список бейджей пользователя"""
+    data = _load_bonuses()
+    user = data["users"].get(str(uid), {})
+    badges = []
+
+    # Первый заказ
+    if user.get("orders", 0) > 0:
+        badges.append("first_order")
+
+    # Спонсор (100k₽)
+    if user.get("spent", 0) >= 100000:
+        badges.append("sponsor")
+
+    # Дарующий (10+ приглашённых)
+    referred = len(user.get("referred", []))
+    if referred >= 10:
+        badges.append("referrer")
+
+    return badges
+
+def apply_loyalty_discount(total, orders_count):
+    """Применить скидку за уровень лояльности"""
+    tier_key, tier = get_loyalty_tier(orders_count)
+    if tier_key:
+        discount = tier.get("discount", 0)
+        return max(0, int(total * (1 - discount)))
+    return total
+
+def get_vip_status(uid):
+    """Проверить VIP статус пользователя"""
+    data = _load_bonuses()
+    user = data["users"].get(str(uid), {})
+
+    vip_until = user.get("vip_until")
+    if not vip_until:
+        return {"active": False, "days_left": 0}
+
+    try:
+        expiry = datetime.fromisoformat(vip_until)
+        now = now_magadan()
+        if expiry > now:
+            days_left = (expiry - now).days
+            return {"active": True, "days_left": days_left, "expiry": vip_until}
+    except (ValueError, TypeError):
+        pass
+
+    return {"active": False, "days_left": 0}
+
+def activate_vip(uid, days=30):
+    """Активировать VIP статус"""
+    data = _load_bonuses()
+    user = _ensure_user(data, uid)
+
+    now = now_magadan()
+    current_vip = user.get("vip_until")
+
+    if current_vip:
+        try:
+            expiry = datetime.fromisoformat(current_vip)
+            if expiry > now:
+                # Продлить существующий VIP
+                new_expiry = expiry + timedelta(days=days)
+            else:
+                # VIP истёк, начать новый
+                new_expiry = now + timedelta(days=days)
+        except (ValueError, TypeError):
+            new_expiry = now + timedelta(days=days)
+    else:
+        new_expiry = now + timedelta(days=days)
+
+    user["vip_until"] = new_expiry.isoformat(timespec="seconds")
+    _save_bonuses(data)
+
+    return new_expiry
 
 def get_main_keyboard():
     web_app_url = "https://borodota.github.io/bazar/"
@@ -414,8 +537,8 @@ async def handle_web_app_order(message: types.Message):
             return
 
         if is_json:
-            order_id = raw_data.get("order_id") or raw_data.get("Order ID") or raw_data.get("id") or datetime.now().strftime("%M%S")
-            date_str = raw_data.get("date") or raw_data.get("Date") or datetime.now().strftime("%d.%m.%Y %H:%M")
+            order_id = raw_data.get("order_id") or raw_data.get("Order ID") or raw_data.get("id") or now_magadan().strftime("%M%S")
+            date_str = raw_data.get("date") or raw_data.get("Date") or now_magadan().strftime("%d.%m.%Y %H:%M")
             name = raw_data.get("name") or raw_data.get("Name") or "Не указано"
             phone = raw_data.get("phone") or raw_data.get("Phone") or "Не указан"
             delivery_type = raw_data.get("delivery") or raw_data.get("Delivery type") or "Самовывоз"
@@ -436,8 +559,8 @@ async def handle_web_app_order(message: types.Message):
             order_redeem = _safe_int(raw_data.get("redeem") or raw_data.get("bonusUsed"), 0)
             order_ref_id = str(raw_data.get("ref_id") or "0")
         else:
-            order_id = datetime.now().strftime("%M%S")
-            date_str = datetime.now().strftime("%d.%m.%Y %H:%M")
+            order_id = now_magadan().strftime("%M%S")
+            date_str = now_magadan().strftime("%d.%m.%Y %H:%M")
             name = message.from_user.first_name if message.from_user.first_name else "Не указано"
             phone = "Указан внутри текста"
             delivery_type = "Проверь текст ниже"
@@ -596,7 +719,7 @@ async def vpn_give_access(callback: types.CallbackQuery):
                 "uuid": uuid_val,
                 "email": email,
                 "expiry": datetime.fromtimestamp(expiry_ms / 1000).isoformat(timespec="seconds"),
-                "created": (rec.get("created") if rec else datetime.now().isoformat(timespec="seconds")),
+                "created": (rec.get("created") if rec else now_magadan().isoformat(timespec="seconds")),
                 "last_processed_order_id": order_id,
             }
             _save_json(VPN_SUBS_FILE, subs)
@@ -742,7 +865,7 @@ async def change_order_status(callback: types.CallbackQuery):
             _subs = _load_json(SUBSCRIBERS_FILE, {})
             if _cid not in _subs:
                 _name_val = _name_m.group(1).strip() if _name_m else ""
-                _subs[_cid] = {"name": _name_val, "username": "", "ts": datetime.now().isoformat(timespec="seconds")}
+                _subs[_cid] = {"name": _name_val, "username": "", "ts": now_magadan().isoformat(timespec="seconds")}
                 _save_json(SUBSCRIBERS_FILE, _subs)
         except Exception:
             pass
@@ -794,7 +917,7 @@ async def change_order_status(callback: types.CallbackQuery):
         if rec:
             receipt_items = rec.get("items") or "—"
             receipt_total = _fmt_money(rec.get("total") or total)
-            receipt_date = rec.get("created_at", datetime.now().isoformat())[:10]
+            receipt_date = rec.get("created_at", now_magadan().isoformat())[:10]
             receipt_text = (
                 f"🧾 <b>ВАШ ЧЕК — VAPEBAZAR PREMIUM</b>\n"
                 f"━━━━━━━━━━━━━━━━━━━━━━━━\n"
@@ -910,7 +1033,7 @@ async def rate_order(callback: types.CallbackQuery):
     reviews[str(order_id)] = {
         "customer_id": str(customer_id),
         "score": score,
-        "ts": datetime.now().isoformat(timespec="seconds"),
+        "ts": now_magadan().isoformat(timespec="seconds"),
     }
     _save_json(REVIEWS_FILE, reviews)
 
@@ -963,8 +1086,17 @@ async def cmd_start(message: types.Message):
         except Exception as e:
             logger.error(f"Не удалось записать реферала из /start: {e}")
     await message.answer(
-        f"Привет, {message.from_user.first_name}! Добро пожаловать в магазин <b>VAPEBAZAR PREMIUM</b>.\n"
-        f"Нажми кнопку ниже, чтобы войти в каталог.",
+        f"Привет, {message.from_user.first_name}! Добро пожаловать в магазин <b>VAPEBAZAR PREMIUM</b>.\n\n"
+        f"Нажми кнопку ниже, чтобы войти в каталог 🛍️\n\n"
+        f"<b>Полезные команды:</b>\n"
+        f"├ /ref — реферальная ссылка и статистика\n"
+        f"├ /vip — статус VIP подписки\n"
+        f"├ /badges — твои достижения\n"
+        f"├ /discount — текущие скидки и бонусы\n"
+        f"├ /challenges — ежемесячные вызовы\n"
+        f"├ /faq — часто задаваемые вопросы\n"
+        f"├ /bonus — баланс баллов\n"
+        f"└ /birthday — сохранить день рождения",
         reply_markup=get_main_keyboard()
     )
     if message.from_user.id in ADMINS:
@@ -1095,7 +1227,7 @@ async def cmd_vpn_subs(message: types.Message):
     if not subs:
         await message.answer("🛡️ VPN-подписок пока нет.")
         return
-    now = datetime.now()
+    now = now_magadan()
     lines = ["🛡️ <b>VPN-подписки</b>", "━━━━━━━━━━━━━━━━━━━━━━━━"]
     # сортируем по сроку окончания (кто раньше истекает — выше)
     for cid, rec in sorted(subs.items(), key=lambda kv: kv[1].get("expiry", "")):
@@ -1119,7 +1251,7 @@ async def cmd_stats(message: types.Message):
         return
     orders = _load_json(ORDERS_FILE, [])
     subs = _load_json(SUBSCRIBERS_FILE, {})
-    now = datetime.now()
+    now = now_magadan()
     today = now.date()
     week_ago = now - timedelta(days=7)
 
@@ -1149,6 +1281,529 @@ async def cmd_stats(message: types.Message):
         "<i>В журнал попадают заказы из кнопки магазина и те, по которым вы нажимали статус.</i>"
     )
 
+
+# ═════════════════════════════════════════════════════════════════════════════
+# АНАЛИТИКА И ДАШБОРД (для админ-панели)
+# ═════════════════════════════════════════════════════════════════════════════
+
+@dp.message(Command("api_analytics"))
+async def cmd_api_analytics(message: types.Message):
+    """API для админ-панели: полная статистика в JSON (последние 30 дней)"""
+    if message.from_user.id not in ADMINS:
+        return
+
+    orders = _load_json(ORDERS_FILE, [])
+    now = now_magadan()
+    start_date = now - timedelta(days=30)
+
+    def _created(o):
+        try:
+            return datetime.fromisoformat(o.get("created_at"))
+        except (TypeError, ValueError):
+            return None
+
+    recent_orders = [o for o in orders
+                     if _created(o) and _created(o) >= start_date
+                     and o.get("status") != "cancel"]
+
+    # Группируем по датам
+    by_date = {}
+    for o in recent_orders:
+        date_str = _created(o).date().isoformat()
+        if date_str not in by_date:
+            by_date[date_str] = {"orders": 0, "revenue": 0}
+        by_date[date_str]["orders"] += 1
+        by_date[date_str]["revenue"] += int(o.get("total") or 0)
+
+    # Топ товаров
+    product_sales = {}
+    for o in recent_orders:
+        items_text = o.get("items", "")
+        for line in items_text.split("\n"):
+            if line.strip().startswith(("•", "▪")):
+                # Парсим: "• ТОВАР · 1 000₽ × 2 = 2 000₽"
+                clean = line.lstrip("•▪️ ").strip()
+                parts = clean.split("·")
+                if len(parts) > 0:
+                    name = parts[0].strip()
+                    if name not in product_sales:
+                        product_sales[name] = 0
+                    product_sales[name] += 1
+
+    top_products = sorted(product_sales.items(), key=lambda x: x[1], reverse=True)[:10]
+
+    # Статистика клиентов
+    customer_stats = {}
+    for o in recent_orders:
+        uid = str(o.get("user_id", "unknown"))
+        if uid not in customer_stats:
+            customer_stats[uid] = {"orders": 0, "spent": 0}
+        customer_stats[uid]["orders"] += 1
+        customer_stats[uid]["spent"] += int(o.get("total") or 0)
+
+    top_customers = sorted(customer_stats.items(),
+                          key=lambda x: x[1]["spent"],
+                          reverse=True)[:10]
+
+    # Подготавливаем ответ
+    total_revenue = sum(int(o.get("total") or 0) for o in recent_orders)
+    avg_check = total_revenue // len(recent_orders) if recent_orders else 0
+
+    response = {
+        "status": "ok",
+        "period": "30d",
+        "summary": {
+            "total_orders": len(recent_orders),
+            "total_revenue": total_revenue,
+            "avg_check": avg_check,
+            "unique_customers": len(customer_stats),
+        },
+        "by_date": by_date,
+        "top_products": [{"name": p[0], "sales": p[1]} for p in top_products],
+        "top_customers": [{"id": c[0], "orders": c[1]["orders"], "spent": c[1]["spent"]} for c in top_customers],
+    }
+
+    # Отправляем JSON
+    await message.answer(
+        f"<code>{json.dumps(response, ensure_ascii=False, indent=2)}</code>",
+        parse_mode="HTML"
+    )
+
+
+@dp.message(Command("api_daily"))
+async def cmd_api_daily(message: types.Message):
+    """API: графические данные по дням (последние 30 дней)"""
+    if message.from_user.id not in ADMINS:
+        return
+
+    orders = _load_json(ORDERS_FILE, [])
+    now = now_magadan()
+    start_date = now - timedelta(days=30)
+
+    def _created(o):
+        try:
+            return datetime.fromisoformat(o.get("created_at"))
+        except (TypeError, ValueError):
+            return None
+
+    recent_orders = [o for o in orders
+                     if _created(o) and _created(o) >= start_date
+                     and o.get("status") != "cancel"]
+
+    # Заполняем все дни (даже с нулями)
+    data = []
+    for i in range(30, -1, -1):
+        date = (now - timedelta(days=i)).date()
+        date_str = date.isoformat()
+
+        day_orders = [o for o in recent_orders
+                     if _created(o).date() == date]
+        revenue = sum(int(o.get("total") or 0) for o in day_orders)
+
+        data.append({
+            "date": date_str,
+            "orders": len(day_orders),
+            "revenue": revenue,
+        })
+
+    response = {"status": "ok", "data": data}
+
+    await message.answer(
+        f"<code>{json.dumps(response, ensure_ascii=False, indent=2)}</code>",
+        parse_mode="HTML"
+    )
+
+
+@dp.message(Command("api_vpn"))
+async def cmd_api_vpn(message: types.Message):
+    """API: статистика VPN-подписок"""
+    if message.from_user.id not in ADMINS:
+        return
+
+    vpn_subs = _load_json(VPN_SUBS_FILE, {})
+    now = now_magadan()
+
+    active = []
+    expiring = []
+    expired = []
+
+    for email, sub in vpn_subs.items():
+        try:
+            expiry = datetime.fromisoformat(sub.get("expiry"))
+        except (TypeError, ValueError):
+            continue
+
+        if expiry > now:
+            active.append(email)
+            if expiry <= now + timedelta(days=7):
+                expiring.append({"email": email, "days_left": (expiry - now).days})
+        else:
+            expired.append(email)
+
+    response = {
+        "status": "ok",
+        "summary": {
+            "active": len(active),
+            "expiring_soon": len(expiring),
+            "expired": len(expired),
+        },
+        "expiring": expiring,
+    }
+
+    await message.answer(
+        f"<code>{json.dumps(response, ensure_ascii=False, indent=2)}</code>",
+        parse_mode="HTML"
+    )
+
+
+# ═════════════════════════════════════════════════════════════════════════════
+# РЕФЕРРАЛЬНАЯ ПРОГРАММА
+# ═════════════════════════════════════════════════════════════════════════════
+
+# ═════════════════════════════════════════════════════════════════════════════
+# VIP И ЛОЯЛЬНОСТЬ
+# ═════════════════════════════════════════════════════════════════════════════
+
+@dp.message(Command("vip"))
+async def cmd_vip(message: types.Message):
+    """Просмотр VIP статуса и активация"""
+    uid = str(message.from_user.id)
+    vip = get_vip_status(uid)
+    tier_key, tier = get_loyalty_tier(_load_bonuses()["users"].get(uid, {}).get("orders", 0))
+
+    if vip["active"]:
+        text = (
+            f"👑 <b>VIP Статус АКТИВЕН</b>\n\n"
+            f"⏰ Действует ещё <b>{vip['days_left']} дней</b>\n"
+            f"📅 До: {vip['expiry'][:10]}\n\n"
+            f"✨ <b>Преимущества VIP</b>\n"
+            f"├ Скидка 5% на каждый заказ\n"
+            f"├ Приоритет доставки\n"
+            f"├ +50 баллов за каждый заказ\n"
+            f"└ Ранний доступ к новым товарам\n\n"
+            f"💰 Стоимость: 299₽/месяц"
+        )
+    else:
+        text = (
+            f"👑 <b>VIP Статус</b>\n\n"
+            f"❌ Статус не активен\n\n"
+            f"✨ <b>Получи VIP за</b>\n"
+            f"├ 💳 299₽/месяц\n"
+            f"├ 📦 10 заказов (бесплатно)\n"
+            f"└ 💎 1000 баллов\n\n"
+            f"<b>Преимущества:</b>\n"
+            f"├ -5% на каждый заказ\n"
+            f"├ Приоритет доставки\n"
+            f"├ +50 баллов за заказ\n"
+            f"└ Ранний доступ к новинкам"
+        )
+
+    await message.answer(text)
+
+
+# ═════════════════════════════════════════════════════════════════════════════
+# FAQ И ГАЙДЫ
+# ═════════════════════════════════════════════════════════════════════════════
+
+FAQ_DATA = {
+    "order": {
+        "emoji": "📦",
+        "title": "Как оформить заказ?",
+        "answer": (
+            "1. Нажми кнопку 🛍️ в меню\n"
+            "2. Выбери товары и добавь в корзину\n"
+            "3. Нажми 'Оформить заказ'\n"
+            "4. Заполни свои данные\n"
+            "5. Выбери способ доставки и оплаты\n"
+            "6. Подтверди заказ\n\n"
+            "Готово! Мы свяжемся с тобой в течение 15 минут."
+        )
+    },
+    "payment": {
+        "emoji": "💳",
+        "title": "Какие способы оплаты?",
+        "answer": (
+            "Мы принимаем:\n"
+            "├ 💵 Наличные при получении\n"
+            "├ 💰 Переводы (QIWI, Яндекс.Касса)\n"
+            "├ 🏦 Банковские переводы\n"
+            "└ 💎 Баллы (списать со своего баланса)\n\n"
+            "Выбирай удобный способ при оформлении."
+        )
+    },
+    "delivery": {
+        "emoji": "🚚",
+        "title": "Как долго доставка?",
+        "answer": (
+            "Доставка в Магадане:\n"
+            "├ 🚲 Самовывоз: 30 минут\n"
+            "├ 🚚 Курьер (день): завтра к 18:00\n"
+            "├ 📦 Почта: 2-3 дня\n"
+            "└ 🚁 Срочная: 2 часа (+200₽)\n\n"
+            "Бесплатная доставка от 2000₽!"
+        )
+    },
+    "return": {
+        "emoji": "↩️",
+        "title": "Можно ли вернуть товар?",
+        "answer": (
+            "Да, вернём товар если:\n"
+            "├ 🏷️ Заводская упаковка целая\n"
+            "├ 🕐 Прошло не более 14 дней\n"
+            "├ ✅ Товар без повреждений\n"
+            "└ 📋 Есть чек\n\n"
+            "Верни товар, вернём деньги за 2 дня.\n"
+            "Напиши @BORO_DOTA в Telegram."
+        )
+    },
+    "points": {
+        "emoji": "💎",
+        "title": "Как копить баллы?",
+        "answer": (
+            "Способы получить баллы:\n"
+            "├ 💰 За заказ: +5% от суммы\n"
+            "├ 🎁 За реферала: +200 баллов\n"
+            "├ ⭐ За отзыв: +50 баллов\n"
+            "├ 🎂 День рождения: +100 баллов\n"
+            "└ 📅 Каждый месяц: +10 баллов\n\n"
+            "Мин. 100 баллов = 100₽ скидка.\n"
+            "Макс. списать: 20% от суммы."
+        )
+    },
+    "vip": {
+        "emoji": "👑",
+        "title": "Что такое VIP?",
+        "answer": (
+            "VIP дает:\n"
+            "├ 💰 Скидка 5% на каждый заказ\n"
+            "├ 🚚 Приоритет доставки (1 час)\n"
+            "├ 💎 +50 баллов вместо +10\n"
+            "├ 🆕 Ранний доступ к новому\n"
+            "└ 👨‍💼 Персональный менеджер\n\n"
+            "Стоимость: 299₽/месяц\n"
+            "Или: 10 заказов → VIP бесплатно!"
+        )
+    },
+    "referral": {
+        "emoji": "🎁",
+        "title": "Как пригласить друга?",
+        "answer": (
+            "Напиши /ref — получи реферальную ссылку.\n\n"
+            "Твой друг по ней зарегистрируется → оба получите:\n"
+            "├ -50₽ на первый заказ друга\n"
+            "├ Ты получишь +200 баллов\n"
+            "└ Друг получит +50 баллов\n\n"
+            "Без ограничений — зовите сколько хотите!"
+        )
+    },
+}
+
+@dp.message(Command("faq"))
+async def cmd_faq(message: types.Message):
+    """Часто задаваемые вопросы"""
+    buttons = []
+    for key, item in FAQ_DATA.items():
+        buttons.append([
+            InlineKeyboardButton(
+                text=f"{item['emoji']} {item['title'][:30]}",
+                callback_data=f"faq_{key}"
+            )
+        ])
+
+    markup = InlineKeyboardMarkup(inline_keyboard=buttons)
+    await message.answer(
+        "❓ <b>Часто задаваемые вопросы</b>\n\n"
+        "Нажми на вопрос чтобы увидеть ответ:",
+        reply_markup=markup
+    )
+
+
+@dp.callback_query(lambda c: c.data.startswith("faq_"))
+async def faq_answer(callback: types.CallbackQuery):
+    """Ответ на FAQ вопрос"""
+    key = callback.data.split("_", 1)[1]
+    item = FAQ_DATA.get(key)
+    if item:
+        await callback.message.answer(
+            f"{item['emoji']} <b>{item['title']}</b>\n\n{item['answer']}"
+        )
+    await callback.answer()
+
+
+@dp.message(Command("challenges"))
+async def cmd_challenges(message: types.Message):
+    """Ежемесячные вызовы"""
+    challenges = _load_json(CHALLENGES_FILE, {}).get("active_challenges", {})
+
+    text = f"🎯 <b>Июльские вызовы</b>\n\n"
+
+    for key, ch in challenges.items():
+        text += (
+            f"<b>{ch.get('name', 'Unknown')}</b>\n"
+            f"📝 {ch.get('description', '')}\n"
+            f"🎁 Награда: "
+        )
+
+        if ch.get("reward_type") == "discount":
+            text += f"-{ch.get('reward_value', 0)}₽ скидка"
+        elif ch.get("reward_type") == "vip":
+            text += f"VIP на {ch.get('reward_days', 7)} дней"
+        else:
+            text += f"+{ch.get('reward', 0)} баллов"
+
+        text += f"\n\n"
+
+    text += (
+        f"<i>Вызовы обновляются каждый месяц.\n"
+        f"Выполни все и получи максимум наград!</i>"
+    )
+
+    await message.answer(text)
+
+
+@dp.message(Command("badges"))
+async def cmd_badges(message: types.Message):
+    """Просмотр бейджей пользователя"""
+    uid = message.from_user.id
+    badges = get_user_badges(uid)
+    data = _load_bonuses()
+    user = data["users"].get(str(uid), {})
+
+    tier_key, tier = get_loyalty_tier(user.get("orders", 0))
+
+    text = f"⭐ <b>Твои Достижения</b>\n\n"
+
+    if tier_key:
+        text += f"<b>Уровень лояльности: {tier['name']}</b>\n"
+        text += f"Статус: {tier['perks']}\n"
+        text += f"Заказов: {user.get('orders', 0)}\n\n"
+
+    if badges:
+        text += "<b>Бейджи:</b>\n"
+        for badge_key in badges:
+            badge = BADGES.get(badge_key, {})
+            text += f"├ {badge.get('emoji', '🏆')} {badge.get('name', 'Unknown')}\n"
+    else:
+        text += "<i>Пока нет бейджей. Начни с первого заказа!</i>\n"
+
+    text += f"\n<i>Всего заказов: {user.get('orders', 0)}</i>"
+
+    await message.answer(text)
+
+
+@dp.message(Command("discount"))
+async def cmd_discount(message: types.Message):
+    """Показать текущие скидки пользователя"""
+    uid = str(message.from_user.id)
+    data = _load_bonuses()
+    user = data["users"].get(uid, {})
+
+    orders_count = user.get("orders", 0)
+    tier_key, tier = get_loyalty_tier(orders_count)
+    vip_status = get_vip_status(int(uid))
+
+    text = "💰 <b>Твои Скидки и Бонусы</b>\n\n"
+
+    # Показываем текущую скидку по лояльности
+    if tier_key:
+        discount_pct = int(tier["discount"] * 100)
+        text += f"<b>Уровень лояльности: {tier['name']}</b>\n"
+        text += f"├ Скидка: <b>-{discount_pct}%</b> на все товары\n"
+        text += f"├ Бонусы: +{discount_pct}% баллов за заказ\n"
+        text += f"└ Преимущества: {tier['perks']}\n\n"
+    else:
+        text += f"<b>Уровень лояльности:</b> Нет (начни с первого заказа)\n"
+        text += f"├ Скидка: базовая -0%\n"
+        text += f"└ Бонусы: +5% баллов за заказ\n\n"
+
+    # Показываем VIP статус
+    if vip_status["active"]:
+        text += f"<b>👑 VIP Статус: АКТИВЕН</b>\n"
+        text += f"├ Скидка: <b>дополнительно -5%</b>\n"
+        text += f"├ Действует: {vip_status['days_left']} дней\n"
+        text += f"└ Бонусы: +50 баллов за заказ\n\n"
+    else:
+        text += f"<b>👑 VIP Статус:</b> Не активен\n"
+        text += f"├ Активирай за 299₽/месяц или сделай 10 заказов\n"
+        text += f"└ Дополнительная скидка: -5%\n\n"
+
+    # Итоговая скидка
+    total_discount = 0
+    if tier_key:
+        total_discount += int(tier["discount"] * 100)
+    if vip_status["active"]:
+        total_discount += 5
+
+    text += f"📊 <b>Итоговая скидка: -{total_discount}%</b> (может быть меньше за счёт акций)\n\n"
+
+    # Прогресс к следующему уровню
+    if tier_key != "platinum":
+        for tier_name, tier_info in LOYALTY_TIERS.items():
+            if tier_info["orders"] > orders_count:
+                needed = tier_info["orders"] - orders_count
+                text += f"⏳ <b>До {tier_info['name']}:</b> ещё {needed} заказов\n"
+                break
+    else:
+        text += f"✅ <b>Максимальный уровень достигнут!</b>\n"
+
+    await message.answer(text)
+
+
+@dp.message(Command("ref"))
+async def cmd_ref(message: types.Message):
+    """Получить реферальную ссылку и статистику приглашённых"""
+    uid = str(message.from_user.id)
+    bonuses = _load_json(BONUSES_FILE, {})
+    my_data = bonuses.get(uid, {})
+
+    # Кодируем ID для ссылки (base36 или hex для удобства)
+    ref_code = format(message.from_user.id, 'x')[:8]
+    ref_url = f"https://t.me/{BOT_USERNAME}?start=ref_{message.from_user.id}"
+
+    # Статистика: кто был приглашён
+    referred = my_data.get("referred", [])
+    referred_count = len(referred)
+
+    # Подсчитываем, сколько приглашённых сделали первый заказ
+    active_referred = 0
+    for ref_id in referred:
+        ref_data = bonuses.get(str(ref_id), {})
+        if ref_data.get("first_order_completed"):
+            active_referred += 1
+
+    text = (
+        f"🎁 <b>Твоя реферальная ссылка</b>\n\n"
+        f"<code>{ref_url}</code>\n\n"
+        f"📊 <b>Статистика</b>\n"
+        f"├ Всего приглашено: <b>{referred_count}</b>\n"
+        f"├ Активных (сделали заказ): <b>{active_referred}</b>\n"
+        f"└ Твоя награда за активных: <b>+{active_referred * REFERRAL_REWARD} баллов</b>\n\n"
+        f"<i>Приведи друга по ссылке — получите оба скидку 50₽ на первый заказ!</i>"
+    )
+
+    await message.answer(
+        text,
+        reply_markup=InlineKeyboardMarkup(inline_keyboard=[
+            [InlineKeyboardButton(text="📋 Скопировать ссылку", callback_data="copy_ref_link")],
+            [InlineKeyboardButton(text="📱 Поделиться в Telegram", url=f"https://t.me/share/url?url={ref_url}&text=Присоединяйся%20к%20VAPEBAZAR!")],
+        ])
+    )
+
+
+@dp.callback_query(lambda c: c.data == "copy_ref_link")
+async def copy_ref_link(callback: types.CallbackQuery):
+    """Копирование реферальной ссылки"""
+    uid = str(callback.from_user.id)
+    ref_url = f"https://t.me/{BOT_USERNAME}?start=ref_{callback.from_user.id}"
+
+    await callback.answer("✅ Ссылка скопирована в буфер обмена!", show_alert=False)
+    # Telegram WebApp может скопировать в буфер обмена
+    # Здесь мы просто показываем уведомление
+
+
+# ═════════════════════════════════════════════════════════════════════════════
+# УПРАВЛЕНИЕ БАЛЛАМИ И БОНУСАМИ
+# ═════════════════════════════════════════════════════════════════════════════
 
 @dp.message(Command("bonus"))
 async def cmd_bonus(message: types.Message):
@@ -1469,7 +2124,7 @@ async def cmd_export(message: types.Message):
         row = {f: str(o.get(f, "")).replace("\n", " | ") for f in fields}
         writer.writerow(row)
     csv_bytes = ("﻿" + output.getvalue()).encode("utf-8")  # BOM для Excel
-    fname = f"orders_{datetime.now().strftime('%Y%m%d_%H%M')}.csv"
+    fname = f"orders_{now_magadan().strftime('%Y%m%d_%H%M')}.csv"
     doc = types.BufferedInputFile(csv_bytes, filename=fname)
     await message.answer_document(doc, caption=f"📁 Экспорт <b>{len(orders)}</b> заказов")
 
@@ -1498,7 +2153,7 @@ async def cmd_birthday(message: types.Message):
     subs = _load_json(SUBSCRIBERS_FILE, {})
     uid = str(message.from_user.id)
     if uid not in subs:
-        subs[uid] = {"name": message.from_user.first_name or "", "username": message.from_user.username or "", "ts": datetime.now().isoformat(timespec="seconds")}
+        subs[uid] = {"name": message.from_user.first_name or "", "username": message.from_user.username or "", "ts": now_magadan().isoformat(timespec="seconds")}
     subs[uid]["birthday"] = formatted
     _save_json(SUBSCRIBERS_FILE, subs)
     await message.answer(f"🎂 День рождения сохранён: <b>{formatted}</b>\nВ этот день тебя ждёт подарок от VAPEBAZAR! 🎁")
@@ -1573,19 +2228,37 @@ async def fallback_any_message(message: types.Message):
         await message.answer(faq_answer, reply_markup=get_main_keyboard())
         return
 
-    # #25 — Автоответ вне рабочего времени (Магадан UTC+10)
-    MAGADAN = timezone(timedelta(hours=10))
-    now_local = datetime.now(MAGADAN)
+    # #25 — Умный чатбот: проверяем ключевые слова для FAQ
+    text_lower = text.lower()
+    keywords_faq = {
+        "оплат": "payment",
+        "доставк": "delivery",
+        "вернуть": "return",
+        "балл": "points",
+        "vip": "vip",
+        "рефер": "referral",
+        "заказ": "order",
+    }
+
+    for keyword, faq_key in keywords_faq.items():
+        if keyword in text_lower and faq_key in FAQ_DATA:
+            item = FAQ_DATA[faq_key]
+            await message.answer(f"{item['emoji']} <b>{item['title']}</b>\n\n{item['answer']}")
+            return
+
+    # ── Проверка рабочего времени ──
+    now_local = now_magadan()
     if now_local.hour < SHOP_OPEN_HOUR or now_local.hour >= SHOP_CLOSE_HOUR:
         opens_at = f"{SHOP_OPEN_HOUR:02d}:00"
         await message.answer(
             f"🌙 Магазин сейчас закрыт.\n\n"
             f"Работаем ежедневно с <b>{SHOP_OPEN_HOUR}:00 до {SHOP_CLOSE_HOUR}:00</b> по Магадану.\n"
             f"Откроемся в <b>{opens_at}</b> — обязательно ответим!\n\n"
+            f"💡 Совет: напиши /faq для ответов на частые вопросы\n"
             f"Ваше сообщение сохранено, менеджер @{MANAGER_USERNAME} увидит его утром.",
             reply_markup=get_main_keyboard()
         )
-        # Всё равно уведомить менеджера, чтобы мог ответить раньше
+        # Уведомить менеджера о сообщении вне рабочего времени
         uname = f"@{message.from_user.username}" if message.from_user.username else message.from_user.first_name
         for cid in ADMINS:
             try:
@@ -1607,45 +2280,78 @@ async def fallback_any_message(message: types.Message):
 
 
 async def birthday_check_loop():
-    """Ежедневно проверяет дни рождения и начисляет +100 баллов."""
+    """Ежедневно проверяет дни рождения и начисляет +100 баллов. Напоминает за неделю."""
     while True:
         try:
-            now = datetime.now()
+            now = now_magadan()
             today_str = f"{now.day:02d}.{now.month:02d}"
+            week_ahead = (now + timedelta(days=7)).strftime("%d.%m")
             subs = _load_json(SUBSCRIBERS_FILE, {})
             changed = False
+
             for uid, data in subs.items():
-                if data.get("birthday") != today_str:
+                birthday = data.get("birthday")
+                if not birthday:
                     continue
-                if data.get("last_birthday_bonus") == now.year:
-                    continue
-                async with _bonus_lock:
-                    bonuses = _load_bonuses()
-                    u = _ensure_user(bonuses, uid)
-                    u["balance"] += 100
-                    _save_bonuses(bonuses)
-                subs[uid]["last_birthday_bonus"] = now.year
-                changed = True
-                name = data.get("name") or "друг"
-                try:
-                    await bot.send_message(
-                        chat_id=int(uid),
-                        text=(
-                            f"🎂 <b>С Днём Рождения, {name}!</b>\n\n"
-                            f"Вся команда VAPEBAZAR поздравляет тебя! 🥳\n"
-                            f"В подарок — <b>+100 баллов</b> на твой счёт 💎\n\n"
-                            f"Трать с удовольствием 💜"
-                        ),
-                        reply_markup=get_main_keyboard()
-                    )
-                except Exception as e:
-                    logger.error(f"Birthday message failed for {uid}: {e}")
+
+                # ── Напоминание за неделю ──
+                if birthday == week_ahead:
+                    reminder_sent_key = f"birthday_reminder_week_{now.year}"
+                    if data.get(reminder_sent_key) != now.year:
+                        name = data.get("name") or "друг"
+                        try:
+                            await bot.send_message(
+                                chat_id=int(uid),
+                                text=(
+                                    f"🎂 <b>Через неделю День Рождения!</b>\n\n"
+                                    f"Привет, {name}! 👋\n"
+                                    f"Через 7 дней у тебя День Рождения 🎉\n\n"
+                                    f"Подготовь свой заказ — в день рождения ты получишь:\n"
+                                    f"├ <b>-30%</b> скидку на любой товар\n"
+                                    f"├ <b>+100 баллов</b> в подарок\n"
+                                    f"└ <b>Бесплатная доставка</b>\n\n"
+                                    f"Спеши, предложение действует только в этот день! 💜"
+                                ),
+                                reply_markup=get_main_keyboard()
+                            )
+                            subs[uid][reminder_sent_key] = now.year
+                            changed = True
+                        except Exception as e:
+                            logger.error(f"Birthday reminder (week before) failed for {uid}: {e}")
+
+                # ── День рождения — начисляем баллы ──
+                if birthday == today_str:
+                    if data.get("last_birthday_bonus") == now.year:
+                        continue
+                    async with _bonus_lock:
+                        bonuses = _load_bonuses()
+                        u = _ensure_user(bonuses, uid)
+                        u["balance"] += 100
+                        _save_bonuses(bonuses)
+                    subs[uid]["last_birthday_bonus"] = now.year
+                    changed = True
+                    name = data.get("name") or "друг"
+                    try:
+                        await bot.send_message(
+                            chat_id=int(uid),
+                            text=(
+                                f"🎂 <b>С Днём Рождения, {name}!</b>\n\n"
+                                f"Вся команда VAPEBAZAR поздравляет тебя! 🥳\n"
+                                f"В подарок — <b>+100 баллов</b> на твой счёт 💎\n\n"
+                                f"<b>Ещё подарок:</b> -30% на любой товар в этот день! 🎁\n\n"
+                                f"Спеши, скидка действует только сегодня 💜"
+                            ),
+                            reply_markup=get_main_keyboard()
+                        )
+                    except Exception as e:
+                        logger.error(f"Birthday message failed for {uid}: {e}")
+
             if changed:
                 _save_json(SUBSCRIBERS_FILE, subs)
         except Exception as e:
             logger.error(f"Birthday loop error: {e}")
         # Следующий запуск в 10:00 следующего дня
-        now = datetime.now()
+        now = now_magadan()
         tomorrow = (now + timedelta(days=1)).replace(hour=10, minute=0, second=0, microsecond=0)
         await asyncio.sleep((tomorrow - now).total_seconds())
 
@@ -1655,7 +2361,7 @@ async def smart_reminder_loop():
     await asyncio.sleep(3600)  # первый запуск через час после старта бота
     while True:
         try:
-            now = datetime.now()
+            now = now_magadan()
             cutoff = now - timedelta(days=14)
             data = _load_bonuses()
             for uid, u in data["users"].items():
@@ -1706,7 +2412,7 @@ async def vpn_expiry_reminder_loop():
     await asyncio.sleep(1800)  # первый запуск через полчаса после старта бота
     while True:
         try:
-            now = datetime.now()
+            now = now_magadan()
             subs = _load_json(VPN_SUBS_FILE, {})
             changed = False
             for uid, rec in subs.items():
@@ -1758,9 +2464,8 @@ async def vpn_expiry_reminder_loop():
 
 async def weekly_digest_loop():
     """Каждый понедельник в 9:00 по Магадану шлёт админам сводку за неделю."""
-    MAGADAN = timezone(timedelta(hours=10))
     while True:
-        now = datetime.now(MAGADAN)
+        now = now_magadan()
         days_ahead = (0 - now.weekday()) % 7  # 0 = понедельник
         if days_ahead == 0 and now.hour >= 9:
             days_ahead = 7
@@ -1774,7 +2479,7 @@ async def weekly_digest_loop():
 
 async def send_weekly_digest():
     """Считает выручку/топ товаров/VPN за последние 7 дней и шлёт всем админам."""
-    now = datetime.now()
+    now = now_magadan()
     week_ago = now - timedelta(days=7)
 
     orders = _load_json(ORDERS_FILE, [])
