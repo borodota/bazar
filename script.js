@@ -2672,3 +2672,130 @@ window._toggleCartNote = function(idx) {
 window._setCartNote = function(idx, val) {
     if (window.cart[idx]) window.cart[idx].note = val;
 };
+
+// ── УВЕЛИЧЕНИЕ ИЗОБРАЖЕНИЙ (IMAGE ZOOM) ──
+window.initImageZoom = function() {
+    document.addEventListener('click', function(e) {
+        if (!e.target.matches('.product-img, .popup-image-center .product-img')) return;
+        if (e.target.style.display === 'none') return;
+
+        const src = e.target.src;
+        if (!src || src.includes('data:')) return;
+
+        // Создаём модальное окно для просмотра
+        const lightbox = document.createElement('div');
+        lightbox.className = 'image-lightbox';
+        lightbox.innerHTML = `
+            <div class="lightbox-overlay"></div>
+            <div class="lightbox-container">
+                <button class="lightbox-close">✕</button>
+                <img src="${src}" alt="Увеличенное изображение" class="lightbox-image">
+                <div class="lightbox-controls">
+                    <button class="lightbox-zoom-out">−</button>
+                    <span class="lightbox-zoom-level">100%</span>
+                    <button class="lightbox-zoom-in">+</button>
+                </div>
+            </div>
+        `;
+        document.body.appendChild(lightbox);
+
+        // Анимация появления
+        requestAnimationFrame(() => lightbox.classList.add('active'));
+
+        let zoom = 100;
+        const img = lightbox.querySelector('.lightbox-image');
+        const level = lightbox.querySelector('.lightbox-zoom-level');
+
+        lightbox.querySelector('.lightbox-zoom-in').addEventListener('click', () => {
+            zoom = Math.min(zoom + 10, 200);
+            img.style.transform = `scale(${zoom / 100})`;
+            level.textContent = zoom + '%';
+        });
+
+        lightbox.querySelector('.lightbox-zoom-out').addEventListener('click', () => {
+            zoom = Math.max(zoom - 10, 100);
+            img.style.transform = `scale(${zoom / 100})`;
+            level.textContent = zoom + '%';
+        });
+
+        const closeLightbox = () => {
+            lightbox.classList.remove('active');
+            setTimeout(() => lightbox.remove(), 300);
+        };
+
+        lightbox.querySelector('.lightbox-close').addEventListener('click', closeLightbox);
+        lightbox.querySelector('.lightbox-overlay').addEventListener('click', closeLightbox);
+
+        // Закрытие по Escape
+        const escHandler = (e) => {
+            if (e.key === 'Escape') {
+                closeLightbox();
+                document.removeEventListener('keydown', escHandler);
+            }
+        };
+        document.addEventListener('keydown', escHandler);
+    });
+};
+
+// ── TOUCH GESTURES (СВАЙП ДЛЯ КАРУСЕЛИ) ──
+window.initTouchGestures = function() {
+    const carousels = document.querySelectorAll('.featured-list, .related-list, .categories-container, .filter-bar');
+
+    carousels.forEach(carousel => {
+        let startX = 0;
+        let currentX = 0;
+
+        carousel.addEventListener('touchstart', (e) => {
+            startX = e.touches[0].clientX;
+        }, { passive: true });
+
+        carousel.addEventListener('touchmove', (e) => {
+            currentX = e.touches[0].clientX;
+        }, { passive: true });
+
+        carousel.addEventListener('touchend', () => {
+            const diff = startX - currentX;
+            if (Math.abs(diff) > 50) {
+                if (diff > 0) {
+                    // Свайп влево
+                    carousel.scrollBy({ left: 100, behavior: 'smooth' });
+                } else {
+                    // Свайп вправо
+                    carousel.scrollBy({ left: -100, behavior: 'smooth' });
+                }
+            }
+        });
+    });
+};
+
+// ── ПЛАВНАЯ АНИМАЦИЯ ЗАГРУЗКИ КОНТЕНТА ──
+window.animateContentIn = function(element) {
+    if (!element) return;
+    element.style.opacity = '0';
+    element.style.transform = 'translateY(8px)';
+
+    requestAnimationFrame(() => {
+        element.style.transition = 'opacity 0.3s ease-out, transform 0.3s ease-out';
+        element.style.opacity = '1';
+        element.style.transform = 'translateY(0)';
+    });
+};
+
+// ── PRELOAD ИЗОБРАЖЕНИЙ ДЛЯ ПРОИЗВОДИТЕЛЬНОСТИ ──
+window.preloadImages = function(urls) {
+    if (!Array.isArray(urls)) return;
+    urls.forEach(url => {
+        if (!url || typeof url !== 'string') return;
+        const img = new Image();
+        img.src = url;
+    });
+};
+
+// Инициализация интерактивных функций при загрузке
+document.addEventListener('DOMContentLoaded', () => {
+    window.initImageZoom();
+    window.initTouchGestures();
+    // Preload избранные товары
+    const featured = window.products.filter(p => ["pod_aegis_hero_5", "pod_xros_5_mini", "dis_lost_mary_30000", "liq_anarhia_v2_brand"].includes(p.id));
+    window.preloadImages(featured.map(p => p.imageUrl));
+});
