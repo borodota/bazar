@@ -2176,6 +2176,108 @@ async def cmd_birthday(message: types.Message):
     await message.answer(f"🎂 День рождения сохранён: <b>{formatted}</b>\nВ этот день тебя ждёт подарок от VAPEBAZAR! 🎁")
 
 
+@dp.message(Command("rozygrysh"))
+async def cmd_rozygrysh(message: types.Message):
+    """Информация о розыгрыше"""
+    uid = str(message.from_user.id)
+    rozygrysh_data = _load_json(CHALLENGES_FILE, {}).get("razygrysh", {})
+    participants = rozygrysh_data.get("participants", [])
+    is_participant = uid in participants
+
+    text = (
+        f"🎉 <b>РОЗЫГРЫШ НА 100 ПОДПИСЧИКОВ!</b>\n\n"
+        f"🏆 <b>ЧТО МОЖНО ВЫИГРАТЬ:</b>\n"
+        f"├ 👑 VIP-подписка на месяц (скидка -5%)\n"
+        f"├ 🎁 Промокод на 1000₽ скидку\n"
+        f"└ 🛍️ Товар на выбор (до 5000₽)\n\n"
+        f"✅ <b>КАК УЧАСТВОВАТЬ:</b>\n"
+        f"1️⃣ Подпишись на канал @VapeBazar49\n"
+        f"2️⃣ Подпишись на бота @VapeBazar_bot\n"
+        f"3️⃣ Нажми кнопку ниже\n"
+        f"4️⃣ Жди результатов!\n\n"
+        f"🎯 <b>Победители объявляют через 3 дня!</b>\n"
+        f"Удачи! 💜✨"
+    )
+
+    if is_participant:
+        text += f"\n\n✅ <b>Ты уже участвуешь в розыгрыше!</b> (ID: {len(participants)})"
+
+    kb = InlineKeyboardMarkup(inline_keyboard=[
+        [InlineKeyboardButton(text="✅ УЧАСТВОВАТЬ" if not is_participant else "✅ ТЫ УЖЕ УЧАСТВУЕШЬ",
+                             callback_data="rozygrysh_enter")]
+    ])
+
+    await message.answer(text, reply_markup=kb)
+
+
+@dp.callback_query(F.data == "rozygrysh_enter")
+async def rozygrysh_enter(callback: types.CallbackQuery):
+    """Вступить в розыгрыш"""
+    uid = str(callback.from_user.id)
+    rozygrysh_data = _load_json(CHALLENGES_FILE, {}).get("razygrysh", {})
+    participants = rozygrysh_data.get("participants", [])
+
+    if uid not in participants:
+        participants.append(uid)
+        rozygrysh_data["participants"] = participants
+
+        data = _load_json(CHALLENGES_FILE, {})
+        data["razygrysh"] = rozygrysh_data
+        _save_json(CHALLENGES_FILE, data)
+
+        await callback.answer("✅ Ты участвуешь в розыгрыше! Удачи! 🍀", show_alert=True)
+    else:
+        await callback.answer("✅ Ты уже участвуешь!", show_alert=True)
+
+
+@dp.message(Command("rozygrysh_winner"))
+async def cmd_rozygrysh_winner(message: types.Message):
+    """АДМИН: Выбрать победителя розыгрыша"""
+    if message.from_user.id not in ADMINS:
+        return
+
+    rozygrysh_data = _load_json(CHALLENGES_FILE, {}).get("razygrysh", {})
+    participants = rozygrysh_data.get("participants", [])
+
+    if not participants:
+        await message.answer("❌ Нет участников в розыгрыше")
+        return
+
+    import random
+    winner_id = random.choice(participants)
+
+    text = (
+        f"🎉 <b>ОБЪЯВЛЯЕМ ПОБЕДИТЕЛЯ!</b>\n\n"
+        f"🏆 Победитель: <code>{winner_id}</code>\n"
+        f"📊 Всего участников: {len(participants)}\n\n"
+        f"✅ Победитель получит:\n"
+        f"├ VIP на месяц или\n"
+        f"├ Промокод 1000₽ или\n"
+        f"└ Товар до 5000₽\n\n"
+        f"Поздравляем! 🎊"
+    )
+
+    # Отправляем победителю
+    try:
+        await bot.send_message(
+            chat_id=int(winner_id),
+            text=(
+                f"🎉 <b>ПОЗДРАВЛЯЕМ!</b>\n\n"
+                f"Ты победитель розыгрыша VAPEBAZAR! 🏆\n\n"
+                f"Выбери свой приз:\n"
+                f"1️⃣ VIP на месяц (скидка -5%)\n"
+                f"2️⃣ Промокод 1000₽\n"
+                f"3️⃣ Товар до 5000₽\n\n"
+                f"Напиши менеджеру @BORO_DOTA"
+            )
+        )
+    except Exception as e:
+        logger.error(f"Не удалось уведомить победителя {winner_id}: {e}")
+
+    # Отправляем админу результат
+    await message.answer(text)
+
+
 @dp.message(Command("restock"))
 async def cmd_restock(message: types.Message):
     """Админ отмечает поступление товара — оповещаем всех, кто ждал."""
