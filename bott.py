@@ -402,7 +402,7 @@ def get_main_keyboard():
         keyboard=[
             [KeyboardButton(text="🛍️ Открыть Магазин", web_app=types.WebAppInfo(url=web_app_url))],
             [KeyboardButton(text="💎 Баллы"), KeyboardButton(text="👑 VIP"), KeyboardButton(text="🎁 Рефереллы")],
-            [KeyboardButton(text="📦 Заказы"), KeyboardButton(text="❓ FAQ"), KeyboardButton(text="📞 Контакты")]
+            [KeyboardButton(text="💸 Партнерка"), KeyboardButton(text="❓ FAQ"), KeyboardButton(text="📞 Контакты")]
         ],
         resize_keyboard=True
     )
@@ -420,10 +420,13 @@ def get_features_menu():
         ],
         [
             InlineKeyboardButton(text="🎁 Рефереллы (/ref)", callback_data="cmd_ref"),
-            InlineKeyboardButton(text="🎪 Вызовы (/challenges)", callback_data="cmd_challenges")
+            InlineKeyboardButton(text="💸 Партнерка (/partner)", callback_data="cmd_partner")
         ],
         [
-            InlineKeyboardButton(text="❓ FAQ (/faq)", callback_data="cmd_faq"),
+            InlineKeyboardButton(text="🎪 Вызовы (/challenges)", callback_data="cmd_challenges"),
+            InlineKeyboardButton(text="❓ FAQ (/faq)", callback_data="cmd_faq")
+        ],
+        [
             InlineKeyboardButton(text="🎂 День рождения (/birthday)", callback_data="cmd_birthday")
         ]
     ])
@@ -1818,6 +1821,67 @@ async def copy_ref_link(callback: types.CallbackQuery):
     # Здесь мы просто показываем уведомление
 
 
+@dp.message(Command("partner"))
+async def cmd_partner(message: types.Message):
+    """Партнерская программа — заработок на рефералах"""
+    uid = str(message.from_user.id)
+    bonuses = _load_json(BONUSES_FILE, {})
+    my_data = bonuses.get(uid, {})
+
+    ref_url = f"https://t.me/{BOT_USERNAME}?start=ref_{message.from_user.id}"
+
+    # Статистика
+    referred = my_data.get("referred", [])
+    referred_count = len(referred)
+
+    # Подсчитываем активных рефералов (те, кто сделал заказ)
+    active_referred = 0
+    total_referred_spent = 0
+    for ref_id in referred:
+        ref_data = bonuses.get(str(ref_id), {})
+        if ref_data.get("orders", 0) > 0:
+            active_referred += 1
+            total_referred_spent += ref_data.get("spent", 0)
+
+    # Потенциальный заработок (за первые покупки активных)
+    potential_earnings = active_referred * REFERRAL_REWARD
+
+    text = (
+        f"💸 <b>ПАРТНЕРСКАЯ ПРОГРАММА VAPEBAZAR</b>\n\n"
+        f"🤑 <b>Как это работает?</b>\n"
+        f"├ Ты получаешь личную реферальную ссылку\n"
+        f"├ Делишься ей в сторис, чатах, постах\n"
+        f"├ За каждого вступившего: <b>+200 баллов</b> (первая покупка)\n"
+        f"└ Плюс <b>5% от суммы первого заказа</b> приглашённого\n\n"
+        f"📊 <b>Твоя статистика:</b>\n"
+        f"├ Уникальных переходов: <b>{referred_count}</b>\n"
+        f"├ Активных клиентов: <b>{active_referred}</b>\n"
+        f"├ Общих потрачено: <b>{_fmt_money(total_referred_spent)} ₽</b>\n"
+        f"└ Твой заработок баллов: <b>+{potential_earnings}</b> 💎\n\n"
+        f"<b>Твоя уникальная ссылка:</b>\n"
+        f"<code>{ref_url}</code>\n\n"
+        f"✨ <b>Бонусы за количество:</b>\n"
+        f"├ 10+ активных = VIP на месяц\n"
+        f"├ 25+ активных = VIP на квартал + 1000 баллов\n"
+        f"└ 50+ активных = VIP на год + 5000 баллов\n\n"
+        f"Есть вопросы? Пиши @BORO_DOTA"
+    )
+
+    kb = InlineKeyboardMarkup(inline_keyboard=[
+        [InlineKeyboardButton(text="📋 Скопировать ссылку", callback_data="copy_partner_link")],
+        [InlineKeyboardButton(text="📱 Поделиться в Telegram", url=f"https://t.me/share/url?url={ref_url}&text=Зарабатывай%20с%20VAPEBAZAR!")],
+        [InlineKeyboardButton(text="💬 Связаться с менеджером", url=f"https://t.me/{MANAGER_USERNAME}")]
+    ])
+
+    await message.answer(text, reply_markup=kb)
+
+
+@dp.callback_query(lambda c: c.data == "copy_partner_link")
+async def copy_partner_link(callback: types.CallbackQuery):
+    """Копирование партнерской ссылки"""
+    await callback.answer("✅ Партнерская ссылка скопирована!", show_alert=False)
+
+
 # ═════════════════════════════════════════════════════════════════════════════
 # УПРАВЛЕНИЕ БАЛЛАМИ И БОНУСАМИ
 # ═════════════════════════════════════════════════════════════════════════════
@@ -1959,6 +2023,12 @@ async def show_referral_panel(message: types.Message):
         f"<i>Нажми кнопку ниже — друг откроет магазин со скидкой автоматически.</i>",
         reply_markup=share_kb
     )
+
+@dp.message(F.text == "💸 Партнерка")
+async def handle_partner_button(message: types.Message):
+    """Обработка нажатия кнопки Партнерка"""
+    await cmd_partner(message)
+
 
 @dp.message(F.text == "🛍️ Мои заказы")
 async def show_my_orders(message: types.Message):
@@ -2513,6 +2583,37 @@ async def handle_menu_buttons(callback: types.CallbackQuery):
                 f"Друг по ссылке:\n"
                 f"├ Получит -50₽ на первый заказ\n"
                 f"└ Ты получишь +200 баллов"
+            )
+            await callback.message.answer(text, reply_markup=get_main_keyboard())
+
+        elif cmd_name == "cmd_partner":
+            uid = str(callback.from_user.id)
+            bonuses = _load_json(BONUSES_FILE, {})
+            my_data = bonuses.get(uid, {})
+            ref_url = f"https://t.me/{BOT_USERNAME}?start=ref_{callback.from_user.id}"
+
+            referred = my_data.get("referred", [])
+            referred_count = len(referred)
+            active_referred = sum(1 for ref_id in referred if bonuses.get(str(ref_id), {}).get("orders", 0) > 0)
+            total_referred_spent = sum(bonuses.get(str(ref_id), {}).get("spent", 0) for ref_id in referred if bonuses.get(str(ref_id), {}).get("orders", 0) > 0)
+            potential_earnings = active_referred * REFERRAL_REWARD
+
+            text = (
+                f"💸 <b>ПАРТНЕРСКАЯ ПРОГРАММА</b>\n\n"
+                f"🤑 Как это работает?\n"
+                f"├ Ты получаешь личную ссылку\n"
+                f"├ Делишься ей в сторис и чатах\n"
+                f"├ За активного: <b>+200 баллов</b>\n"
+                f"└ Плюс <b>5% от первого заказа</b>\n\n"
+                f"📊 Твоя статистика:\n"
+                f"├ Переходов: <b>{referred_count}</b>\n"
+                f"├ Активных: <b>{active_referred}</b>\n"
+                f"├ Потрачено ими: <b>{_fmt_money(total_referred_spent)} ₽</b>\n"
+                f"└ Твой заработок: <b>+{potential_earnings}</b> 💎\n\n"
+                f"✨ Бонусы за кол-во:\n"
+                f"├ 10+ активных = VIP на месяц\n"
+                f"├ 25+ = VIP на квартал + 1000 баллов\n"
+                f"└ 50+ = VIP на год + 5000 баллов"
             )
             await callback.message.answer(text, reply_markup=get_main_keyboard())
 
