@@ -1086,8 +1086,17 @@ async def cmd_start(message: types.Message):
         except Exception as e:
             logger.error(f"Не удалось записать реферала из /start: {e}")
     await message.answer(
-        f"Привет, {message.from_user.first_name}! Добро пожаловать в магазин <b>VAPEBAZAR PREMIUM</b>.\n"
-        f"Нажми кнопку ниже, чтобы войти в каталог.",
+        f"Привет, {message.from_user.first_name}! Добро пожаловать в магазин <b>VAPEBAZAR PREMIUM</b>.\n\n"
+        f"Нажми кнопку ниже, чтобы войти в каталог 🛍️\n\n"
+        f"<b>Полезные команды:</b>\n"
+        f"├ /ref — реферальная ссылка и статистика\n"
+        f"├ /vip — статус VIP подписки\n"
+        f"├ /badges — твои достижения\n"
+        f"├ /discount — текущие скидки и бонусы\n"
+        f"├ /challenges — ежемесячные вызовы\n"
+        f"├ /faq — часто задаваемые вопросы\n"
+        f"├ /bonus — баланс баллов\n"
+        f"└ /birthday — сохранить день рождения",
         reply_markup=get_main_keyboard()
     )
     if message.from_user.id in ADMINS:
@@ -1678,6 +1687,64 @@ async def cmd_badges(message: types.Message):
         text += "<i>Пока нет бейджей. Начни с первого заказа!</i>\n"
 
     text += f"\n<i>Всего заказов: {user.get('orders', 0)}</i>"
+
+    await message.answer(text)
+
+
+@dp.message(Command("discount"))
+async def cmd_discount(message: types.Message):
+    """Показать текущие скидки пользователя"""
+    uid = str(message.from_user.id)
+    data = _load_bonuses()
+    user = data["users"].get(uid, {})
+
+    orders_count = user.get("orders", 0)
+    tier_key, tier = get_loyalty_tier(orders_count)
+    vip_status = get_vip_status(int(uid))
+
+    text = "💰 <b>Твои Скидки и Бонусы</b>\n\n"
+
+    # Показываем текущую скидку по лояльности
+    if tier_key:
+        discount_pct = int(tier["discount"] * 100)
+        text += f"<b>Уровень лояльности: {tier['name']}</b>\n"
+        text += f"├ Скидка: <b>-{discount_pct}%</b> на все товары\n"
+        text += f"├ Бонусы: +{discount_pct}% баллов за заказ\n"
+        text += f"└ Преимущества: {tier['perks']}\n\n"
+    else:
+        text += f"<b>Уровень лояльности:</b> Нет (начни с первого заказа)\n"
+        text += f"├ Скидка: базовая -0%\n"
+        text += f"└ Бонусы: +5% баллов за заказ\n\n"
+
+    # Показываем VIP статус
+    if vip_status["active"]:
+        text += f"<b>👑 VIP Статус: АКТИВЕН</b>\n"
+        text += f"├ Скидка: <b>дополнительно -5%</b>\n"
+        text += f"├ Действует: {vip_status['days_left']} дней\n"
+        text += f"└ Бонусы: +50 баллов за заказ\n\n"
+    else:
+        text += f"<b>👑 VIP Статус:</b> Не активен\n"
+        text += f"├ Активирай за 299₽/месяц или сделай 10 заказов\n"
+        text += f"└ Дополнительная скидка: -5%\n\n"
+
+    # Итоговая скидка
+    total_discount = 0
+    if tier_key:
+        total_discount += int(tier["discount"] * 100)
+    if vip_status["active"]:
+        total_discount += 5
+
+    text += f"📊 <b>Итоговая скидка: -{total_discount}%</b> (может быть меньше за счёт акций)\n\n"
+
+    # Прогресс к следующему уровню
+    if tier_key != "platinum":
+        for tier_name, tier_info in LOYALTY_TIERS.items():
+            if tier_info["orders"] > orders_count:
+                needed = tier_info["orders"] - orders_count
+                text += f"⏳ <b>До {tier_info['name']}:</b> ещё {needed} заказов\n"
+                break
+    else:
+        text += f"✅ <b>Максимальный уровень достигнут!</b>\n"
 
     await message.answer(text)
 
