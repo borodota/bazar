@@ -2178,29 +2178,39 @@ async def cmd_birthday(message: types.Message):
 
 @dp.message(Command("rozygrysh"))
 async def cmd_rozygrysh(message: types.Message):
-    """Информация о розыгрыше"""
+    """Информация о розыгрыше на 100 подписчиков"""
     uid = str(message.from_user.id)
     rozygrysh_data = _load_json(CHALLENGES_FILE, {}).get("razygrysh", {})
     participants = rozygrysh_data.get("participants", [])
     is_participant = uid in participants
 
     text = (
-        f"🎉 <b>РОЗЫГРЫШ НА 100 ПОДПИСЧИКОВ!</b>\n\n"
-        f"🏆 <b>ЧТО МОЖНО ВЫИГРАТЬ:</b>\n"
-        f"├ 👑 VIP-подписка на месяц (скидка -5%)\n"
-        f"├ 🎁 Промокод на 1000₽ скидку\n"
-        f"└ 🛍️ Товар на выбор (до 5000₽)\n\n"
+        f"🎉 <b>РОЗЫГРЫШ НА 100 ПОДПИСЧИКОВ!</b>\n"
+        f"Осталось совсем чуть-чуть! 🚀\n\n"
+        f"🏆 <b>10 МЕСТ С ПРИЗАМИ:</b>\n\n"
+        f"🥇 1️⃣ <b>МЕСТО</b> Vaporesso XROS 6 🆕\n"
+        f"🥈 2️⃣ <b>МЕСТО</b> Vaporesso XROS 5\n"
+        f"🥉 3️⃣ <b>МЕСТО</b> Vaporesso XROS 5 mini\n"
+        f"4️⃣ <b>МЕСТО</b> Жидкость INFLAVE & BUBBLE\n"
+        f"5️⃣ <b>МЕСТО</b> Жидкость OGGO Premium\n"
+        f"6️⃣ <b>МЕСТО</b> Smoant K5 (Испаритель) + XROS Series Картридж\n"
+        f"7️⃣ <b>МЕСТО</b> GeekVape B-series (Испаритель) + Lost Vape Ursa Nano Картридж\n"
+        f"8️⃣ <b>МЕСТО</b> Жидкость Narcos 5% + Жидкость Annima Love\n"
+        f"9️⃣ <b>МЕСТО</b> Картридж Rincoe Manto Ultra + Жидкость v2\n"
+        f"🔟 <b>МЕСТО</b> Промокод 500₽ + Аккум 18650\n\n"
+        f"━━━━━━━━━━━━━━━━━━━━━━━━\n"
         f"✅ <b>КАК УЧАСТВОВАТЬ:</b>\n"
         f"1️⃣ Подпишись на канал @VapeBazar49\n"
         f"2️⃣ Подпишись на бота @VapeBazar_bot\n"
-        f"3️⃣ Нажми кнопку ниже\n"
-        f"4️⃣ Жди результатов!\n\n"
-        f"🎯 <b>Победители объявляют через 3 дня!</b>\n"
+        f"3️⃣ Жди объявления розыгрыша (01.08)\n"
+        f"4️⃣ Участвуй через бота!\n\n"
+        f"🎯 Один победитель = один приз\n"
+        f"📅 Розыгрыш на 100 подписчиков\n"
         f"Удачи! 💜✨"
     )
 
     if is_participant:
-        text += f"\n\n✅ <b>Ты уже участвуешь в розыгрыше!</b> (ID: {len(participants)})"
+        text += f"\n\n✅ <b>Ты уже участвуешь в розыгрыше!</b>"
 
     kb = InlineKeyboardMarkup(inline_keyboard=[
         [InlineKeyboardButton(text="✅ УЧАСТВОВАТЬ" if not is_participant else "✅ ТЫ УЖЕ УЧАСТВУЕШЬ",
@@ -2232,7 +2242,7 @@ async def rozygrysh_enter(callback: types.CallbackQuery):
 
 @dp.message(Command("rozygrysh_winner"))
 async def cmd_rozygrysh_winner(message: types.Message):
-    """АДМИН: Выбрать победителя розыгрыша"""
+    """АДМИН: Выбрать 10 победителей розыгрыша (по одному за место)"""
     if message.from_user.id not in ADMINS:
         return
 
@@ -2243,38 +2253,100 @@ async def cmd_rozygrysh_winner(message: types.Message):
         await message.answer("❌ Нет участников в розыгрыше")
         return
 
-    import random
-    winner_id = random.choice(participants)
+    prizes = [
+        {"place": 1, "emoji": "🥇", "prize": "Vaporesso XROS 6 🆕"},
+        {"place": 2, "emoji": "🥈", "prize": "Vaporesso XROS 5"},
+        {"place": 3, "emoji": "🥉", "prize": "Vaporesso XROS 5 mini"},
+        {"place": 4, "emoji": "4️⃣", "prize": "Жидкость INFLAVE & BUBBLE"},
+        {"place": 5, "emoji": "5️⃣", "prize": "Жидкость OGGO Premium"},
+        {"place": 6, "emoji": "6️⃣", "prize": "Smoant K5 + XROS Картридж"},
+        {"place": 7, "emoji": "7️⃣", "prize": "GeekVape B-series + Lost Vape Картридж"},
+        {"place": 8, "emoji": "8️⃣", "prize": "Narcos + Annima Love"},
+        {"place": 9, "emoji": "9️⃣", "prize": "Rincoe Manto Ultra + v2"},
+        {"place": 10, "emoji": "🔟", "prize": "Промокод 500₽ + Аккум 18650"},
+    ]
 
-    text = (
-        f"🎉 <b>ОБЪЯВЛЯЕМ ПОБЕДИТЕЛЯ!</b>\n\n"
-        f"🏆 Победитель: <code>{winner_id}</code>\n"
-        f"📊 Всего участников: {len(participants)}\n\n"
-        f"✅ Победитель получит:\n"
-        f"├ VIP на месяц или\n"
-        f"├ Промокод 1000₽ или\n"
-        f"└ Товар до 5000₽\n\n"
-        f"Поздравляем! 🎊"
+    import random
+    # Выбираем 10 уникальных победителей
+    selected_participants = random.sample(participants, min(10, len(participants)))
+
+    winners_data = []
+    admin_text = (
+        f"🎉 <b>ОБЪЯВЛЯЕМ ПОБЕДИТЕЛЕЙ!</b>\n"
+        f"📊 Всего участников: {len(participants)}\n"
+        f"🏆 Выбрано мест: {len(selected_participants)}\n\n"
     )
 
-    # Отправляем победителю
-    try:
-        await bot.send_message(
-            chat_id=int(winner_id),
-            text=(
-                f"🎉 <b>ПОЗДРАВЛЯЕМ!</b>\n\n"
-                f"Ты победитель розыгрыша VAPEBAZAR! 🏆\n\n"
-                f"Выбери свой приз:\n"
-                f"1️⃣ VIP на месяц (скидка -5%)\n"
-                f"2️⃣ Промокод 1000₽\n"
-                f"3️⃣ Товар до 5000₽\n\n"
-                f"Напиши менеджеру @BORO_DOTA"
+    for idx, winner_id in enumerate(selected_participants):
+        if idx < len(prizes):
+            prize_info = prizes[idx]
+            winners_data.append({
+                "place": prize_info["place"],
+                "winner_id": winner_id,
+                "prize": prize_info["prize"]
+            })
+            admin_text += (
+                f"{prize_info['emoji']} <b>Место {prize_info['place']}</b>\n"
+                f"Победитель: <code>{winner_id}</code>\n"
+                f"Приз: {prize_info['prize']}\n\n"
             )
-        )
-    except Exception as e:
-        logger.error(f"Не удалось уведомить победителя {winner_id}: {e}")
 
-    # Отправляем админу результат
+            # Отправляем победителю
+            try:
+                await bot.send_message(
+                    chat_id=int(winner_id),
+                    text=(
+                        f"🎉 <b>ПОЗДРАВЛЯЕМ!</b>\n\n"
+                        f"Ты победитель розыгрыша VAPEBAZAR! 🏆\n\n"
+                        f"{prize_info['emoji']} <b>Место {prize_info['place']}</b>\n"
+                        f"<b>Твой приз:</b> {prize_info['prize']}\n\n"
+                        f"Напиши менеджеру @BORO_DOTA для получения приза!"
+                    )
+                )
+            except Exception as e:
+                logger.error(f"Не удалось уведомить победителя {winner_id}: {e}")
+
+    # Сохраняем результаты
+    rozygrysh_data["winners"] = winners_data
+    data = _load_json(CHALLENGES_FILE, {})
+    data["razygrysh"] = rozygrysh_data
+    _save_json(CHALLENGES_FILE, data)
+
+    # Отправляем админу полный результат
+    await message.answer(admin_text)
+
+
+@dp.message(Command("rozygrysh_prizes"))
+async def cmd_rozygrysh_prizes(message: types.Message):
+    """Показать все 10 призов розыгрыша"""
+    if message.from_user.id not in ADMINS:
+        return
+
+    prizes = [
+        {"place": 1, "emoji": "🥇", "prize": "Vaporesso XROS 6 🆕"},
+        {"place": 2, "emoji": "🥈", "prize": "Vaporesso XROS 5"},
+        {"place": 3, "emoji": "🥉", "prize": "Vaporesso XROS 5 mini"},
+        {"place": 4, "emoji": "4️⃣", "prize": "Жидкость INFLAVE & BUBBLE"},
+        {"place": 5, "emoji": "5️⃣", "prize": "Жидкость OGGO Premium"},
+        {"place": 6, "emoji": "6️⃣", "prize": "Smoant K5 + XROS Картридж"},
+        {"place": 7, "emoji": "7️⃣", "prize": "GeekVape B-series + Lost Vape Картридж"},
+        {"place": 8, "emoji": "8️⃣", "prize": "Narcos + Annima Love"},
+        {"place": 9, "emoji": "9️⃣", "prize": "Rincoe Manto Ultra + v2"},
+        {"place": 10, "emoji": "🔟", "prize": "Промокод 500₽ + Аккум 18650"},
+    ]
+
+    rozygrysh_data = _load_json(CHALLENGES_FILE, {}).get("razygrysh", {})
+    winners = {w["place"]: w["winner_id"] for w in rozygrysh_data.get("winners", [])}
+
+    text = "<b>🏆 ВСЕ 10 ПРИЗОВ РОЗЫГРЫША:</b>\n\n"
+    for prize_info in prizes:
+        place = prize_info["place"]
+        winner = winners.get(place, "")
+        if winner:
+            text += f"{prize_info['emoji']} Место {place}: {prize_info['prize']}\n✅ Победитель: <code>{winner}</code>\n\n"
+        else:
+            text += f"{prize_info['emoji']} Место {place}: {prize_info['prize']}\n"
+
     await message.answer(text)
 
 
