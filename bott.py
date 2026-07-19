@@ -400,13 +400,36 @@ def get_main_keyboard():
     web_app_url = "https://borodota.github.io/bazar/"
     return ReplyKeyboardMarkup(
         keyboard=[
-            [KeyboardButton(text="📱 Открыть Магазин / Корзину", web_app=types.WebAppInfo(url=web_app_url))],
-            [KeyboardButton(text="💎 Мои баллы"), KeyboardButton(text="🎁 Пригласить друга")],
-            [KeyboardButton(text="🛍️ Мои заказы"), KeyboardButton(text="📞 Контакты")],
-            [KeyboardButton(text="ℹ️ О магазине")]
+            [KeyboardButton(text="🛍️ Открыть Магазин", web_app=types.WebAppInfo(url=web_app_url))],
+            [KeyboardButton(text="💎 Баллы"), KeyboardButton(text="👑 VIP"), KeyboardButton(text="🎁 Рефереллы")],
+            [KeyboardButton(text="💸 Партнерка"), KeyboardButton(text="❓ FAQ"), KeyboardButton(text="📞 Контакты")]
         ],
         resize_keyboard=True
     )
+
+def get_features_menu():
+    """Меню с инлайн кнопками для фич"""
+    return InlineKeyboardMarkup(inline_keyboard=[
+        [
+            InlineKeyboardButton(text="💎 Баллы (/bonus)", callback_data="cmd_bonus"),
+            InlineKeyboardButton(text="👑 VIP (/vip)", callback_data="cmd_vip")
+        ],
+        [
+            InlineKeyboardButton(text="🏆 Бейджи (/badges)", callback_data="cmd_badges"),
+            InlineKeyboardButton(text="🎯 Скидки (/discount)", callback_data="cmd_discount")
+        ],
+        [
+            InlineKeyboardButton(text="🎁 Рефереллы (/ref)", callback_data="cmd_ref"),
+            InlineKeyboardButton(text="💸 Партнерка (/partner)", callback_data="cmd_partner")
+        ],
+        [
+            InlineKeyboardButton(text="🎪 Вызовы (/challenges)", callback_data="cmd_challenges"),
+            InlineKeyboardButton(text="❓ FAQ (/faq)", callback_data="cmd_faq")
+        ],
+        [
+            InlineKeyboardButton(text="🎂 День рождения (/birthday)", callback_data="cmd_birthday")
+        ]
+    ])
 
 @dp.message(F.web_app_data)
 async def handle_web_app_order(message: types.Message):
@@ -1086,17 +1109,14 @@ async def cmd_start(message: types.Message):
         except Exception as e:
             logger.error(f"Не удалось записать реферала из /start: {e}")
     await message.answer(
-        f"Привет, {message.from_user.first_name}! Добро пожаловать в магазин <b>VAPEBAZAR PREMIUM</b>.\n\n"
-        f"Нажми кнопку ниже, чтобы войти в каталог 🛍️\n\n"
-        f"<b>Полезные команды:</b>\n"
-        f"├ /ref — реферальная ссылка и статистика\n"
-        f"├ /vip — статус VIP подписки\n"
-        f"├ /badges — твои достижения\n"
-        f"├ /discount — текущие скидки и бонусы\n"
-        f"├ /challenges — ежемесячные вызовы\n"
-        f"├ /faq — часто задаваемые вопросы\n"
-        f"├ /bonus — баланс баллов\n"
-        f"└ /birthday — сохранить день рождения",
+        f"Привет, {message.from_user.first_name}! 👋\n\n"
+        f"Добро пожаловать в <b>VAPEBAZAR PREMIUM</b> 💜\n\n"
+        f"Нажми кнопки ниже чтобы посмотреть статус и управлять скидками:",
+        reply_markup=get_features_menu()
+    )
+
+    await message.answer(
+        f"<b>Основное меню:</b>",
         reply_markup=get_main_keyboard()
     )
     if message.from_user.id in ADMINS:
@@ -1801,6 +1821,67 @@ async def copy_ref_link(callback: types.CallbackQuery):
     # Здесь мы просто показываем уведомление
 
 
+@dp.message(Command("partner"))
+async def cmd_partner(message: types.Message):
+    """Партнерская программа — заработок на рефералах"""
+    uid = str(message.from_user.id)
+    bonuses = _load_json(BONUSES_FILE, {})
+    my_data = bonuses.get(uid, {})
+
+    ref_url = f"https://t.me/{BOT_USERNAME}?start=ref_{message.from_user.id}"
+
+    # Статистика
+    referred = my_data.get("referred", [])
+    referred_count = len(referred)
+
+    # Подсчитываем активных рефералов (те, кто сделал заказ)
+    active_referred = 0
+    total_referred_spent = 0
+    for ref_id in referred:
+        ref_data = bonuses.get(str(ref_id), {})
+        if ref_data.get("orders", 0) > 0:
+            active_referred += 1
+            total_referred_spent += ref_data.get("spent", 0)
+
+    # Потенциальный заработок (за первые покупки активных)
+    potential_earnings = active_referred * REFERRAL_REWARD
+
+    text = (
+        f"💸 <b>ПАРТНЕРСКАЯ ПРОГРАММА VAPEBAZAR</b>\n\n"
+        f"🤑 <b>Как это работает?</b>\n"
+        f"├ Ты получаешь личную реферальную ссылку\n"
+        f"├ Делишься ей в сторис, чатах, постах\n"
+        f"├ За каждого вступившего: <b>+200 баллов</b> (первая покупка)\n"
+        f"└ Плюс <b>5% от суммы первого заказа</b> приглашённого\n\n"
+        f"📊 <b>Твоя статистика:</b>\n"
+        f"├ Уникальных переходов: <b>{referred_count}</b>\n"
+        f"├ Активных клиентов: <b>{active_referred}</b>\n"
+        f"├ Общих потрачено: <b>{_fmt_money(total_referred_spent)} ₽</b>\n"
+        f"└ Твой заработок баллов: <b>+{potential_earnings}</b> 💎\n\n"
+        f"<b>Твоя уникальная ссылка:</b>\n"
+        f"<code>{ref_url}</code>\n\n"
+        f"✨ <b>Бонусы за количество:</b>\n"
+        f"├ 10+ активных = VIP на месяц\n"
+        f"├ 25+ активных = VIP на квартал + 1000 баллов\n"
+        f"└ 50+ активных = VIP на год + 5000 баллов\n\n"
+        f"Есть вопросы? Пиши @BORO_DOTA"
+    )
+
+    kb = InlineKeyboardMarkup(inline_keyboard=[
+        [InlineKeyboardButton(text="📋 Скопировать ссылку", callback_data="copy_partner_link")],
+        [InlineKeyboardButton(text="📱 Поделиться в Telegram", url=f"https://t.me/share/url?url={ref_url}&text=Зарабатывай%20с%20VAPEBAZAR!")],
+        [InlineKeyboardButton(text="💬 Связаться с менеджером", url=f"https://t.me/{MANAGER_USERNAME}")]
+    ])
+
+    await message.answer(text, reply_markup=kb)
+
+
+@dp.callback_query(lambda c: c.data == "copy_partner_link")
+async def copy_partner_link(callback: types.CallbackQuery):
+    """Копирование партнерской ссылки"""
+    await callback.answer("✅ Партнерская ссылка скопирована!", show_alert=False)
+
+
 # ═════════════════════════════════════════════════════════════════════════════
 # УПРАВЛЕНИЕ БАЛЛАМИ И БОНУСАМИ
 # ═════════════════════════════════════════════════════════════════════════════
@@ -1942,6 +2023,12 @@ async def show_referral_panel(message: types.Message):
         f"<i>Нажми кнопку ниже — друг откроет магазин со скидкой автоматически.</i>",
         reply_markup=share_kb
     )
+
+@dp.message(F.text == "💸 Партнерка")
+async def handle_partner_button(message: types.Message):
+    """Обработка нажатия кнопки Партнерка"""
+    await cmd_partner(message)
+
 
 @dp.message(F.text == "🛍️ Мои заказы")
 async def show_my_orders(message: types.Message):
@@ -2159,6 +2246,180 @@ async def cmd_birthday(message: types.Message):
     await message.answer(f"🎂 День рождения сохранён: <b>{formatted}</b>\nВ этот день тебя ждёт подарок от VAPEBAZAR! 🎁")
 
 
+@dp.message(Command("rozygrysh"))
+async def cmd_rozygrysh(message: types.Message):
+    """Информация о розыгрыше на 100 подписчиков"""
+    uid = str(message.from_user.id)
+    rozygrysh_data = _load_json(CHALLENGES_FILE, {}).get("razygrysh", {})
+    participants = rozygrysh_data.get("participants", [])
+    is_participant = uid in participants
+
+    text = (
+        f"🎉 <b>РОЗЫГРЫШ НА 100 ПОДПИСЧИКОВ!</b>\n"
+        f"Осталось совсем чуть-чуть! 🚀\n\n"
+        f"🏆 <b>10 МЕСТ С ПРИЗАМИ:</b>\n\n"
+        f"🥇 1️⃣ <b>МЕСТО</b> Vaporesso XROS 6 🆕\n"
+        f"🥈 2️⃣ <b>МЕСТО</b> Vaporesso XROS 5\n"
+        f"🥉 3️⃣ <b>МЕСТО</b> Vaporesso XROS 5 mini\n"
+        f"4️⃣ <b>МЕСТО</b> Жидкость INFLAVE & BUBBLE\n"
+        f"5️⃣ <b>МЕСТО</b> Жидкость OGGO Premium\n"
+        f"6️⃣ <b>МЕСТО</b> Smoant K5 (Испаритель) + XROS Series Картридж\n"
+        f"7️⃣ <b>МЕСТО</b> GeekVape B-series (Испаритель) + Lost Vape Ursa Nano Картридж\n"
+        f"8️⃣ <b>МЕСТО</b> Жидкость Narcos 5% + Жидкость Annima Love\n"
+        f"9️⃣ <b>МЕСТО</b> Картридж Rincoe Manto Ultra + Жидкость v2\n"
+        f"🔟 <b>МЕСТО</b> Промокод 500₽ + Аккум 18650\n\n"
+        f"━━━━━━━━━━━━━━━━━━━━━━━━\n"
+        f"✅ <b>КАК УЧАСТВОВАТЬ:</b>\n"
+        f"1️⃣ Подпишись на канал @VapeBazar49\n"
+        f"2️⃣ Подпишись на бота @VapeBazar_bot\n"
+        f"3️⃣ Жди объявления розыгрыша (01.08)\n"
+        f"4️⃣ Участвуй через бота!\n\n"
+        f"🎯 Один победитель = один приз\n"
+        f"📅 Розыгрыш на 100 подписчиков\n"
+        f"Удачи! 💜✨"
+    )
+
+    if is_participant:
+        text += f"\n\n✅ <b>Ты уже участвуешь в розыгрыше!</b>"
+
+    kb = InlineKeyboardMarkup(inline_keyboard=[
+        [InlineKeyboardButton(text="✅ УЧАСТВОВАТЬ" if not is_participant else "✅ ТЫ УЖЕ УЧАСТВУЕШЬ",
+                             callback_data="rozygrysh_enter")]
+    ])
+
+    await message.answer(text, reply_markup=kb)
+
+
+@dp.callback_query(F.data == "rozygrysh_enter")
+async def rozygrysh_enter(callback: types.CallbackQuery):
+    """Вступить в розыгрыш"""
+    uid = str(callback.from_user.id)
+    rozygrysh_data = _load_json(CHALLENGES_FILE, {}).get("razygrysh", {})
+    participants = rozygrysh_data.get("participants", [])
+
+    if uid not in participants:
+        participants.append(uid)
+        rozygrysh_data["participants"] = participants
+
+        data = _load_json(CHALLENGES_FILE, {})
+        data["razygrysh"] = rozygrysh_data
+        _save_json(CHALLENGES_FILE, data)
+
+        await callback.answer("✅ Ты участвуешь в розыгрыше! Удачи! 🍀", show_alert=True)
+    else:
+        await callback.answer("✅ Ты уже участвуешь!", show_alert=True)
+
+
+@dp.message(Command("rozygrysh_winner"))
+async def cmd_rozygrysh_winner(message: types.Message):
+    """АДМИН: Выбрать 10 победителей розыгрыша (по одному за место)"""
+    if message.from_user.id not in ADMINS:
+        return
+
+    rozygrysh_data = _load_json(CHALLENGES_FILE, {}).get("razygrysh", {})
+    participants = rozygrysh_data.get("participants", [])
+
+    if not participants:
+        await message.answer("❌ Нет участников в розыгрыше")
+        return
+
+    prizes = [
+        {"place": 1, "emoji": "🥇", "prize": "Vaporesso XROS 6 🆕"},
+        {"place": 2, "emoji": "🥈", "prize": "Vaporesso XROS 5"},
+        {"place": 3, "emoji": "🥉", "prize": "Vaporesso XROS 5 mini"},
+        {"place": 4, "emoji": "4️⃣", "prize": "Жидкость INFLAVE & BUBBLE"},
+        {"place": 5, "emoji": "5️⃣", "prize": "Жидкость OGGO Premium"},
+        {"place": 6, "emoji": "6️⃣", "prize": "Smoant K5 + XROS Картридж"},
+        {"place": 7, "emoji": "7️⃣", "prize": "GeekVape B-series + Lost Vape Картридж"},
+        {"place": 8, "emoji": "8️⃣", "prize": "Narcos + Annima Love"},
+        {"place": 9, "emoji": "9️⃣", "prize": "Rincoe Manto Ultra + v2"},
+        {"place": 10, "emoji": "🔟", "prize": "Промокод 500₽ + Аккум 18650"},
+    ]
+
+    import random
+    # Выбираем 10 уникальных победителей
+    selected_participants = random.sample(participants, min(10, len(participants)))
+
+    winners_data = []
+    admin_text = (
+        f"🎉 <b>ОБЪЯВЛЯЕМ ПОБЕДИТЕЛЕЙ!</b>\n"
+        f"📊 Всего участников: {len(participants)}\n"
+        f"🏆 Выбрано мест: {len(selected_participants)}\n\n"
+    )
+
+    for idx, winner_id in enumerate(selected_participants):
+        if idx < len(prizes):
+            prize_info = prizes[idx]
+            winners_data.append({
+                "place": prize_info["place"],
+                "winner_id": winner_id,
+                "prize": prize_info["prize"]
+            })
+            admin_text += (
+                f"{prize_info['emoji']} <b>Место {prize_info['place']}</b>\n"
+                f"Победитель: <code>{winner_id}</code>\n"
+                f"Приз: {prize_info['prize']}\n\n"
+            )
+
+            # Отправляем победителю
+            try:
+                await bot.send_message(
+                    chat_id=int(winner_id),
+                    text=(
+                        f"🎉 <b>ПОЗДРАВЛЯЕМ!</b>\n\n"
+                        f"Ты победитель розыгрыша VAPEBAZAR! 🏆\n\n"
+                        f"{prize_info['emoji']} <b>Место {prize_info['place']}</b>\n"
+                        f"<b>Твой приз:</b> {prize_info['prize']}\n\n"
+                        f"Напиши менеджеру @BORO_DOTA для получения приза!"
+                    )
+                )
+            except Exception as e:
+                logger.error(f"Не удалось уведомить победителя {winner_id}: {e}")
+
+    # Сохраняем результаты
+    rozygrysh_data["winners"] = winners_data
+    data = _load_json(CHALLENGES_FILE, {})
+    data["razygrysh"] = rozygrysh_data
+    _save_json(CHALLENGES_FILE, data)
+
+    # Отправляем админу полный результат
+    await message.answer(admin_text)
+
+
+@dp.message(Command("rozygrysh_prizes"))
+async def cmd_rozygrysh_prizes(message: types.Message):
+    """Показать все 10 призов розыгрыша"""
+    if message.from_user.id not in ADMINS:
+        return
+
+    prizes = [
+        {"place": 1, "emoji": "🥇", "prize": "Vaporesso XROS 6 🆕"},
+        {"place": 2, "emoji": "🥈", "prize": "Vaporesso XROS 5"},
+        {"place": 3, "emoji": "🥉", "prize": "Vaporesso XROS 5 mini"},
+        {"place": 4, "emoji": "4️⃣", "prize": "Жидкость INFLAVE & BUBBLE"},
+        {"place": 5, "emoji": "5️⃣", "prize": "Жидкость OGGO Premium"},
+        {"place": 6, "emoji": "6️⃣", "prize": "Smoant K5 + XROS Картридж"},
+        {"place": 7, "emoji": "7️⃣", "prize": "GeekVape B-series + Lost Vape Картридж"},
+        {"place": 8, "emoji": "8️⃣", "prize": "Narcos + Annima Love"},
+        {"place": 9, "emoji": "9️⃣", "prize": "Rincoe Manto Ultra + v2"},
+        {"place": 10, "emoji": "🔟", "prize": "Промокод 500₽ + Аккум 18650"},
+    ]
+
+    rozygrysh_data = _load_json(CHALLENGES_FILE, {}).get("razygrysh", {})
+    winners = {w["place"]: w["winner_id"] for w in rozygrysh_data.get("winners", [])}
+
+    text = "<b>🏆 ВСЕ 10 ПРИЗОВ РОЗЫГРЫША:</b>\n\n"
+    for prize_info in prizes:
+        place = prize_info["place"]
+        winner = winners.get(place, "")
+        if winner:
+            text += f"{prize_info['emoji']} Место {place}: {prize_info['prize']}\n✅ Победитель: <code>{winner}</code>\n\n"
+        else:
+            text += f"{prize_info['emoji']} Место {place}: {prize_info['prize']}\n"
+
+    await message.answer(text)
+
+
 @dp.message(Command("restock"))
 async def cmd_restock(message: types.Message):
     """Админ отмечает поступление товара — оповещаем всех, кто ждал."""
@@ -2214,6 +2475,292 @@ async def cmd_restock(message: types.Message):
         notify_reqs.pop(key, None)
     _save_json(NOTIFY_FILE, notify_reqs)
     await message.answer(f"✅ Отправлено: {sent}, не доставлено: {failed}")
+
+
+# ═════════════════════════════════════════════════════════════════════════════
+# ИНЛАЙН КНОПКИ МЕНЮ (cmd_bonus, cmd_vip, и т.д.)
+# ═════════════════════════════════════════════════════════════════════════════
+
+@dp.callback_query(lambda c: c.data.startswith("cmd_"))
+async def handle_menu_buttons(callback: types.CallbackQuery):
+    """Обработчик инлайн кнопок меню"""
+    try:
+        cmd_name = callback.data
+        uid = str(callback.from_user.id)
+        remember_user(callback.from_user)
+
+        # Выполняем соответствующую команду
+        if cmd_name == "cmd_bonus":
+            bonuses = _load_json(BONUSES_FILE, {})
+            user = bonuses.get(uid, {})
+            balance = user.get("balance", 0)
+            await callback.message.answer(
+                f"💎 <b>Твой баланс: {balance} баллов</b>\n\n"
+                f"1 балл = 1₽ скидка при заказе\n"
+                f"Минимум для использования: 100 баллов",
+                reply_markup=get_main_keyboard()
+            )
+
+        elif cmd_name == "cmd_vip":
+            vip = get_vip_status(uid)
+            tier_key, tier = get_loyalty_tier(_load_bonuses()["users"].get(uid, {}).get("orders", 0))
+
+            if vip["active"]:
+                text = (
+                    f"👑 <b>VIP Статус АКТИВЕН</b>\n\n"
+                    f"⏰ Действует ещё <b>{vip['days_left']} дней</b>\n"
+                    f"📅 До: {vip['expiry'][:10]}\n\n"
+                    f"✨ <b>Преимущества VIP</b>\n"
+                    f"├ Скидка 5% на каждый заказ\n"
+                    f"├ Приоритет доставки\n"
+                    f"├ +50 баллов за заказ\n"
+                    f"└ Ранний доступ к новым товарам"
+                )
+            else:
+                text = (
+                    f"👑 <b>VIP Статус</b>\n\n"
+                    f"❌ Статус не активен\n\n"
+                    f"✨ <b>Получи VIP за</b>\n"
+                    f"├ 💳 299₽/месяц\n"
+                    f"├ 📦 10 заказов (бесплатно)\n"
+                    f"└ 💎 1000 баллов"
+                )
+            await callback.message.answer(text, reply_markup=get_main_keyboard())
+
+        elif cmd_name == "cmd_badges":
+            badges = get_user_badges(int(uid))
+            data = _load_bonuses()
+            user = data["users"].get(uid, {})
+            tier_key, tier = get_loyalty_tier(user.get("orders", 0))
+
+            text = f"⭐ <b>Твои Достижения</b>\n\n"
+            if tier_key:
+                text += f"<b>Уровень: {tier['name']}</b>\n"
+                text += f"Заказов: {user.get('orders', 0)}\n\n"
+
+            if badges:
+                text += "<b>Бейджи:</b>\n"
+                for badge_key in badges:
+                    badge = BADGES.get(badge_key, {})
+                    text += f"├ {badge.get('emoji', '🏆')} {badge.get('name', 'Unknown')}\n"
+            else:
+                text += "<i>Пока нет бейджей. Начни с первого заказа!</i>"
+
+            await callback.message.answer(text, reply_markup=get_main_keyboard())
+
+        elif cmd_name == "cmd_discount":
+            data = _load_bonuses()
+            user = data["users"].get(uid, {})
+            orders_count = user.get("orders", 0)
+            tier_key, tier = get_loyalty_tier(orders_count)
+            vip_status = get_vip_status(uid)
+
+            text = "💰 <b>Твои Скидки и Бонусы</b>\n\n"
+            if tier_key:
+                discount_pct = int(tier["discount"] * 100)
+                text += f"<b>{tier['name']}</b>\n"
+                text += f"├ Скидка: <b>-{discount_pct}%</b>\n"
+                text += f"└ Бонусы: +{discount_pct}% баллов\n\n"
+            else:
+                text += "<b>Уровень лояльности:</b> Нет\n"
+                text += f"└ Базовая: +5% баллов\n\n"
+
+            if vip_status["active"]:
+                text += f"👑 <b>VIP: АКТИВЕН</b>\n"
+                text += f"├ Дополнительно: <b>-5%</b>\n"
+                text += f"└ {vip_status['days_left']} дней\n\n"
+
+            total_discount = (int(tier["discount"] * 100) if tier_key else 0) + (5 if vip_status["active"] else 0)
+            text += f"📊 <b>Итого: -{total_discount}%</b>"
+
+            await callback.message.answer(text, reply_markup=get_main_keyboard())
+
+        elif cmd_name == "cmd_ref":
+            ref_url = f"https://t.me/{BOT_USERNAME}?start=ref_{callback.from_user.id}"
+            text = (
+                f"🎁 <b>Твоя реферальная ссылка</b>\n\n"
+                f"<code>{ref_url}</code>\n\n"
+                f"Друг по ссылке:\n"
+                f"├ Получит -50₽ на первый заказ\n"
+                f"└ Ты получишь +200 баллов"
+            )
+            await callback.message.answer(text, reply_markup=get_main_keyboard())
+
+        elif cmd_name == "cmd_partner":
+            uid = str(callback.from_user.id)
+            bonuses = _load_json(BONUSES_FILE, {})
+            my_data = bonuses.get(uid, {})
+            ref_url = f"https://t.me/{BOT_USERNAME}?start=ref_{callback.from_user.id}"
+
+            referred = my_data.get("referred", [])
+            referred_count = len(referred)
+            active_referred = sum(1 for ref_id in referred if bonuses.get(str(ref_id), {}).get("orders", 0) > 0)
+            total_referred_spent = sum(bonuses.get(str(ref_id), {}).get("spent", 0) for ref_id in referred if bonuses.get(str(ref_id), {}).get("orders", 0) > 0)
+            potential_earnings = active_referred * REFERRAL_REWARD
+
+            text = (
+                f"💸 <b>ПАРТНЕРСКАЯ ПРОГРАММА</b>\n\n"
+                f"🤑 Как это работает?\n"
+                f"├ Ты получаешь личную ссылку\n"
+                f"├ Делишься ей в сторис и чатах\n"
+                f"├ За активного: <b>+200 баллов</b>\n"
+                f"└ Плюс <b>5% от первого заказа</b>\n\n"
+                f"📊 Твоя статистика:\n"
+                f"├ Переходов: <b>{referred_count}</b>\n"
+                f"├ Активных: <b>{active_referred}</b>\n"
+                f"├ Потрачено ими: <b>{_fmt_money(total_referred_spent)} ₽</b>\n"
+                f"└ Твой заработок: <b>+{potential_earnings}</b> 💎\n\n"
+                f"✨ Бонусы за кол-во:\n"
+                f"├ 10+ активных = VIP на месяц\n"
+                f"├ 25+ = VIP на квартал + 1000 баллов\n"
+                f"└ 50+ = VIP на год + 5000 баллов"
+            )
+            await callback.message.answer(text, reply_markup=get_main_keyboard())
+
+        elif cmd_name == "cmd_challenges":
+            challenges = _load_json(CHALLENGES_FILE, {}).get("active_challenges", {})
+            text = "🎯 <b>Июльские вызовы</b>\n\n"
+            for key, ch in challenges.items():
+                text += f"<b>{ch.get('name', 'Unknown')}</b>\n"
+                text += f"📝 {ch.get('description', '')}\n"
+                text += f"🎁 Награда: "
+                if ch.get("reward_type") == "discount":
+                    text += f"-{ch.get('reward_value', 0)}₽"
+                elif ch.get("reward_type") == "vip":
+                    text += f"VIP на {ch.get('reward_days', 7)} дней"
+                else:
+                    text += f"+{ch.get('reward', 0)} баллов"
+                text += "\n\n"
+            await callback.message.answer(text, reply_markup=get_main_keyboard())
+
+        elif cmd_name == "cmd_faq":
+            buttons = []
+            for key, item in FAQ_DATA.items():
+                buttons.append([
+                    InlineKeyboardButton(
+                        text=f"{item['emoji']} {item['title'][:30]}",
+                        callback_data=f"faq_{key}"
+                    )
+                ])
+            markup = InlineKeyboardMarkup(inline_keyboard=buttons)
+            await callback.message.answer("❓ <b>FAQ</b>", reply_markup=markup)
+
+        elif cmd_name == "cmd_birthday":
+            text = (
+                "🎂 <b>День рождения</b>\n\n"
+                "Укажи дату: <code>/birthday ДД.ММ</code>\n"
+                "Пример: <code>/birthday 15.03</code>\n\n"
+                "В день рождения получишь:\n"
+                "├ -30% скидку на любой товар\n"
+                "└ +100 баллов в подарок!"
+            )
+            await callback.message.answer(text, reply_markup=get_main_keyboard())
+
+        await callback.answer()
+
+    except Exception as e:
+        logger.error(f"Error in menu button {callback.data}: {e}")
+        await callback.answer("❌ Ошибка при выполнении", show_alert=True)
+
+
+# ── ОБРАБОТЧИК ТЕКСТОВЫХ КНОПОК ──
+@dp.message(F.text)
+async def handle_text_buttons(message: types.Message):
+    """Обработчик текстовых кнопок главного меню"""
+    remember_user(message.from_user)
+    text = message.text or ""
+
+    # Маппирование текстовых кнопок на функции
+    button_handlers = {
+        "💎 Баллы": "bonus",
+        "👑 VIP": "vip",
+        "🎁 Рефереллы": "ref",
+        "📦 Заказы": "orders",
+        "❓ FAQ": "faq",
+        "📞 Контакты": "contacts",
+    }
+
+    if text in button_handlers:
+        handler = button_handlers[text]
+        uid = str(message.from_user.id)
+
+        try:
+            if handler == "bonus":
+                bonuses = _load_json(BONUSES_FILE, {})
+                user = bonuses.get(uid, {})
+                balance = user.get("balance", 0)
+                await message.answer(
+                    f"💎 <b>Твой баланс: {balance} баллов</b>\n\n"
+                    f"1 балл = 1₽ скидка при заказе\n"
+                    f"Минимум для использования: 100 баллов",
+                    reply_markup=get_main_keyboard()
+                )
+
+            elif handler == "vip":
+                vip = get_vip_status(uid)
+                if vip["active"]:
+                    text_msg = (
+                        f"👑 <b>VIP Статус АКТИВЕН</b>\n\n"
+                        f"⏰ Действует ещё <b>{vip['days_left']} дней</b>\n"
+                        f"📅 До: {vip['expiry'][:10]}\n\n"
+                        f"✨ <b>Преимущества VIP</b>\n"
+                        f"├ Скидка 5% на каждый заказ\n"
+                        f"├ Приоритет доставки\n"
+                        f"├ +50 баллов за заказ\n"
+                        f"└ Ранний доступ к новым товарам"
+                    )
+                else:
+                    text_msg = (
+                        f"👑 <b>VIP Статус</b>\n\n"
+                        f"❌ Статус не активен\n\n"
+                        f"✨ <b>Получи VIP за</b>\n"
+                        f"├ 💳 299₽/месяц\n"
+                        f"├ 📦 10 заказов (бесплатно)\n"
+                        f"└ 💎 1000 баллов"
+                    )
+                await message.answer(text_msg, reply_markup=get_main_keyboard())
+
+            elif handler == "ref":
+                ref_url = f"https://t.me/{BOT_USERNAME}?start=ref_{message.from_user.id}"
+                await message.answer(
+                    f"🎁 <b>Твоя реферальная ссылка</b>\n\n"
+                    f"<code>{ref_url}</code>\n\n"
+                    f"Друг по ссылке:\n"
+                    f"├ Получит -50₽ на первый заказ\n"
+                    f"└ Ты получишь +200 баллов",
+                    reply_markup=get_main_keyboard()
+                )
+
+            elif handler == "orders":
+                await show_my_orders(message)
+
+            elif handler == "faq":
+                buttons = []
+                for faq_key, item in FAQ_DATA.items():
+                    buttons.append([
+                        InlineKeyboardButton(
+                            text=f"{item['emoji']} {item['title'][:30]}",
+                            callback_data=f"faq_{faq_key}"
+                        )
+                    ])
+                markup = InlineKeyboardMarkup(inline_keyboard=buttons)
+                await message.answer("❓ <b>Часто задаваемые вопросы</b>", reply_markup=markup)
+
+            elif handler == "contacts":
+                await message.answer(
+                    f"📞 <b>Контакты VAPEBAZAR</b>\n\n"
+                    f"📱 Telegram: @{MANAGER_USERNAME}\n"
+                    f"🕐 Работаем ежедневно 10:00-22:00 (МСК+8)\n"
+                    f"❓ Вопросы: /faq или напиши сообщение",
+                    reply_markup=get_main_keyboard()
+                )
+        except Exception as e:
+            logger.error(f"Error handling button {text}: {e}")
+            await message.answer("❌ Ошибка при выполнении", reply_markup=get_main_keyboard())
+        return
+
+    # Если не кнопка - продолжаем в fallback_any_message
+    await fallback_any_message(message)
 
 
 # Ловит всё остальное — регистрируется последним, чтобы не перехватывать другие хэндлеры.
