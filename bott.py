@@ -61,6 +61,7 @@ BONUSES_FILE = os.path.join(DATA_DIR, "bonuses.json")          # ИСТОЧНИ�
 NOTIFY_FILE = os.path.join(DATA_DIR, "notify_requests.json")   # запросы уведомить о поступлении товара
 VPN_SUBS_FILE = os.path.join(DATA_DIR, "vpn_subs.json")        # учёт VPN-подписок: кто, тариф, срок
 REVIEWS_FILE = os.path.join(DATA_DIR, "reviews.json")          # оценки клиентов после выполненного заказа
+CHALLENGES_FILE = os.path.join(DATA_DIR, "challenges.json")    # ежемесячные вызовы и прогресс
 
 # ── Тарифы VPN (название / дней / цена ₽ / устройств) ──
 VPN_TARIFFS = {
@@ -76,6 +77,27 @@ VPN_EXPIRY_GRACE_DAYS = 14    # но не дольше N дней после —
 
 REFERRAL_REWARD = 200   # баллов пригласившему за ПЕРВЫЙ оплаченный заказ друга
 EARN_CAP_RATE = 0.15    # санити-лимит начисления: не больше 15% от суммы заказа
+
+# ── VIP ПОДПИСКА И УРОВНИ ЛОЯЛЬНОСТИ ──
+VIP_MONTHLY_PRICE = 299  # цена VIP на месяц
+VIP_ORDERS_TO_FREE = 10  # бесплатный VIP за 10 заказов
+
+# Уровни лояльности (название / заказов / скидка / описание)
+LOYALTY_TIERS = {
+    "bronze": {"name": "🥉 Bronze", "orders": 10, "discount": 0.03, "perks": "Скидка 3% на каждый заказ"},
+    "silver": {"name": "🥈 Silver", "orders": 20, "discount": 0.05, "perks": "Скидка 5% + приоритет доставки"},
+    "gold": {"name": "🥇 Gold", "orders": 50, "discount": 0.07, "perks": "Скидка 7% + бесплатная доставка"},
+    "platinum": {"name": "👑 Platinum", "orders": 100, "discount": 0.10, "perks": "Скидка 10% + персональный менеджер"},
+}
+
+# Бейджи за действия
+BADGES = {
+    "first_order": {"emoji": "🎯", "name": "Первый заказ", "desc": "Сделал первый заказ"},
+    "fast_buyer": {"emoji": "⚡", "name": "На маршруте", "desc": "Заказ в течение часа после открытия"},
+    "sponsor": {"emoji": "💰", "name": "Спонсор", "desc": "Потратил 100k₽"},
+    "referrer": {"emoji": "🎁", "name": "Дарующий", "desc": "Пригласил 10 друзей"},
+    "reviewer": {"emoji": "⭐", "name": "Критик", "desc": "Оставил 5+ отзывов"},
+}
 
 ADMINS = set([ADMIN_ID] + DEPUTY_ADMIN_IDS)
 
@@ -289,6 +311,90 @@ def referral_stats(uid):
                 rewarded += 1
     bal = data["users"].get(uid, {}).get("balance", 0)
     return {"invited": invited, "rewarded": rewarded, "balance": bal}
+
+def get_loyalty_tier(orders_count):
+    """Определить уровень лояльности по количеству заказов"""
+    for tier_key in ["platinum", "gold", "silver", "bronze"]:
+        tier = LOYALTY_TIERS[tier_key]
+        if orders_count >= tier["orders"]:
+            return tier_key, tier
+    return None, {}
+
+def get_user_badges(uid):
+    """Получить список бейджей пользователя"""
+    data = _load_bonuses()
+    user = data["users"].get(str(uid), {})
+    badges = []
+
+    # Первый заказ
+    if user.get("orders", 0) > 0:
+        badges.append("first_order")
+
+    # Спонсор (100k₽)
+    if user.get("spent", 0) >= 100000:
+        badges.append("sponsor")
+
+    # Дарующий (10+ приглашённых)
+    referred = len(user.get("referred", []))
+    if referred >= 10:
+        badges.append("referrer")
+
+    return badges
+
+def apply_loyalty_discount(total, orders_count):
+    """Применить скидку за уровень лояльности"""
+    tier_key, tier = get_loyalty_tier(orders_count)
+    if tier_key:
+        discount = tier.get("discount", 0)
+        return max(0, int(total * (1 - discount)))
+    return total
+
+def get_vip_status(uid):
+    """Проверить VIP статус пользователя"""
+    data = _load_bonuses()
+    user = data["users"].get(str(uid), {})
+
+    vip_until = user.get("vip_until")
+    if not vip_until:
+        return {"active": False, "days_left": 0}
+
+    try:
+        expiry = datetime.fromisoformat(vip_until)
+        now = now_magadan()
+        if expiry > now:
+            days_left = (expiry - now).days
+            return {"active": True, "days_left": days_left, "expiry": vip_until}
+    except (ValueError, TypeError):
+        pass
+
+    return {"active": False, "days_left": 0}
+
+def activate_vip(uid, days=30):
+    """Активировать VIP статус"""
+    data = _load_bonuses()
+    user = _ensure_user(data, uid)
+
+    now = now_magadan()
+    current_vip = user.get("vip_until")
+
+    if current_vip:
+        try:
+            expiry = datetime.fromisoformat(current_vip)
+            if expiry > now:
+                # Продлить существующий VIP
+                new_expiry = expiry + timedelta(days=days)
+            else:
+                # VIP истёк, начать новый
+                new_expiry = now + timedelta(days=days)
+        except (ValueError, TypeError):
+            new_expiry = now + timedelta(days=days)
+    else:
+        new_expiry = now + timedelta(days=days)
+
+    user["vip_until"] = new_expiry.isoformat(timespec="seconds")
+    _save_bonuses(data)
+
+    return new_expiry
 
 def get_main_keyboard():
     web_app_url = "https://borodota.github.io/bazar/"
@@ -1345,6 +1451,237 @@ async def cmd_api_vpn(message: types.Message):
 # РЕФЕРРАЛЬНАЯ ПРОГРАММА
 # ═════════════════════════════════════════════════════════════════════════════
 
+# ═════════════════════════════════════════════════════════════════════════════
+# VIP И ЛОЯЛЬНОСТЬ
+# ═════════════════════════════════════════════════════════════════════════════
+
+@dp.message(Command("vip"))
+async def cmd_vip(message: types.Message):
+    """Просмотр VIP статуса и активация"""
+    uid = str(message.from_user.id)
+    vip = get_vip_status(uid)
+    tier_key, tier = get_loyalty_tier(_load_bonuses()["users"].get(uid, {}).get("orders", 0))
+
+    if vip["active"]:
+        text = (
+            f"👑 <b>VIP Статус АКТИВЕН</b>\n\n"
+            f"⏰ Действует ещё <b>{vip['days_left']} дней</b>\n"
+            f"📅 До: {vip['expiry'][:10]}\n\n"
+            f"✨ <b>Преимущества VIP</b>\n"
+            f"├ Скидка 5% на каждый заказ\n"
+            f"├ Приоритет доставки\n"
+            f"├ +50 баллов за каждый заказ\n"
+            f"└ Ранний доступ к новым товарам\n\n"
+            f"💰 Стоимость: 299₽/месяц"
+        )
+    else:
+        text = (
+            f"👑 <b>VIP Статус</b>\n\n"
+            f"❌ Статус не активен\n\n"
+            f"✨ <b>Получи VIP за</b>\n"
+            f"├ 💳 299₽/месяц\n"
+            f"├ 📦 10 заказов (бесплатно)\n"
+            f"└ 💎 1000 баллов\n\n"
+            f"<b>Преимущества:</b>\n"
+            f"├ -5% на каждый заказ\n"
+            f"├ Приоритет доставки\n"
+            f"├ +50 баллов за заказ\n"
+            f"└ Ранний доступ к новинкам"
+        )
+
+    await message.answer(text)
+
+
+# ═════════════════════════════════════════════════════════════════════════════
+# FAQ И ГАЙДЫ
+# ═════════════════════════════════════════════════════════════════════════════
+
+FAQ_DATA = {
+    "order": {
+        "emoji": "📦",
+        "title": "Как оформить заказ?",
+        "answer": (
+            "1. Нажми кнопку 🛍️ в меню\n"
+            "2. Выбери товары и добавь в корзину\n"
+            "3. Нажми 'Оформить заказ'\n"
+            "4. Заполни свои данные\n"
+            "5. Выбери способ доставки и оплаты\n"
+            "6. Подтверди заказ\n\n"
+            "Готово! Мы свяжемся с тобой в течение 15 минут."
+        )
+    },
+    "payment": {
+        "emoji": "💳",
+        "title": "Какие способы оплаты?",
+        "answer": (
+            "Мы принимаем:\n"
+            "├ 💵 Наличные при получении\n"
+            "├ 💰 Переводы (QIWI, Яндекс.Касса)\n"
+            "├ 🏦 Банковские переводы\n"
+            "└ 💎 Баллы (списать со своего баланса)\n\n"
+            "Выбирай удобный способ при оформлении."
+        )
+    },
+    "delivery": {
+        "emoji": "🚚",
+        "title": "Как долго доставка?",
+        "answer": (
+            "Доставка в Магадане:\n"
+            "├ 🚲 Самовывоз: 30 минут\n"
+            "├ 🚚 Курьер (день): завтра к 18:00\n"
+            "├ 📦 Почта: 2-3 дня\n"
+            "└ 🚁 Срочная: 2 часа (+200₽)\n\n"
+            "Бесплатная доставка от 2000₽!"
+        )
+    },
+    "return": {
+        "emoji": "↩️",
+        "title": "Можно ли вернуть товар?",
+        "answer": (
+            "Да, вернём товар если:\n"
+            "├ 🏷️ Заводская упаковка целая\n"
+            "├ 🕐 Прошло не более 14 дней\n"
+            "├ ✅ Товар без повреждений\n"
+            "└ 📋 Есть чек\n\n"
+            "Верни товар, вернём деньги за 2 дня.\n"
+            "Напиши @BORO_DOTA в Telegram."
+        )
+    },
+    "points": {
+        "emoji": "💎",
+        "title": "Как копить баллы?",
+        "answer": (
+            "Способы получить баллы:\n"
+            "├ 💰 За заказ: +5% от суммы\n"
+            "├ 🎁 За реферала: +200 баллов\n"
+            "├ ⭐ За отзыв: +50 баллов\n"
+            "├ 🎂 День рождения: +100 баллов\n"
+            "└ 📅 Каждый месяц: +10 баллов\n\n"
+            "Мин. 100 баллов = 100₽ скидка.\n"
+            "Макс. списать: 20% от суммы."
+        )
+    },
+    "vip": {
+        "emoji": "👑",
+        "title": "Что такое VIP?",
+        "answer": (
+            "VIP дает:\n"
+            "├ 💰 Скидка 5% на каждый заказ\n"
+            "├ 🚚 Приоритет доставки (1 час)\n"
+            "├ 💎 +50 баллов вместо +10\n"
+            "├ 🆕 Ранний доступ к новому\n"
+            "└ 👨‍💼 Персональный менеджер\n\n"
+            "Стоимость: 299₽/месяц\n"
+            "Или: 10 заказов → VIP бесплатно!"
+        )
+    },
+    "referral": {
+        "emoji": "🎁",
+        "title": "Как пригласить друга?",
+        "answer": (
+            "Напиши /ref — получи реферальную ссылку.\n\n"
+            "Твой друг по ней зарегистрируется → оба получите:\n"
+            "├ -50₽ на первый заказ друга\n"
+            "├ Ты получишь +200 баллов\n"
+            "└ Друг получит +50 баллов\n\n"
+            "Без ограничений — зовите сколько хотите!"
+        )
+    },
+}
+
+@dp.message(Command("faq"))
+async def cmd_faq(message: types.Message):
+    """Часто задаваемые вопросы"""
+    buttons = []
+    for key, item in FAQ_DATA.items():
+        buttons.append([
+            InlineKeyboardButton(
+                text=f"{item['emoji']} {item['title'][:30]}",
+                callback_data=f"faq_{key}"
+            )
+        ])
+
+    markup = InlineKeyboardMarkup(inline_keyboard=buttons)
+    await message.answer(
+        "❓ <b>Часто задаваемые вопросы</b>\n\n"
+        "Нажми на вопрос чтобы увидеть ответ:",
+        reply_markup=markup
+    )
+
+
+@dp.callback_query(lambda c: c.data.startswith("faq_"))
+async def faq_answer(callback: types.CallbackQuery):
+    """Ответ на FAQ вопрос"""
+    key = callback.data.split("_", 1)[1]
+    item = FAQ_DATA.get(key)
+    if item:
+        await callback.message.answer(
+            f"{item['emoji']} <b>{item['title']}</b>\n\n{item['answer']}"
+        )
+    await callback.answer()
+
+
+@dp.message(Command("challenges"))
+async def cmd_challenges(message: types.Message):
+    """Ежемесячные вызовы"""
+    challenges = _load_json(CHALLENGES_FILE, {}).get("active_challenges", {})
+
+    text = f"🎯 <b>Июльские вызовы</b>\n\n"
+
+    for key, ch in challenges.items():
+        text += (
+            f"<b>{ch.get('name', 'Unknown')}</b>\n"
+            f"📝 {ch.get('description', '')}\n"
+            f"🎁 Награда: "
+        )
+
+        if ch.get("reward_type") == "discount":
+            text += f"-{ch.get('reward_value', 0)}₽ скидка"
+        elif ch.get("reward_type") == "vip":
+            text += f"VIP на {ch.get('reward_days', 7)} дней"
+        else:
+            text += f"+{ch.get('reward', 0)} баллов"
+
+        text += f"\n\n"
+
+    text += (
+        f"<i>Вызовы обновляются каждый месяц.\n"
+        f"Выполни все и получи максимум наград!</i>"
+    )
+
+    await message.answer(text)
+
+
+@dp.message(Command("badges"))
+async def cmd_badges(message: types.Message):
+    """Просмотр бейджей пользователя"""
+    uid = message.from_user.id
+    badges = get_user_badges(uid)
+    data = _load_bonuses()
+    user = data["users"].get(str(uid), {})
+
+    tier_key, tier = get_loyalty_tier(user.get("orders", 0))
+
+    text = f"⭐ <b>Твои Достижения</b>\n\n"
+
+    if tier_key:
+        text += f"<b>Уровень лояльности: {tier['name']}</b>\n"
+        text += f"Статус: {tier['perks']}\n"
+        text += f"Заказов: {user.get('orders', 0)}\n\n"
+
+    if badges:
+        text += "<b>Бейджи:</b>\n"
+        for badge_key in badges:
+            badge = BADGES.get(badge_key, {})
+            text += f"├ {badge.get('emoji', '🏆')} {badge.get('name', 'Unknown')}\n"
+    else:
+        text += "<i>Пока нет бейджей. Начни с первого заказа!</i>\n"
+
+    text += f"\n<i>Всего заказов: {user.get('orders', 0)}</i>"
+
+    await message.answer(text)
+
+
 @dp.message(Command("ref"))
 async def cmd_ref(message: types.Message):
     """Получить реферальную ссылку и статистику приглашённых"""
@@ -1824,7 +2161,25 @@ async def fallback_any_message(message: types.Message):
         await message.answer(faq_answer, reply_markup=get_main_keyboard())
         return
 
-    # #25 — Автоответ вне рабочего времени (Магадан UTC+11)
+    # #25 — Умный чатбот: проверяем ключевые слова для FAQ
+    text_lower = text.lower()
+    keywords_faq = {
+        "оплат": "payment",
+        "доставк": "delivery",
+        "вернуть": "return",
+        "балл": "points",
+        "vip": "vip",
+        "рефер": "referral",
+        "заказ": "order",
+    }
+
+    for keyword, faq_key in keywords_faq.items():
+        if keyword in text_lower and faq_key in FAQ_DATA:
+            item = FAQ_DATA[faq_key]
+            await message.answer(f"{item['emoji']} <b>{item['title']}</b>\n\n{item['answer']}")
+            return
+
+    # ── Проверка рабочего времени ──
     now_local = now_magadan()
     if now_local.hour < SHOP_OPEN_HOUR or now_local.hour >= SHOP_CLOSE_HOUR:
         opens_at = f"{SHOP_OPEN_HOUR:02d}:00"
@@ -1832,10 +2187,11 @@ async def fallback_any_message(message: types.Message):
             f"🌙 Магазин сейчас закрыт.\n\n"
             f"Работаем ежедневно с <b>{SHOP_OPEN_HOUR}:00 до {SHOP_CLOSE_HOUR}:00</b> по Магадану.\n"
             f"Откроемся в <b>{opens_at}</b> — обязательно ответим!\n\n"
+            f"💡 Совет: напиши /faq для ответов на частые вопросы\n"
             f"Ваше сообщение сохранено, менеджер @{MANAGER_USERNAME} увидит его утром.",
             reply_markup=get_main_keyboard()
         )
-        # Всё равно уведомить менеджера, чтобы мог ответить раньше
+        # Уведомить менеджера о сообщении вне рабочего времени
         uname = f"@{message.from_user.username}" if message.from_user.username else message.from_user.first_name
         for cid in ADMINS:
             try:

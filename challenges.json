@@ -1,0 +1,44 @@
+{
+  "active_challenges": {
+    "july_marathon": {
+      "name": "Июльский марафон 🏃",
+      "description": "Купи товары из 3 разных категорий и получи +200 баллов",
+      "reward": 200,
+      "progress_type": "categories",
+      "target": 3,
+      "start": "2026-07-01",
+      "end": "2026-07-31"
+    },
+    "generous_day": {
+      "name": "Щедрый день 💝",
+      "description": "Потрати 1000₽ в один день и получи -50₽ скидку на следующий заказ",
+      "reward_type": "discount",
+      "reward_value": 50,
+      "target": 1000,
+      "progress_type": "spending",
+      "start": "2026-07-01",
+      "end": "2026-07-31"
+    },
+    "social_butterfly": {
+      "name": "Социальный бабочка 🦋",
+      "description": "Поделись с 5 друзьями и получи -50₽ скидку",
+      "reward_type": "discount",
+      "reward_value": 50,
+      "target": 5,
+      "progress_type": "shares",
+      "start": "2026-07-01",
+      "end": "2026-07-31"
+    },
+    "vip_trial": {
+      "name": "VIP пробация 👑",
+      "description": "Потрати 500₽ и получи неделю VIP бесплатно",
+      "reward_type": "vip",
+      "reward_days": 7,
+      "target": 500,
+      "progress_type": "spending",
+      "start": "2026-07-01",
+      "end": "2026-07-31"
+    }
+  },
+  "user_progress": {}
+}
