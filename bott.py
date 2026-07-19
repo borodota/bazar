@@ -62,6 +62,24 @@ NOTIFY_FILE = os.path.join(DATA_DIR, "notify_requests.json")   # запросы 
 VPN_SUBS_FILE = os.path.join(DATA_DIR, "vpn_subs.json")        # учёт VPN-подписок: кто, тариф, срок
 REVIEWS_FILE = os.path.join(DATA_DIR, "reviews.json")          # оценки клиентов после выполненного заказа
 CHALLENGES_FILE = os.path.join(DATA_DIR, "challenges.json")    # ежемесячные вызовы и прогресс
+BLOCKED_USERS_FILE = os.path.join(DATA_DIR, "blocked_users.json")  # заблокированные спамеры
+
+# ── СПИСОК СПАМА ──
+SPAM_KEYWORDS = [
+    "бот для пробива",
+    "пробив",
+    "lvne12345bot",
+    "sherlock",
+    "энигма",
+    "поиск людей",
+    "найди человека",
+    "найди кого угодно",
+    "https://t.me/",
+    "t.me/",
+    "telegram.me/",
+    "@lvne",
+    "@sherlock",
+]
 
 # ── Тарифы VPN (название / дней / цена ₽ / устройств) ──
 VPN_TARIFFS = {
@@ -135,6 +153,27 @@ def remember_user(user):
         "ts": now_magadan().isoformat(timespec="seconds"),
     }
     _save_json(SUBSCRIBERS_FILE, subs)
+
+def is_user_blocked(user_id: int) -> bool:
+    """Проверить, заблокирован ли пользователь"""
+    blocked = _load_json(BLOCKED_USERS_FILE, [])
+    return int(user_id) in blocked
+
+def block_user(user_id: int):
+    """Добавить пользователя в чёрный список"""
+    blocked = _load_json(BLOCKED_USERS_FILE, [])
+    user_id = int(user_id)
+    if user_id not in blocked:
+        blocked.append(user_id)
+        _save_json(BLOCKED_USERS_FILE, blocked)
+
+def unblock_user(user_id: int):
+    """Удалить пользователя из чёрного списка"""
+    blocked = _load_json(BLOCKED_USERS_FILE, [])
+    user_id = int(user_id)
+    if user_id in blocked:
+        blocked.remove(user_id)
+        _save_json(BLOCKED_USERS_FILE, blocked)
 
 def log_order(order_id, customer_id, total, action, status_label, items=None, name=None, phone=None, address=None):
     """Создаёт/обновляет запись заказа в журнале. Вызывается при создании заказа
@@ -1959,6 +1998,109 @@ async def cmd_bonus_add(message: types.Message):
             pass
 
 
+@dp.message(Command("block"))
+async def cmd_block(message: types.Message):
+    """Заблокировать пользователя от отправки сообщений: /block <user_id>"""
+    if message.from_user.id not in ADMINS:
+        return
+    args = (message.text or "").split()
+    if len(args) < 2:
+        await message.answer("❌ Использование: <code>/block &lt;user_id&gt;</code>")
+        return
+    try:
+        user_id = int(args[1].lstrip("@"))
+        block_user(user_id)
+        await message.answer(f"🚫 Пользователь <code>{user_id}</code> заблокирован.")
+    except ValueError:
+        await message.answer("❌ ID должен быть числом.")
+
+
+@dp.message(Command("unblock"))
+async def cmd_unblock(message: types.Message):
+    """Разблокировать пользователя: /unblock <user_id>"""
+    if message.from_user.id not in ADMINS:
+        return
+    args = (message.text or "").split()
+    if len(args) < 2:
+        await message.answer("❌ Использование: <code>/unblock &lt;user_id&gt;</code>")
+        return
+    try:
+        user_id = int(args[1].lstrip("@"))
+        unblock_user(user_id)
+        await message.answer(f"✅ Пользователь <code>{user_id}</code> разблокирован.")
+    except ValueError:
+        await message.answer("❌ ID должен быть числом.")
+
+
+@dp.message(Command("status"))
+async def cmd_status(message: types.Message):
+    """Получить статус бота: /status"""
+    if message.from_user.id not in ADMINS:
+        return
+
+    try:
+        now = now_magadan()
+        time_str = now.strftime("%H:%M:%S")
+        date_str = now.strftime("%d.%m.%Y")
+
+        # Размеры файлов
+        files_info = ""
+        for fname, fpath in [
+            ("bonuses.json", BONUSES_FILE),
+            ("orders_log.json", ORDERS_FILE),
+            ("vpn_subs.json", VPN_SUBS_FILE),
+            ("challenges.json", CHALLENGES_FILE),
+        ]:
+            if os.path.exists(fpath):
+                size = os.path.getsize(fpath)
+                files_info += f"✅ {fname} ({size:,} байт)\n"
+            else:
+                files_info += f"❌ {fname} не найден\n"
+
+        # Кол-во пользователей
+        bonuses = _load_bonuses()
+        user_count = len(bonuses.get("users", {}))
+
+        # Статистика
+        orders = _load_json(ORDERS_FILE, [])
+        total_revenue = sum(o.get("total", 0) for o in orders)
+
+        # Заблокированные
+        blocked = _load_json(BLOCKED_USERS_FILE, [])
+
+        # VPN подписки
+        vpn_subs = _load_json(VPN_SUBS_FILE, {})
+        vpn_active = len([v for v in vpn_subs.values() if v.get("expires") and datetime.fromisoformat(v.get("expires")).replace(tzinfo=MAGADAN_TZ) > now])
+
+        report = (
+            f"<b>📊 СТАТУС БОТА</b>\n"
+            f"━━━━━━━━━━━━━━━━━━━━━━━━━━\n"
+            f"🕐 <b>Время (Магадан):</b> {time_str}\n"
+            f"📅 <b>Дата:</b> {date_str}\n\n"
+            f"<b>👥 ПОЛЬЗОВАТЕЛИ</b>\n"
+            f"✅ Активных: {user_count}\n"
+            f"🚫 Заблокировано: {len(blocked)}\n\n"
+            f"<b>💰 ФИНАНСЫ</b>\n"
+            f"💵 Выручка: {_fmt_money(total_revenue)} ₽\n"
+            f"📦 Заказов: {len(orders)}\n\n"
+            f"<b>🌐 VPN</b>\n"
+            f"✅ Активных подписок: {vpn_active}\n"
+            f"📊 Всего выданных: {len(vpn_subs)}\n\n"
+            f"<b>📁 ДАННЫЕ</b>\n"
+            f"{files_info}\n"
+            f"<b>🔧 СИСТЕМЫ</b>\n"
+            f"✅ Спам-фильтр активен\n"
+            f"✅ Партнерка включена\n"
+            f"✅ Розыгрыш готов\n"
+            f"✅ Система работает нормально"
+        )
+
+        await message.answer(report)
+    except Exception as e:
+        logger.error(f"Ошибка в /status: {e}")
+        await message.answer(f"❌ Ошибка: {e}")
+
+
 @dp.message(F.text == "📞 Контакты")
 async def show_contacts(message: types.Message):
     await message.answer(f"<b>По всем вопросам, опту и предложениям:</b>\nДиректор Enterprise: @{MANAGER_USERNAME}")
@@ -2766,9 +2908,27 @@ async def handle_text_buttons(message: types.Message):
 # Ловит всё остальное — регистрируется последним, чтобы не перехватывать другие хэндлеры.
 @dp.message()
 async def fallback_any_message(message: types.Message):
+    # ── Проверка заблокированных пользователей ──
+    if is_user_blocked(message.from_user.id):
+        logger.warning(f"🚫 Заблокированный пользователь {message.from_user.id} (@{message.from_user.username}) пытался отправить: {message.text!r}")
+        return
+
     remember_user(message.from_user)
     text = message.text or ""
     logger.info(f"Сообщение без обработчика от {message.from_user.id} (@{message.from_user.username}): {text!r}")
+
+    # ── Проверка спама ──
+    text_lower = text.lower()
+    for spam_keyword in SPAM_KEYWORDS:
+        if spam_keyword in text_lower:
+            logger.warning(f"🚫 СПАМ от {message.from_user.id} (@{message.from_user.username}): {text!r}")
+            # Блокируем автоматически
+            block_user(message.from_user.id)
+            await message.answer(
+                "🚫 <b>Спам автоматически заблокирован.</b>\n\n"
+                "Если это ошибка — свяжись с менеджером: @BORO_DOTA"
+            )
+            return
 
     faq_answer = _match_faq(text)
     if faq_answer:
