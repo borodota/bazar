@@ -402,9 +402,7 @@ def get_main_keyboard():
         keyboard=[
             [KeyboardButton(text="🛍️ Открыть Магазин", web_app=types.WebAppInfo(url=web_app_url))],
             [KeyboardButton(text="💎 Баллы"), KeyboardButton(text="👑 VIP"), KeyboardButton(text="🎁 Рефереллы")],
-            [KeyboardButton(text="🏆 Бейджи"), KeyboardButton(text="🎯 Скидки"), KeyboardButton(text="🎂 День рождения")],
-            [KeyboardButton(text="🎪 Вызовы"), KeyboardButton(text="❓ FAQ"), KeyboardButton(text="📦 Мои заказы")],
-            [KeyboardButton(text="📞 Контакты")]
+            [KeyboardButton(text="📦 Заказы"), KeyboardButton(text="❓ FAQ"), KeyboardButton(text="📞 Контакты")]
         ],
         resize_keyboard=True
     )
@@ -2242,37 +2240,152 @@ async def cmd_restock(message: types.Message):
 @dp.callback_query(lambda c: c.data.startswith("cmd_"))
 async def handle_menu_buttons(callback: types.CallbackQuery):
     """Обработчик инлайн кнопок меню"""
-    uid = callback.from_user.id
+    try:
+        cmd_name = callback.data
+        uid = str(callback.from_user.id)
+        remember_user(callback.from_user)
 
-    # Инлайн кнопки для быстрого доступа к командам
-    cmd_map = {
-        "cmd_bonus": cmd_bonus,
-        "cmd_vip": cmd_vip,
-        "cmd_badges": cmd_badges,
-        "cmd_discount": cmd_discount,
-        "cmd_ref": cmd_ref,
-        "cmd_challenges": cmd_challenges,
-        "cmd_faq": cmd_faq,
-        "cmd_birthday": cmd_birthday,
-    }
+        # Выполняем соответствующую команду
+        if cmd_name == "cmd_bonus":
+            bonuses = _load_json(BONUSES_FILE, {})
+            user = bonuses.get(uid, {})
+            balance = user.get("balance", 0)
+            await callback.message.answer(
+                f"💎 <b>Твой баланс: {balance} баллов</b>\n\n"
+                f"1 балл = 1₽ скидка при заказе\n"
+                f"Минимум для использования: 100 баллов",
+                reply_markup=get_main_keyboard()
+            )
 
-    cmd_name = callback.data
-    if cmd_name in cmd_map:
-        # Создаём fake message object для вызова функции команды
-        fake_msg = types.Message(
-            message_id=0,
-            date=0,
-            chat=types.Chat(id=uid, type="private"),
-            from_user=callback.from_user,
-            text=f"/{cmd_name.replace('cmd_', '')}"
-        )
-        try:
-            await cmd_map[cmd_name](fake_msg)
-        except Exception as e:
-            logger.error(f"Error in menu button {cmd_name}: {e}")
-            await callback.answer("❌ Ошибка при выполнении команды", show_alert=True)
+        elif cmd_name == "cmd_vip":
+            vip = get_vip_status(uid)
+            tier_key, tier = get_loyalty_tier(_load_bonuses()["users"].get(uid, {}).get("orders", 0))
 
-    await callback.answer()
+            if vip["active"]:
+                text = (
+                    f"👑 <b>VIP Статус АКТИВЕН</b>\n\n"
+                    f"⏰ Действует ещё <b>{vip['days_left']} дней</b>\n"
+                    f"📅 До: {vip['expiry'][:10]}\n\n"
+                    f"✨ <b>Преимущества VIP</b>\n"
+                    f"├ Скидка 5% на каждый заказ\n"
+                    f"├ Приоритет доставки\n"
+                    f"├ +50 баллов за заказ\n"
+                    f"└ Ранний доступ к новым товарам"
+                )
+            else:
+                text = (
+                    f"👑 <b>VIP Статус</b>\n\n"
+                    f"❌ Статус не активен\n\n"
+                    f"✨ <b>Получи VIP за</b>\n"
+                    f"├ 💳 299₽/месяц\n"
+                    f"├ 📦 10 заказов (бесплатно)\n"
+                    f"└ 💎 1000 баллов"
+                )
+            await callback.message.answer(text, reply_markup=get_main_keyboard())
+
+        elif cmd_name == "cmd_badges":
+            badges = get_user_badges(int(uid))
+            data = _load_bonuses()
+            user = data["users"].get(uid, {})
+            tier_key, tier = get_loyalty_tier(user.get("orders", 0))
+
+            text = f"⭐ <b>Твои Достижения</b>\n\n"
+            if tier_key:
+                text += f"<b>Уровень: {tier['name']}</b>\n"
+                text += f"Заказов: {user.get('orders', 0)}\n\n"
+
+            if badges:
+                text += "<b>Бейджи:</b>\n"
+                for badge_key in badges:
+                    badge = BADGES.get(badge_key, {})
+                    text += f"├ {badge.get('emoji', '🏆')} {badge.get('name', 'Unknown')}\n"
+            else:
+                text += "<i>Пока нет бейджей. Начни с первого заказа!</i>"
+
+            await callback.message.answer(text, reply_markup=get_main_keyboard())
+
+        elif cmd_name == "cmd_discount":
+            data = _load_bonuses()
+            user = data["users"].get(uid, {})
+            orders_count = user.get("orders", 0)
+            tier_key, tier = get_loyalty_tier(orders_count)
+            vip_status = get_vip_status(uid)
+
+            text = "💰 <b>Твои Скидки и Бонусы</b>\n\n"
+            if tier_key:
+                discount_pct = int(tier["discount"] * 100)
+                text += f"<b>{tier['name']}</b>\n"
+                text += f"├ Скидка: <b>-{discount_pct}%</b>\n"
+                text += f"└ Бонусы: +{discount_pct}% баллов\n\n"
+            else:
+                text += "<b>Уровень лояльности:</b> Нет\n"
+                text += f"└ Базовая: +5% баллов\n\n"
+
+            if vip_status["active"]:
+                text += f"👑 <b>VIP: АКТИВЕН</b>\n"
+                text += f"├ Дополнительно: <b>-5%</b>\n"
+                text += f"└ {vip_status['days_left']} дней\n\n"
+
+            total_discount = (int(tier["discount"] * 100) if tier_key else 0) + (5 if vip_status["active"] else 0)
+            text += f"📊 <b>Итого: -{total_discount}%</b>"
+
+            await callback.message.answer(text, reply_markup=get_main_keyboard())
+
+        elif cmd_name == "cmd_ref":
+            ref_url = f"https://t.me/{BOT_USERNAME}?start=ref_{callback.from_user.id}"
+            text = (
+                f"🎁 <b>Твоя реферальная ссылка</b>\n\n"
+                f"<code>{ref_url}</code>\n\n"
+                f"Друг по ссылке:\n"
+                f"├ Получит -50₽ на первый заказ\n"
+                f"└ Ты получишь +200 баллов"
+            )
+            await callback.message.answer(text, reply_markup=get_main_keyboard())
+
+        elif cmd_name == "cmd_challenges":
+            challenges = _load_json(CHALLENGES_FILE, {}).get("active_challenges", {})
+            text = "🎯 <b>Июльские вызовы</b>\n\n"
+            for key, ch in challenges.items():
+                text += f"<b>{ch.get('name', 'Unknown')}</b>\n"
+                text += f"📝 {ch.get('description', '')}\n"
+                text += f"🎁 Награда: "
+                if ch.get("reward_type") == "discount":
+                    text += f"-{ch.get('reward_value', 0)}₽"
+                elif ch.get("reward_type") == "vip":
+                    text += f"VIP на {ch.get('reward_days', 7)} дней"
+                else:
+                    text += f"+{ch.get('reward', 0)} баллов"
+                text += "\n\n"
+            await callback.message.answer(text, reply_markup=get_main_keyboard())
+
+        elif cmd_name == "cmd_faq":
+            buttons = []
+            for key, item in FAQ_DATA.items():
+                buttons.append([
+                    InlineKeyboardButton(
+                        text=f"{item['emoji']} {item['title'][:30]}",
+                        callback_data=f"faq_{key}"
+                    )
+                ])
+            markup = InlineKeyboardMarkup(inline_keyboard=buttons)
+            await callback.message.answer("❓ <b>FAQ</b>", reply_markup=markup)
+
+        elif cmd_name == "cmd_birthday":
+            text = (
+                "🎂 <b>День рождения</b>\n\n"
+                "Укажи дату: <code>/birthday ДД.ММ</code>\n"
+                "Пример: <code>/birthday 15.03</code>\n\n"
+                "В день рождения получишь:\n"
+                "├ -30% скидку на любой товар\n"
+                "└ +100 баллов в подарок!"
+            )
+            await callback.message.answer(text, reply_markup=get_main_keyboard())
+
+        await callback.answer()
+
+    except Exception as e:
+        logger.error(f"Error in menu button {callback.data}: {e}")
+        await callback.answer("❌ Ошибка при выполнении", show_alert=True)
 
 
 # ── ОБРАБОТЧИК ТЕКСТОВЫХ КНОПОК ──
@@ -2282,56 +2395,93 @@ async def handle_text_buttons(message: types.Message):
     remember_user(message.from_user)
     text = message.text or ""
 
-    # Маппирование текстовых кнопок на команды
-    button_map = {
-        "💎 Баллы": "/bonus",
-        "👑 VIP": "/vip",
-        "🏆 Бейджи": "/badges",
-        "🎯 Скидки": "/discount",
-        "🎁 Рефереллы": "/ref",
-        "🎪 Вызовы": "/challenges",
-        "❓ FAQ": "/faq",
-        "🎂 День рождения": "/birthday",
-        "📦 Мои заказы": "/orders",
-        "📞 Контакты": "/contacts",
+    # Маппирование текстовых кнопок на функции
+    button_handlers = {
+        "💎 Баллы": "bonus",
+        "👑 VIP": "vip",
+        "🎁 Рефереллы": "ref",
+        "📦 Заказы": "orders",
+        "❓ FAQ": "faq",
+        "📞 Контакты": "contacts",
     }
 
-    if text in button_map:
-        # Создаём fake message с командой
-        fake_msg = types.Message(
-            message_id=0,
-            date=0,
-            chat=types.Chat(id=message.from_user.id, type="private"),
-            from_user=message.from_user,
-            text=button_map[text]
-        )
-        # Перенаправляем на обработчик команды
-        if button_map[text] == "/bonus":
-            await cmd_bonus(fake_msg)
-        elif button_map[text] == "/vip":
-            await cmd_vip(fake_msg)
-        elif button_map[text] == "/badges":
-            await cmd_badges(fake_msg)
-        elif button_map[text] == "/discount":
-            await cmd_discount(fake_msg)
-        elif button_map[text] == "/ref":
-            await cmd_ref(fake_msg)
-        elif button_map[text] == "/challenges":
-            await cmd_challenges(fake_msg)
-        elif button_map[text] == "/faq":
-            await cmd_faq(fake_msg)
-        elif button_map[text] == "/birthday":
-            await cmd_birthday(fake_msg)
-        elif button_map[text] == "/orders":
-            await show_my_orders(fake_msg)
-        elif button_map[text] == "/contacts":
-            await message.answer(
-                f"📞 <b>Контакты VAPEBAZAR</b>\n\n"
-                f"📱 Telegram: @{MANAGER_USERNAME}\n"
-                f"🕐 Работаем ежедневно 10:00-22:00 (МСК+8)\n"
-                f"❓ Вопросы: /faq или напиши в чат",
-                reply_markup=get_main_keyboard()
-            )
+    if text in button_handlers:
+        handler = button_handlers[text]
+        uid = str(message.from_user.id)
+
+        try:
+            if handler == "bonus":
+                bonuses = _load_json(BONUSES_FILE, {})
+                user = bonuses.get(uid, {})
+                balance = user.get("balance", 0)
+                await message.answer(
+                    f"💎 <b>Твой баланс: {balance} баллов</b>\n\n"
+                    f"1 балл = 1₽ скидка при заказе\n"
+                    f"Минимум для использования: 100 баллов",
+                    reply_markup=get_main_keyboard()
+                )
+
+            elif handler == "vip":
+                vip = get_vip_status(uid)
+                if vip["active"]:
+                    text_msg = (
+                        f"👑 <b>VIP Статус АКТИВЕН</b>\n\n"
+                        f"⏰ Действует ещё <b>{vip['days_left']} дней</b>\n"
+                        f"📅 До: {vip['expiry'][:10]}\n\n"
+                        f"✨ <b>Преимущества VIP</b>\n"
+                        f"├ Скидка 5% на каждый заказ\n"
+                        f"├ Приоритет доставки\n"
+                        f"├ +50 баллов за заказ\n"
+                        f"└ Ранний доступ к новым товарам"
+                    )
+                else:
+                    text_msg = (
+                        f"👑 <b>VIP Статус</b>\n\n"
+                        f"❌ Статус не активен\n\n"
+                        f"✨ <b>Получи VIP за</b>\n"
+                        f"├ 💳 299₽/месяц\n"
+                        f"├ 📦 10 заказов (бесплатно)\n"
+                        f"└ 💎 1000 баллов"
+                    )
+                await message.answer(text_msg, reply_markup=get_main_keyboard())
+
+            elif handler == "ref":
+                ref_url = f"https://t.me/{BOT_USERNAME}?start=ref_{message.from_user.id}"
+                await message.answer(
+                    f"🎁 <b>Твоя реферальная ссылка</b>\n\n"
+                    f"<code>{ref_url}</code>\n\n"
+                    f"Друг по ссылке:\n"
+                    f"├ Получит -50₽ на первый заказ\n"
+                    f"└ Ты получишь +200 баллов",
+                    reply_markup=get_main_keyboard()
+                )
+
+            elif handler == "orders":
+                await show_my_orders(message)
+
+            elif handler == "faq":
+                buttons = []
+                for faq_key, item in FAQ_DATA.items():
+                    buttons.append([
+                        InlineKeyboardButton(
+                            text=f"{item['emoji']} {item['title'][:30]}",
+                            callback_data=f"faq_{faq_key}"
+                        )
+                    ])
+                markup = InlineKeyboardMarkup(inline_keyboard=buttons)
+                await message.answer("❓ <b>Часто задаваемые вопросы</b>", reply_markup=markup)
+
+            elif handler == "contacts":
+                await message.answer(
+                    f"📞 <b>Контакты VAPEBAZAR</b>\n\n"
+                    f"📱 Telegram: @{MANAGER_USERNAME}\n"
+                    f"🕐 Работаем ежедневно 10:00-22:00 (МСК+8)\n"
+                    f"❓ Вопросы: /faq или напиши сообщение",
+                    reply_markup=get_main_keyboard()
+                )
+        except Exception as e:
+            logger.error(f"Error handling button {text}: {e}")
+            await message.answer("❌ Ошибка при выполнении", reply_markup=get_main_keyboard())
         return
 
     # Если не кнопка - продолжаем в fallback_any_message
