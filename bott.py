@@ -36,7 +36,7 @@ def now_magadan():
 
 # ==================== КОНФИГУРАЦИЯ ====================
 # Токен лучше хранить в переменной окружения BOT_TOKEN (см. README)
-SHOP_BOT_TOKEN = os.getenv("BOT_TOKEN", "8687110031:AAE9E430W55aRQQuUwDI8hEMjaVliq_gbG4")
+SHOP_BOT_TOKEN = os.getenv("BOT_TOKEN", "8687110031:AAF4MbPjBvRH4qSJfQu0AkRUUR8_nadJsr0")
 ADMIN_ID = 6163521938
 MANAGER_USERNAME = 'BORO_DOTA'
 BOT_USERNAME = 'vapebazar_bot'   # для реферальных ссылок t.me/<bot>?startapp=ref_<id>
