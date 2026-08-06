@@ -35,8 +35,15 @@ def now_magadan():
     return datetime.now(MAGADAN_TZ)
 
 # ==================== КОНФИГУРАЦИЯ ====================
-# Токен лучше хранить в переменной окружения BOT_TOKEN (см. README)
-SHOP_BOT_TOKEN = os.getenv("BOT_TOKEN", "8687110031:AAE9E430W55aRQQuUwDI8hEMjaVliq_gbG4")
+# Токен ТОЛЬКО из переменной окружения BOT_TOKEN. Репозиторий публичный —
+# вписанный сюда токен утекает всем, кто откроет GitHub (см. deploy/env.example).
+SHOP_BOT_TOKEN = os.getenv("BOT_TOKEN", "").strip()
+if not SHOP_BOT_TOKEN:
+    logger.critical(
+        "Не задан BOT_TOKEN. Запуск: BOT_TOKEN=\"токен_от_BotFather\" python3 bott.py\n"
+        "На сервере токен лежит в /etc/vapebazar-bot.env (его читает systemd)."
+    )
+    sys.exit(1)
 ADMIN_ID = 6163521938
 MANAGER_USERNAME = 'BORO_DOTA'
 BOT_USERNAME = 'vapebazar_bot'   # для реферальных ссылок t.me/<bot>?startapp=ref_<id>
