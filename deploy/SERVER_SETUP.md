@@ -6,6 +6,20 @@
 > ⚠️ Данные (`bonuses.json`, `subscribers.json`, `orders_log.json`) = деньги и база.
 > Их НЕТ в git — переносим вручную (шаг 4). Сначала бэкап (шаг 1)!
 
+## Быстрый путь: автоустановка на чистый сервер
+
+Вместо шагов 3–7 можно выполнить на новом VPS от root одну команду —
+скрипт сам поставит зависимости, спросит токен, создаст `/etc/vapebazar-bot.env`
+и поднимет systemd-сервис:
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/borodota/bazar/main/deploy/install.sh -o install.sh
+bash install.sh
+```
+
+Данные (шаг 4) всё равно переносятся вручную — скрипт их не трогает.
+Установить не из `main`, а из другой ветки: `BRANCH=имя-ветки bash install.sh`.
+
 ---
 
 ## Шаг 1 — Бэкап данных (на Mac)
