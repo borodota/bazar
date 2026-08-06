@@ -35,8 +35,15 @@ def now_magadan():
     return datetime.now(MAGADAN_TZ)
 
 # ==================== КОНФИГУРАЦИЯ ====================
-# Токен лучше хранить в переменной окружения BOT_TOKEN (см. README)
-SHOP_BOT_TOKEN = os.getenv("8687110031:AAF4MbPjBvRH4qSJfQu0AkRUUR8_nadJsr0")
+# Токен ТОЛЬКО из переменной окружения BOT_TOKEN. Репозиторий публичный —
+# вписанный сюда токен утекает всем, кто откроет GitHub (см. deploy/env.example).
+SHOP_BOT_TOKEN = os.getenv("BOT_TOKEN", "").strip()
+if not SHOP_BOT_TOKEN:
+    logger.critical(
+        "Не задан BOT_TOKEN. Запуск: BOT_TOKEN=\"токен_от_BotFather\" python3 bott.py\n"
+        "На сервере токен лежит в /etc/vapebazar-bot.env (его читает systemd)."
+    )
+    sys.exit(1)
 ADMIN_ID = 6163521938
 MANAGER_USERNAME = 'BORO_DOTA'
 BOT_USERNAME = 'vapebazar_bot'   # для реферальных ссылок t.me/<bot>?startapp=ref_<id>
@@ -440,8 +447,9 @@ def get_main_keyboard():
     return ReplyKeyboardMarkup(
         keyboard=[
             [KeyboardButton(text="🛍️ Открыть Магазин", web_app=types.WebAppInfo(url=web_app_url))],
-            [KeyboardButton(text="💎 Баллы"), KeyboardButton(text="👑 VIP"), KeyboardButton(text="🎁 Рефереллы")],
-            [KeyboardButton(text="💸 Партнерка"), KeyboardButton(text="❓ FAQ"), KeyboardButton(text="📞 Контакты")]
+            [KeyboardButton(text="🛡️ VPN"), KeyboardButton(text="💎 Баллы"), KeyboardButton(text="👑 VIP")],
+            [KeyboardButton(text="🎁 Рефереллы"), KeyboardButton(text="💸 Партнерка"), KeyboardButton(text="❓ FAQ")],
+            [KeyboardButton(text="📞 Контакты")]
         ],
         resize_keyboard=True
     )
@@ -1520,6 +1528,196 @@ async def cmd_api_vpn(message: types.Message):
 # ═════════════════════════════════════════════════════════════════════════════
 
 # ═════════════════════════════════════════════════════════════════════════════
+# VPN — ВИТРИНА И ПОКУПКА ПРЯМО В БОТЕ
+# ═════════════════════════════════════════════════════════════════════════════
+
+# Порядок показа тарифов: от пробного к самому выгодному.
+VPN_TARIFF_ORDER = ["trial", "month", "q", "half", "year"]
+
+
+def _vpn_my_sub(uid):
+    """Активная подписка клиента и сколько дней осталось (или None)."""
+    rec = _load_json(VPN_SUBS_FILE, {}).get(str(uid))
+    if not rec or not rec.get("expiry"):
+        return None, 0
+    try:
+        expiry = datetime.fromisoformat(rec["expiry"])
+    except (TypeError, ValueError):
+        return None, 0
+    # Срок в файле пишется без таймзоны — приводим к магаданской, иначе
+    # сравнение с now_magadan() падает с "can't compare offset-naive and offset-aware".
+    if expiry.tzinfo is None:
+        expiry = expiry.replace(tzinfo=MAGADAN_TZ)
+    days_left = (expiry - now_magadan()).total_seconds() / 86400
+    return rec, days_left
+
+
+def _vpn_offer_kb(active: bool):
+    """Кнопки тарифов: по две в ряд, самый выгодный — отдельной строкой."""
+    rows, pair = [], []
+    for tid in VPN_TARIFF_ORDER:
+        t = VPN_TARIFFS.get(tid)
+        if not t:
+            continue
+        if tid == "trial" and active:
+            continue  # пробный нужен только новичкам
+        label = f"{t['name']} · {t['price']} ₽"
+        if tid == "year":
+            label = f"🔥 {label} — выгоднее всего"
+            if pair:
+                rows.append(pair)
+                pair = []
+            rows.append([InlineKeyboardButton(text=label, callback_data=f"vpnbuy_{tid}")])
+            continue
+        pair.append(InlineKeyboardButton(text=label, callback_data=f"vpnbuy_{tid}"))
+        if len(pair) == 2:
+            rows.append(pair)
+            pair = []
+    if pair:
+        rows.append(pair)
+    rows.append([InlineKeyboardButton(text="❓ Что это и зачем", callback_data="vpn_about")])
+    return InlineKeyboardMarkup(inline_keyboard=rows)
+
+
+async def show_vpn_offer(message: types.Message):
+    """Витрина VPN: статус подписки + тарифы одним экраном."""
+    rec, days_left = _vpn_my_sub(message.from_user.id)
+    active = bool(rec) and days_left > 0
+
+    head = (
+        "🛡️ <b>VPN ОТ VAPEBAZAR</b>\n"
+        "━━━━━━━━━━━━━━━━━━━━━━━━\n"
+    )
+    if active:
+        expiry = datetime.fromisoformat(rec["expiry"]).strftime("%d.%m.%Y")
+        tname = VPN_TARIFFS.get(rec.get("tariff"), {}).get("name", "—")
+        head += (
+            f"✅ <b>Подписка активна</b>\n"
+            f"├ Тариф: <b>{tname}</b>\n"
+            f"├ Осталось: <b>{int(days_left) + 1} дн.</b>\n"
+            f"└ Действует до: <b>{expiry}</b>\n\n"
+            f"Можно продлить заранее — оставшиеся дни не сгорают, "
+            f"новый срок прибавится к текущему.\n\n"
+        )
+    else:
+        head += (
+            "⚡ Быстрый · 🔒 Без логов · 📱 Любые устройства\n"
+            "Работает там, где ничего не открывается.\n\n"
+        )
+
+    lines = ["<b>Тарифы:</b>"]
+    for tid in VPN_TARIFF_ORDER:
+        t = VPN_TARIFFS.get(tid)
+        if not t or (tid == "trial" and active):
+            continue
+        per_month = t["price"] / (t["days"] / 30)
+        note = ""
+        if tid == "trial":
+            note = " — попробовать"
+        elif tid != "month":
+            base = VPN_TARIFFS["month"]["price"]
+            save = int((1 - per_month / base) * 100)
+            if save > 0:
+                note = f" — выгода {save}%"
+        lines.append(f"├ <b>{t['name']}</b> · {t['days']} дн. — <b>{t['price']} ₽</b>{note}")
+    if len(lines) > 1:
+        lines[-1] = "└" + lines[-1][1:]  # последний пункт закрываем уголком
+
+    tail = (
+        "\n\n👇 Выбери тариф — оплата займёт минуту, "
+        "доступ пришлём сюда же сразу после подтверждения."
+    )
+    await message.answer(head + "\n".join(lines) + tail, reply_markup=_vpn_offer_kb(active))
+
+
+@dp.message(Command("vpn"))
+async def cmd_vpn(message: types.Message):
+    remember_user(message.from_user)
+    await show_vpn_offer(message)
+
+
+@dp.callback_query(F.data == "vpn_about")
+async def vpn_about(callback: types.CallbackQuery):
+    await callback.message.answer(
+        "🛡️ <b>Зачем нужен VPN</b>\n"
+        "━━━━━━━━━━━━━━━━━━━━━━━━\n\n"
+        "├ Открываются сайты и приложения, которые не работают\n"
+        "├ Видео грузится без тормозов\n"
+        "├ Провайдер не видит, что ты открываешь\n"
+        "└ Работает на телефоне, ноутбуке, планшете\n\n"
+        "<b>Как подключить:</b> после оплаты пришлём ссылку. "
+        "Ставишь приложение <b>HAPP</b>, вставляешь ссылку, включаешь тумблер. Всё.\n\n"
+        f"Вопросы: @{MANAGER_USERNAME}"
+    )
+    await callback.answer()
+
+
+@dp.callback_query(F.data.startswith("vpnbuy_"))
+async def vpn_buy(callback: types.CallbackQuery):
+    """Клиент выбрал тариф — оформляем заявку и зовём админа выдать доступ."""
+    tariff_id = callback.data.split("_", 1)[1]
+    tariff = VPN_TARIFFS.get(tariff_id)
+    if not tariff:
+        await callback.answer("⚠️ Тариф не найден", show_alert=True)
+        return
+
+    user = callback.from_user
+    remember_user(user)
+    rec, days_left = _vpn_my_sub(user.id)
+    is_renewal = bool(rec)
+
+    # Пробный — только тем, у кого подписки ещё не было
+    if tariff_id == "trial" and is_renewal:
+        await callback.answer("Пробный тариф только для новых клиентов 🙂", show_alert=True)
+        return
+
+    await callback.answer("Заявка отправлена ✅")
+
+    await callback.message.answer(
+        f"🛡️ <b>Заявка на VPN принята!</b>\n"
+        f"━━━━━━━━━━━━━━━━━━━━━━━━\n"
+        f"├ Тариф: <b>{tariff['name']}</b>\n"
+        f"├ Срок: <b>{tariff['days']} дн.</b>\n"
+        f"└ К оплате: <b>{tariff['price']} ₽</b>\n\n"
+        f"💳 Напиши директору @{MANAGER_USERNAME} и переведи оплату.\n"
+        f"Как подтвердит — доступ придёт сюда автоматически 🚀",
+        reply_markup=InlineKeyboardMarkup(inline_keyboard=[[
+            InlineKeyboardButton(text="💳 Оплатить — написать директору",
+                                 url=f"https://t.me/{MANAGER_USERNAME}")
+        ]])
+    )
+
+    # Реферала берём из леджера — по нему начислится бонус обоим
+    ref_id = str(_load_bonuses()["users"].get(str(user.id), {}).get("referred_by") or "0")
+    order_id = now_magadan().strftime("%m%d%H%M%S")
+    uname = f"@{user.username}" if user.username else "скрыт"
+
+    admin_text = (
+        f"🛡️ <b>{'ПРОДЛЕНИЕ' if is_renewal else 'НОВЫЙ'} VPN-ЗАКАЗ</b> (из бота)\n"
+        f"━━━━━━━━━━━━━━━━━━━━━━━━\n\n"
+        f"👤 Клиент: {uname} · {user.first_name or ''}\n"
+        f"🆔 ID: <code>{user.id}</code>\n\n"
+        f"📦 Тариф: <b>{tariff['name']}</b> ({tariff['days']} дн., {tariff['devices']} устр.)\n"
+        f"💰 К оплате: <b>{tariff['price']} ₽</b>\n"
+    )
+    if is_renewal:
+        admin_text += f"⏳ Текущая подписка: осталось {max(0, int(days_left))} дн.\n"
+    admin_text += "\n👉 После оплаты жми кнопку — доступ выдастся сам."
+
+    kb = InlineKeyboardMarkup(inline_keyboard=[
+        [InlineKeyboardButton(
+            text="✅ Оплачено — выдать",
+            callback_data=f"vpn_give_{user.id}_{tariff_id}_{tariff['devices']}_{ref_id}_{order_id}")],
+        [InlineKeyboardButton(text="📞 Связаться", url=f"tg://user?id={user.id}")],
+    ])
+    for chat_id in ADMINS:
+        try:
+            await bot.send_message(chat_id=chat_id, text=admin_text, reply_markup=kb)
+        except Exception as e:
+            logger.error(f"vpn_buy notify failed {chat_id}: {e}")
+
+
+# ═════════════════════════════════════════════════════════════════════════════
 # VIP И ЛОЯЛЬНОСТЬ
 # ═════════════════════════════════════════════════════════════════════════════
 
@@ -2030,6 +2228,75 @@ async def cmd_unblock(message: types.Message):
         await message.answer(f"✅ Пользователь <code>{user_id}</code> разблокирован.")
     except ValueError:
         await message.answer("❌ ID должен быть числом.")
+
+
+@dp.message(Command("status"))
+async def cmd_status(message: types.Message):
+    """Получить статус бота: /status"""
+    if message.from_user.id not in ADMINS:
+        return
+
+    try:
+        now = now_magadan()
+        time_str = now.strftime("%H:%M:%S")
+        date_str = now.strftime("%d.%m.%Y")
+
+        # Размеры файлов
+        files_info = ""
+        for fname, fpath in [
+            ("bonuses.json", BONUSES_FILE),
+            ("orders_log.json", ORDERS_FILE),
+            ("vpn_subs.json", VPN_SUBS_FILE),
+            ("challenges.json", CHALLENGES_FILE),
+        ]:
+            if os.path.exists(fpath):
+                size = os.path.getsize(fpath)
+                files_info += f"✅ {fname} ({size:,} байт)\n"
+            else:
+                files_info += f"❌ {fname} не найден\n"
+
+        # Кол-во пользователей
+        bonuses = _load_bonuses()
+        user_count = len(bonuses.get("users", {}))
+
+        # Статистика
+        orders = _load_json(ORDERS_FILE, [])
+        total_revenue = sum(o.get("total", 0) for o in orders)
+
+        # Заблокированные
+        blocked = _load_json(BLOCKED_USERS_FILE, [])
+
+        # VPN подписки
+        vpn_subs = _load_json(VPN_SUBS_FILE, {})
+        vpn_active = len([v for v in vpn_subs.values() if v.get("expires") and datetime.fromisoformat(v.get("expires")).replace(tzinfo=MAGADAN_TZ) > now])
+
+        report = (
+            f"<b>📊 СТАТУС БОТА</b>\n"
+            f"━━━━━━━━━━━━━━━━━━━━━━━━━━\n"
+            f"🕐 <b>Время (Магадан):</b> {time_str}\n"
+            f"📅 <b>Дата:</b> {date_str}\n\n"
+            f"<b>👥 ПОЛЬЗОВАТЕЛИ</b>\n"
+            f"✅ Активных: {user_count}\n"
+            f"🚫 Заблокировано: {len(blocked)}\n\n"
+            f"<b>💰 ФИНАНСЫ</b>\n"
+            f"💵 Выручка: {_fmt_money(total_revenue)} ₽\n"
+            f"📦 Заказов: {len(orders)}\n\n"
+            f"<b>🌐 VPN</b>\n"
+            f"✅ Активных подписок: {vpn_active}\n"
+            f"📊 Всего выданных: {len(vpn_subs)}\n\n"
+            f"<b>📁 ДАННЫЕ</b>\n"
+            f"{files_info}\n"
+            f"<b>🔧 СИСТЕМЫ</b>\n"
+            f"✅ Спам-фильтр активен\n"
+            f"✅ Партнерка включена\n"
+            f"✅ Розыгрыш готов\n"
+            f"✅ Система работает нормально"
+        )
+
+        await message.answer(report)
+    except Exception as e:
+        logger.error(f"Ошибка в /status: {e}")
+        await message.answer(f"❌ Ошибка: {e}")
 
 
 @dp.message(F.text == "📞 Контакты")
@@ -2745,6 +3012,7 @@ async def handle_text_buttons(message: types.Message):
 
     # Маппирование текстовых кнопок на функции
     button_handlers = {
+        "🛡️ VPN": "vpn",
         "💎 Баллы": "bonus",
         "👑 VIP": "vip",
         "🎁 Рефереллы": "ref",
@@ -2758,7 +3026,10 @@ async def handle_text_buttons(message: types.Message):
         uid = str(message.from_user.id)
 
         try:
-            if handler == "bonus":
+            if handler == "vpn":
+                await show_vpn_offer(message)
+
+            elif handler == "bonus":
                 bonuses = _load_json(BONUSES_FILE, {})
                 user = bonuses.get(uid, {})
                 balance = user.get("balance", 0)

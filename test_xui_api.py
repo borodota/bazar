@@ -129,6 +129,7 @@ class TestExtendClient(unittest.IsolatedAsyncioTestCase):
 class TestResolveInbound(unittest.IsolatedAsyncioTestCase):
     async def test_resolve_by_remark(self):
         c = XuiClient(base_url="https://panel.test/base", sub_base="https://s/sub",
+                      username="admin", password="test",
                       inbound_id=None, inbound_remark="MyVPN")
         listing = {"success": True, "obj": [
             {"id": 1, "remark": "Other"},
@@ -140,6 +141,7 @@ class TestResolveInbound(unittest.IsolatedAsyncioTestCase):
 
     async def test_resolve_not_found(self):
         c = XuiClient(base_url="https://panel.test/base", sub_base="https://s/sub",
+                      username="admin", password="test",
                       inbound_id=None, inbound_remark="MyVPN")
         listing = {"success": True, "obj": [{"id": 1, "remark": "Other"}]}
         with patch.object(c, "_request", new=AsyncMock(return_value=listing)):

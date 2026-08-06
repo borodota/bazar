@@ -139,6 +139,7 @@ class TestAddClient(unittest.IsolatedAsyncioTestCase):
         path = make_db()
         try:
             c = XuiClient(db_path=path, server_host="62.133.61.23",
+                          sub_base="https://62.133.61.23:2096/sub",
                           inbound_remark="НетТакого", restart_cmd="")
             with self.assertRaises(XuiError):
                 await c.add_client(email="tg1", days=7)

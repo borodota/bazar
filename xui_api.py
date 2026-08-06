@@ -40,10 +40,16 @@ class XuiClient:
         inbound_id=None,
         inbound_remark=None,
     ):
-        self.base_url = (base_url or os.getenv("XUI_BASE_URL", "https://62.133.61.23:2053/KUzeX4i5ljeMdedcxc")).rstrip("/")
-        self.sub_base = (sub_base or os.getenv("XUI_SUB_BASE", "https://62.133.61.23:2096/sub")).rstrip("/")
-        self.username = username or os.getenv("XUI_USERNAME", "admin")
-        self.password = password or os.getenv("XUI_PASSWORD", "Zkwmafaa1998700")
+        # Репозиторий публичный — ни пароль, ни секретный путь панели сюда вписывать нельзя.
+        # Всё берём из окружения (на сервере это /etc/vapebazar-bot.env).
+        self.base_url = (base_url or os.getenv("XUI_BASE_URL", "")).strip().rstrip("/")
+        self.sub_base = (sub_base or os.getenv("XUI_SUB_BASE", "")).strip().rstrip("/")
+        self.username = username or os.getenv("XUI_USERNAME", "").strip()
+        self.password = password or os.getenv("XUI_PASSWORD", "")
+        _missing = [n for n, v in (("XUI_BASE_URL", self.base_url), ("XUI_SUB_BASE", self.sub_base),
+                                   ("XUI_USERNAME", self.username), ("XUI_PASSWORD", self.password)) if not v]
+        if _missing:
+            raise XuiError("Не заданы переменные окружения: " + ", ".join(_missing))
         _env_inbound = os.getenv("XUI_INBOUND_ID", "").strip()
         self.inbound_id = inbound_id if inbound_id is not None else (int(_env_inbound) if _env_inbound else None)
         self.inbound_remark = inbound_remark or os.getenv("XUI_INBOUND_REMARK", "MyVPN")

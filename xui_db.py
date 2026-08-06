@@ -56,9 +56,16 @@ class XuiClient:
     def __init__(self, db_path=None, server_host=None, inbound_remark=None,
                  restart_cmd=None, sub_base=None):
         self.db_path = db_path or os.getenv("XUI_DB_PATH", "/etc/x-ui/x-ui.db")
-        self.server_host = server_host or os.getenv("XUI_SERVER_HOST", "62.133.61.23")
-        self.sub_base = (sub_base or os.getenv("XUI_SUB_BASE", "https://62.133.61.23:2096/sub")).rstrip("/")
+        # Адрес сервера НЕ имеет значения по умолчанию: при переезде на другой VPS
+        # забытая переменная выдавала бы клиентам рабочие с виду ссылки на старый
+        # (уже мёртвый) сервер — молча, без единой ошибки в логах.
+        self.server_host = (server_host or os.getenv("XUI_SERVER_HOST", "")).strip()
+        self.sub_base = (sub_base or os.getenv("XUI_SUB_BASE", "")).strip().rstrip("/")
         self.inbound_remark = inbound_remark or os.getenv("XUI_INBOUND_REMARK", "MyVPN")
+        _missing = [n for n, v in (("XUI_SERVER_HOST", self.server_host),
+                                   ("XUI_SUB_BASE", self.sub_base)) if not v]
+        if _missing:
+            raise XuiError("Не заданы переменные окружения: " + ", ".join(_missing))
         self.restart_cmd = (restart_cmd if restart_cmd is not None
                             else os.getenv("XUI_RESTART_CMD", "systemctl restart x-ui"))
 
