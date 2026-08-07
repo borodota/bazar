@@ -109,7 +109,17 @@ class XuiClient:
             (self.inbound_remark,)
         ).fetchone()
         if not row:
-            raise XuiError(f"Инбаунд '{self.inbound_remark}' не найден в базе панели")
+            # Показываем, какие инбаунды в панели есть на самом деле — иначе при
+            # переезде на новый сервер приходится лезть в базу руками, чтобы
+            # узнать имя и вписать его в XUI_INBOUND_REMARK.
+            found = cur.execute("SELECT remark FROM inbounds ORDER BY id").fetchall()
+            names = ", ".join(f"'{r[0]}'" for r in found if r[0]) or "их вообще нет"
+            raise XuiError(
+                f"Инбаунд '{self.inbound_remark}' не найден в панели. "
+                f"Доступные: {names}. "
+                f"Впиши нужное имя в XUI_INBOUND_REMARK (/etc/vapebazar-bot.env) "
+                f"и перезапусти бота."
+            )
         return row[0], json.loads(row[1] or "{}"), (row[2] or "{}"), row[3]
 
     def _build_vless(self, port, stream_settings_json, client_uuid, label):
