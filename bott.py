@@ -458,6 +458,9 @@ def get_features_menu():
     """Меню с инлайн кнопками для фич"""
     return InlineKeyboardMarkup(inline_keyboard=[
         [
+            InlineKeyboardButton(text="🛡️ Купить VPN", callback_data="cmd_vpn")
+        ],
+        [
             InlineKeyboardButton(text="💎 Баллы (/bonus)", callback_data="cmd_bonus"),
             InlineKeyboardButton(text="👑 VIP (/vip)", callback_data="cmd_vip")
         ],
@@ -1579,9 +1582,14 @@ def _vpn_offer_kb(active: bool):
     return InlineKeyboardMarkup(inline_keyboard=rows)
 
 
-async def show_vpn_offer(message: types.Message):
-    """Витрина VPN: статус подписки + тарифы одним экраном."""
-    rec, days_left = _vpn_my_sub(message.from_user.id)
+async def show_vpn_offer(message: types.Message, user: types.User = None):
+    """Витрина VPN: статус подписки + тарифы одним экраном.
+
+    user передаётся явно при вызове из инлайн-кнопки: у message оттуда
+    from_user — это сам бот, и подписка проверялась бы не у покупателя.
+    """
+    user = user or message.from_user
+    rec, days_left = _vpn_my_sub(user.id)
     active = bool(rec) and days_left > 0
 
     head = (
@@ -2830,7 +2838,10 @@ async def handle_menu_buttons(callback: types.CallbackQuery):
         remember_user(callback.from_user)
 
         # Выполняем соответствующую команду
-        if cmd_name == "cmd_bonus":
+        if cmd_name == "cmd_vpn":
+            await show_vpn_offer(callback.message, callback.from_user)
+
+        elif cmd_name == "cmd_bonus":
             bonuses = _load_json(BONUSES_FILE, {})
             user = bonuses.get(uid, {})
             balance = user.get("balance", 0)
@@ -3354,10 +3365,13 @@ async def vpn_expiry_reminder_loop():
                         chat_id=int(uid),
                         text=(
                             f"{header}\n\n"
-                            f"Продли тариф «{tname}» за {price} ₽ прямо в приложении:\n"
-                            f"Профиль → 🛡️ VPN-подписка → «{tname}» → Купить."
+                            f"Продлить тариф «{tname}» — <b>{price} ₽</b>. "
+                            f"Оставшиеся дни не сгорят, новый срок прибавится к текущему."
                         ),
-                        reply_markup=get_main_keyboard()
+                        reply_markup=InlineKeyboardMarkup(inline_keyboard=[[
+                            InlineKeyboardButton(text=f"🛡️ Продлить за {price} ₽",
+                                                 callback_data=f"vpnbuy_{rec.get('tariff')}")
+                        ]])
                     )
                     rec["last_expiry_reminder"] = expiry_str
                     changed = True
