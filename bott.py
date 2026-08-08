@@ -1158,6 +1158,20 @@ async def cmd_start(message: types.Message):
                 record_referral(message.from_user.id, payload[4:], message.from_user)
         except Exception as e:
             logger.error(f"Не удалось записать реферала из /start: {e}")
+
+    # Переход из Mini App «купить VPN»: /start vpn_<тариф>. Сама заявка
+    # оформляется здесь, чтобы витрине не требовался токен бота.
+    if payload.startswith("vpn_"):
+        tariff_id = payload[4:]
+        refusal = await create_vpn_request(message, message.from_user, tariff_id,
+                                           source="из магазина")
+        if refusal:
+            # Тариф недоступен (например, пробный уже был) — не молчим,
+            # объясняем и сразу показываем, что можно взять вместо него.
+            await message.answer(f"ℹ️ {refusal}")
+            await show_vpn_offer(message)
+        return
+
     await message.answer(
         f"Привет, {message.from_user.first_name}! 👋\n\n"
         f"Добро пожаловать в <b>VAPEBAZAR PREMIUM</b> 💜\n\n"
@@ -1660,28 +1674,26 @@ async def vpn_about(callback: types.CallbackQuery):
     await callback.answer()
 
 
-@dp.callback_query(F.data.startswith("vpnbuy_"))
-async def vpn_buy(callback: types.CallbackQuery):
-    """Клиент выбрал тариф — оформляем заявку и зовём админа выдать доступ."""
-    tariff_id = callback.data.split("_", 1)[1]
+async def create_vpn_request(target: types.Message, user: types.User, tariff_id: str, source: str = "бот"):
+    """Оформляет заявку на VPN: подтверждение клиенту + кнопка выдачи админам.
+
+    Общая точка для кнопки в боте и для перехода из Mini App (/start vpn_<тариф>),
+    чтобы витрине не нужен был токен бота для отправки заявки.
+    Возвращает текст отказа или None, если заявка принята.
+    """
     tariff = VPN_TARIFFS.get(tariff_id)
     if not tariff:
-        await callback.answer("⚠️ Тариф не найден", show_alert=True)
-        return
+        return "⚠️ Тариф не найден"
 
-    user = callback.from_user
     remember_user(user)
     rec, days_left = _vpn_my_sub(user.id)
     is_renewal = bool(rec)
 
     # Пробный — только тем, у кого подписки ещё не было
     if tariff_id == "trial" and is_renewal:
-        await callback.answer("Пробный тариф только для новых клиентов 🙂", show_alert=True)
-        return
+        return "Пробный тариф только для новых клиентов 🙂"
 
-    await callback.answer("Заявка отправлена ✅")
-
-    await callback.message.answer(
+    await target.answer(
         f"🛡️ <b>Заявка на VPN принята!</b>\n"
         f"━━━━━━━━━━━━━━━━━━━━━━━━\n"
         f"├ Тариф: <b>{tariff['name']}</b>\n"
@@ -1701,7 +1713,7 @@ async def vpn_buy(callback: types.CallbackQuery):
     uname = f"@{user.username}" if user.username else "скрыт"
 
     admin_text = (
-        f"🛡️ <b>{'ПРОДЛЕНИЕ' if is_renewal else 'НОВЫЙ'} VPN-ЗАКАЗ</b> (из бота)\n"
+        f"🛡️ <b>{'ПРОДЛЕНИЕ' if is_renewal else 'НОВЫЙ'} VPN-ЗАКАЗ</b> ({source})\n"
         f"━━━━━━━━━━━━━━━━━━━━━━━━\n\n"
         f"👤 Клиент: {uname} · {user.first_name or ''}\n"
         f"🆔 ID: <code>{user.id}</code>\n\n"
@@ -1722,7 +1734,16 @@ async def vpn_buy(callback: types.CallbackQuery):
         try:
             await bot.send_message(chat_id=chat_id, text=admin_text, reply_markup=kb)
         except Exception as e:
-            logger.error(f"vpn_buy notify failed {chat_id}: {e}")
+            logger.error(f"vpn request notify failed {chat_id}: {e}")
+    return None
+
+
+@dp.callback_query(F.data.startswith("vpnbuy_"))
+async def vpn_buy(callback: types.CallbackQuery):
+    """Клиент выбрал тариф кнопкой — оформляем заявку."""
+    tariff_id = callback.data.split("_", 1)[1]
+    refusal = await create_vpn_request(callback.message, callback.from_user, tariff_id)
+    await callback.answer(refusal or "Заявка отправлена ✅", show_alert=bool(refusal))
 
 
 # ═════════════════════════════════════════════════════════════════════════════

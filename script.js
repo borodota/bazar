@@ -49,11 +49,15 @@ window.tg = (window.Telegram && window.Telegram.WebApp) ? window.Telegram.WebApp
 // (см. relay/worker.js и relay/README.md): токен живёт там, в секрете.
 // После деплоя воркера вставь его адрес в RELAY_URL ниже — и удали BOT_API_TOKEN.
 const RELAY_URL = ""; // напр. "https://vapebazar-relay.ИМЯ.workers.dev"
-// Fallback на время, пока релей не настроен (RELAY_URL пуст). НЕ безопасно —
-// убрать сразу, как только заработает релей.
-const BOT_API_TOKEN = "8687110031:AAE9E430W55aRQQuUwDI8hEMjaVliq_gbG4";
+// Токена здесь БОЛЬШЕ НЕТ и быть не должно: этот файл раздаётся публично через
+// GitHub Pages, любой может открыть его и забрать токен — так и утёк прошлый.
+// Заказы уходят либо через релей (RELAY_URL), либо через tg.sendData().
+// Пустая строка, а не удалённая константа: на неё завязаны загрузка аватарок
+// и диагностика — они сами отключаются, когда токена нет.
+const BOT_API_TOKEN = "";
 const ORDER_ADMIN_IDS = [6163521938, 5289357165];
 const MANAGER_TG = "BORO_DOTA";
+const BOT_USERNAME = "VapeBazar_bot";
 
 // ── БОНУСНАЯ ПРОГРАММА ──
 const BONUS_RATE = 0.05;        // базовый % (Бронза); реальный % зависит от уровня
@@ -101,14 +105,14 @@ async function tgApiSend(chatId, text, replyMarkup) {
             ]);
             return resp.json();
         }
-        : async (body) => {
-            const resp = await Promise.race([
-                fetch("https://api.telegram.org/bot" + BOT_API_TOKEN + "/sendMessage", {
-                    method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body)
-                }),
-                new Promise((_, r) => setTimeout(() => r(new Error("Timeout")), 10000))
-            ]);
-            return resp.json();
+        : async () => {
+            // Без релея слать напрямую нечем — токен из этого файла убран
+            // намеренно (он публичный). Ошибка осознанная и читаемая, чтобы
+            // не выглядело «молча ничего не произошло».
+            throw new Error(
+                "Отправка не настроена: задай RELAY_URL в script.js " +
+                "(релей лежит в api/relay.js, деплоится на Vercel с BOT_TOKEN в переменных окружения)"
+            );
         };
 
     const body = { chat_id: chatId, text, parse_mode: "HTML" };
@@ -778,69 +782,34 @@ window.selectVpnDevices = function (devices) {
 };
 
 window.buyVpn = function (tariffId) {
-    if (window._vpnBuyInFlight) return; // защита от двойной заявки при быстром повторном тапе
+    if (window._vpnBuyInFlight) return; // защита от двойного тапа
     const t = window.VPN_TARIFFS.find(x => x.id === tariffId);
     if (!t) return;
-    const devices = window._vpnDevices || 1;
-    const price = window.vpnPriceFor(t, devices);
-    const user = tgCurrentUser();
-    const customerId = user ? user.id : "";
-    if (!customerId) { haptic("error"); window.showToast("Открой магазин через Telegram"); return; }
+
+    // Заявку оформляет БОТ, а не эта страница: раньше Mini App слал её напрямую
+    // в Bot API с токеном, зашитым в script.js. Токен раздавался публично через
+    // GitHub Pages, и после его отзыва покупка перестала работать совсем.
+    // Переход по deep-link надёжнее: не нужен ни токен, ни релей, и работает
+    // при любом способе открытия приложения (кнопка, меню, прямая ссылка).
     window._vpnBuyInFlight = true;
-    const usernameText = (user && user.username) ? "@" + user.username : (user.first_name || "Скрыт");
-
-    // Реферал — приведи друга на VPN, независимо от того, использовал ли он
-    // уже реферальную скидку в магазине (своя отметка, чтобы не путать флаги)
-    const referredByRaw = localStorage.getItem("vapeReferredBy");
-    const vpnRefId = (referredByRaw && localStorage.getItem("vapeVpnRefUsed") !== "1"
-        && /^\d+$/.test(referredByRaw) && referredByRaw !== String(customerId)) ? referredByRaw : "0";
-
-    // Уникальный ID этого заказа — нужен боту, чтобы не выдать VPN дважды,
-    // если оба админа нажмут «Оплачено» на своих копиях заявки почти одновременно.
-    const vpnOrderId = Date.now().toString().slice(-8);
-
-    const adminText =
-        `🛡️ <b>VPN-ЗАКАЗ</b>\n` +
-        `━━━━━━━━━━━━━━━━━━━━━━━━\n\n` +
-        `👤 <b>Клиент:</b> ${escHtml(usernameText)}\n` +
-        `🆔 <b>ID:</b> <code>${customerId}</code>\n\n` +
-        `📦 <b>Тариф:</b> ${t.name} (${t.days} дн., ${devices} устр.)\n` +
-        `💰 <b>К оплате:</b> ${price} ₽\n\n` +
-        `👉 Клиент платит напрямую. После оплаты жми «Оплачено — выдать».`;
-    const kb = { inline_keyboard: [
-        [{ text: "✅ Оплачено — выдать", callback_data: `vpn_give_${customerId}_${t.id}_${devices}_${vpnRefId}_${vpnOrderId}` }],
-        [{ text: "📞 Связаться", url: "tg://user?id=" + customerId }]
-    ]};
-
-    // Показ ошибки — alert() заблокирован в Telegram Mobile, используем showPopup/showToast.
-    function showVpnError(err) {
-        haptic("error");
-        console.error("VPN order error:", err);
-        const msg = `Заявка на VPN не отправлена. Напишите @${MANAGER_TG} напрямую.`;
-        if (window.tg && window.tg.showPopup) {
-            window.tg.showPopup({ title: "Ошибка отправки", message: msg, buttons: [{ type: "ok" }] });
-        } else {
-            window.showToast("❌ " + msg, 5000);
-        }
-    }
-
     haptic("success");
-    window.showToast("Отправляем заявку…");
-    notifyAdmins(adminText, kb).then(() => {
-        tgApiSend(customerId,
-            `🛡️ <b>Заявка на VPN принята!</b>\n\n` +
-            `Тариф: <b>${t.name}</b> — ${price} ₽ (${t.days} дн., ${devices} устр.)\n\n` +
-            `💳 Оплати директору @${MANAGER_TG}. Как подтвердит оплату — ` +
-            `сразу пришлём сюда ссылку и инструкцию по подключению.`
-        ).catch(() => {});
-        if (vpnRefId !== "0") localStorage.setItem("vapeVpnRefUsed", "1");
-        window.showToast("Заявка отправлена ✓");
-        window._vpnBuyInFlight = false;
-        setTimeout(window.closeVpnStore, 800);
-    }).catch((err) => {
-        window._vpnBuyInFlight = false;
-        showVpnError(err);
-    });
+
+    const link = `https://t.me/${BOT_USERNAME}?start=vpn_${encodeURIComponent(t.id)}`;
+    const reset = () => { window._vpnBuyInFlight = false; };
+
+    if (window.tg && window.tg.openTelegramLink) {
+        try {
+            window.tg.openTelegramLink(link);
+            setTimeout(reset, 1500);
+            return;
+        } catch (e) { /* ниже — обычное открытие ссылки */ }
+    }
+    try {
+        window.open(link, "_blank");
+    } catch (e) {
+        window.showToast(`Напишите @${MANAGER_TG} — оформим VPN вручную`, 5000);
+    }
+    setTimeout(reset, 1500);
 };
 
 // Цветовая тема карточки по категории
