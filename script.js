@@ -45,10 +45,9 @@ window.tg = (window.Telegram && window.Telegram.WebApp) ? window.Telegram.WebApp
 // Поэтому шлём через Bot API.
 //
 // ⚠️ БЕЗОПАСНОСТЬ: токен бота НЕЛЬЗЯ держать в этом файле — он раздаётся
-// публично через GitHub Pages. Правильный путь — релей на Cloudflare Worker
-// (см. relay/worker.js и relay/README.md): токен живёт там, в секрете.
-// После деплоя воркера вставь его адрес в RELAY_URL ниже — и удали BOT_API_TOKEN.
-const RELAY_URL = ""; // напр. "https://vapebazar-relay.ИМЯ.workers.dev"
+// публично через GitHub Pages. Токен живёт в секретных переменных релея
+// (api/relay.js, развёрнут на Vercel), сюда попадает только его адрес.
+const RELAY_URL = "https://bazar-amber.vercel.app/api/relay";
 // Токена здесь БОЛЬШЕ НЕТ и быть не должно: этот файл раздаётся публично через
 // GitHub Pages, любой может открыть его и забрать токен — так и утёк прошлый.
 // Заказы уходят либо через релей (RELAY_URL), либо через tg.sendData().
