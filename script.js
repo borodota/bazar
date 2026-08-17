@@ -2011,23 +2011,54 @@ window.checkoutVapeOrder = function () {
     const checkoutBtnEl = document.getElementById("checkoutBtn");
     if (checkoutBtnEl) { checkoutBtnEl.disabled = true; checkoutBtnEl.style.opacity = "0.6"; }
 
-    window.showToast("Отправляем заказ…");
-    notifyAdmins(adminText, kb).then(() => {
-        // подтверждение клиенту в чат с ботом (если клиент запускал бота)
-        if (customerId) {
-            tgApiSend(customerId,
-                `✅ <b>Заказ #${orderData.order_id} принят!</b>\n` +
-                `📅 ${orderData.date}\n\n` +
-                `🛒 <b>Ваш заказ</b>\n` +
-                `<blockquote>${escHtml(itemsList)}</blockquote>\n\n` +
-                totalsBlock +
-                `\n💰 <b>К оплате: ${fmt(total)} ₽</b>\n` +
-                (bonusEarned > 0 ? `💎 +${fmt(bonusEarned)} баллов зачислим после подтверждения\n` : "") +
-                `\n📍 ${isPickup ? "Самовывоз: " : "Доставка: "}${escHtml(orderData.address)}\n\n` +
-                `🧑‍💻 Наш директор @${MANAGER_TG} свяжется с вами для подтверждения.\n` +
-                `🔔 Мы пришлём уведомление, когда статус заказа изменится!`
-            ).catch(() => {});
-        }
+    // ── Отправка заказа ───────────────────────────────────────────────────
+    // Раньше заказ уходил напрямую в Bot API с токеном, вписанным в этот файл.
+    // Файл публичный (GitHub Pages), токен утёк и был отозван — заказы перестали
+    // доходить. Теперь: если настроен релей — шлём через него, иначе через
+    // tg.sendData(), который бот принимает сам и токена не требует.
+    const orderPayload = Object.assign({}, orderData, {
+        earn: bonusEarned,
+        redeem: bonusUsed,
+        ref_id: localStorage.getItem("vapeReferredBy") || "0"
+    });
+
+    // Подтверждение клиенту нужно только на пути через релей: при sendData
+    // его отправляет сам бот, получив заказ.
+    const clientText =
+        `✅ <b>Заказ #${orderData.order_id} принят!</b>\n` +
+        `📅 ${orderData.date}\n\n` +
+        `🛒 <b>Ваш заказ</b>\n` +
+        `<blockquote>${escHtml(itemsList)}</blockquote>\n\n` +
+        totalsBlock +
+        `\n💰 <b>К оплате: ${fmt(total)} ₽</b>\n` +
+        (bonusEarned > 0 ? `💎 +${fmt(bonusEarned)} баллов зачислим после подтверждения\n` : "") +
+        `\n📍 ${isPickup ? "Самовывоз: " : "Доставка: "}${escHtml(orderData.address)}\n\n` +
+        `🧑‍💻 Наш директор @${MANAGER_TG} свяжется с вами для подтверждения.\n` +
+        `🔔 Мы пришлём уведомление, когда статус заказа изменится!`;
+
+    // Успешный sendData закрывает Mini App, поэтому списания и очистка корзины
+    // делаются ДО отправки. Снимок — чтобы вернуть всё назад, если не ушло.
+    function _snapshot() {
+        return {
+            cart: window.cart.slice(),
+            bonus: bonusGet(),
+            promo: window.appliedPromo,
+            refActive: window.referralDiscountActive,
+            refUsed: localStorage.getItem("vapeRefUsed")
+        };
+    }
+    function _restore(s) {
+        window.cart = s.cart;
+        bonusSet(s.bonus);
+        window.appliedPromo = s.promo;
+        window.referralDiscountActive = s.refActive;
+        if (s.refUsed === null) localStorage.removeItem("vapeRefUsed");
+        else localStorage.setItem("vapeRefUsed", s.refUsed);
+        window.updateCartCounters();
+        window.updateBonusUI();
+    }
+
+    function _applySuccess() {
         haptic("success");
         bonusSet(bonusGet() - bonusUsed + bonusEarned);
         window.bonusApplied = false;
@@ -2041,7 +2072,8 @@ window.checkoutVapeOrder = function () {
         window.updateBonusUI();
         window.showConfetti();
         window.showOrderSuccess(orderData.order_id, bonusEarned);
-        // Сохраняем данные для тихого логирования при закрытии overlay
+        // Тихое логирование при закрытии overlay — нужно на пути через релей,
+        // где бот сам заказа не видит. На пути sendData обнуляется ниже.
         window._pendingOrderLog = {
             type: "order_log",
             order_id: orderData.order_id,
@@ -2052,10 +2084,51 @@ window.checkoutVapeOrder = function () {
             total: total,
             earn: bonusEarned
         };
-    }).catch((err) => {
+    }
+
+    window.showToast("Отправляем заказ…");
+
+    if (RELAY_URL) {
+        notifyAdmins(adminText, kb).then(() => {
+            if (customerId) tgApiSend(customerId, clientText).catch(() => {});
+            _applySuccess();
+        }).catch((err) => {
+            if (checkoutBtnEl) { checkoutBtnEl.disabled = false; checkoutBtnEl.style.opacity = ""; }
+            _showError(err);
+        });
+        return;
+    }
+
+    if (!(window.tg && window.tg.sendData)) {
         if (checkoutBtnEl) { checkoutBtnEl.disabled = false; checkoutBtnEl.style.opacity = ""; }
-        _showError(err);
-    });
+        _showError(new Error("Магазин открыт вне Telegram"));
+        return;
+    }
+
+    const snap = _snapshot();
+    _applySuccess();
+    window._pendingOrderLog = null; // заказ уходит боту целиком, дублировать нечем
+    try {
+        window.tg.sendData(JSON.stringify(orderPayload));
+    } catch (e) {
+        _restore(snap);
+        if (checkoutBtnEl) { checkoutBtnEl.disabled = false; checkoutBtnEl.style.opacity = ""; }
+        _showError(e);
+        return;
+    }
+    // sendData закрывает приложение. Если через 2.5 с мы всё ещё живы — данные
+    // не ушли: так бывает, когда магазин открыт не кнопкой клавиатуры бота.
+    setTimeout(() => {
+        _restore(snap);
+        if (checkoutBtnEl) { checkoutBtnEl.disabled = false; checkoutBtnEl.style.opacity = ""; }
+        const msg = "Заказ не ушёл. Открой магазин кнопкой «🛍️ Открыть Магазин» " +
+                    "в чате бота и повтори — корзина сохранена.";
+        if (window.tg && window.tg.showPopup) {
+            window.tg.showPopup({ title: "Не отправлено", message: msg, buttons: [{ type: "ok" }] });
+        } else {
+            window.showToast("❌ " + msg, 6000);
+        }
+    }, 2500);
 };
 
 // ==========================================================================
