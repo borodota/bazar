@@ -1999,10 +1999,14 @@ window.checkoutVapeOrder = function () {
         haptic("error");
         console.error("Order send error:", err);
         const msg = "Заказ не отправлен. Напишите @" + MANAGER_TG + " — корзина сохранена.";
+        // Причину показываем прямо в окне: из Telegram консоль не открыть, а без
+        // текста ошибки разбираться приходится вслепую.
+        const detail = String((err && err.message) || err || "").slice(0, 200);
+        const full = detail ? msg + "\n\nПричина: " + detail : msg;
         if (window.tg && window.tg.showPopup) {
-            window.tg.showPopup({ title: "Ошибка отправки", message: msg, buttons: [{ type: "ok" }] });
+            window.tg.showPopup({ title: "Ошибка отправки", message: full, buttons: [{ type: "ok" }] });
         } else {
-            window.showToast("❌ " + msg, 5000);
+            window.showToast("❌ " + full, 7000);
         }
     }
 
