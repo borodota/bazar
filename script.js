@@ -2121,10 +2121,24 @@ window.checkoutVapeOrder = function () {
     setTimeout(() => {
         _restore(snap);
         if (checkoutBtnEl) { checkoutBtnEl.disabled = false; checkoutBtnEl.style.opacity = ""; }
-        const msg = "Заказ не ушёл. Открой магазин кнопкой «🛍️ Открыть Магазин» " +
-                    "в чате бота и повтори — корзина сохранена.";
+        const msg = "Заказ не ушёл — так бывает, если магазин открыт не из чата бота. " +
+                    "Корзина сохранена: перейди в бота, нажми «🛍️ Открыть Магазин» и оформи снова.";
+        const goToBot = () => {
+            const link = `https://t.me/${BOT_USERNAME}`;
+            if (window.tg && window.tg.openTelegramLink) {
+                try { window.tg.openTelegramLink(link); return; } catch (e) { /* ниже */ }
+            }
+            try { window.open(link, "_blank"); } catch (e) { /* некуда */ }
+        };
         if (window.tg && window.tg.showPopup) {
-            window.tg.showPopup({ title: "Не отправлено", message: msg, buttons: [{ type: "ok" }] });
+            window.tg.showPopup({
+                title: "Не отправлено",
+                message: msg,
+                buttons: [
+                    { id: "gobot", type: "default", text: "Перейти в бота" },
+                    { type: "cancel" }
+                ]
+            }, (btnId) => { if (btnId === "gobot") goToBot(); });
         } else {
             window.showToast("❌ " + msg, 6000);
         }
