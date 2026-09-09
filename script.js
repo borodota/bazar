@@ -84,7 +84,34 @@ const SHOP_OPEN_HOUR = 10;   // открытие 10:00
 const SHOP_CLOSE_HOUR = 22;  // закрытие 22:00
 
 function escHtml(s) {
-    return String(s == null ? "" : s).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+    return String(s == null ? "" : s).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;").replace(/'/g, "&#39;");
+}
+
+function storedList(key) {
+    try {
+        const value = JSON.parse(localStorage.getItem(key) || "[]");
+        return Array.isArray(value) ? value : [];
+    } catch (_) { return []; }
+}
+
+function newOrderId() {
+    const bytes = new Uint8Array(5);
+    crypto.getRandomValues(bytes);
+    return Array.from(bytes, b => b.toString(16).padStart(2, "0")).join("");
+}
+
+async function relayRequest(payload, timeout = 12000) {
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), timeout);
+    try {
+        const response = await fetch(RELAY_URL, {
+            method: "POST", headers: { "Content-Type": "application/json" },
+            body: JSON.stringify(payload), signal: controller.signal
+        });
+        const data = await response.json();
+        if (!response.ok) throw new Error(data.description || "Сервис временно недоступен");
+        return data;
+    } finally { clearTimeout(timer); }
 }
 
 async function tgApiSend(chatId, text, replyMarkup) {
@@ -98,11 +125,7 @@ async function tgApiSend(chatId, text, replyMarkup) {
             };
             if (body.parse_mode) payload.parse_mode = body.parse_mode;
             if (body.reply_markup) payload.reply_markup = body.reply_markup;
-            const resp = await Promise.race([
-                fetch(RELAY_URL, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(payload) }),
-                new Promise((_, r) => setTimeout(() => r(new Error("Timeout")), 10000))
-            ]);
-            return resp.json();
+            return relayRequest(payload);
         }
         : async () => {
             // Без релея слать напрямую нечем — токен из этого файла убран
@@ -120,7 +143,7 @@ async function tgApiSend(chatId, text, replyMarkup) {
     let data = await doSend(body);
 
     // если HTML не распарсился — шлём без разметки
-    if (!data.ok) {
+    if (!data.ok && /can't parse entities|can't find end|unsupported start tag/i.test(data.description || "")) {
         console.warn("tgApiSend HTML failed:", data.description, "— retrying plain");
         const plainBody = { chat_id: chatId, text: text.replace(/<[^>]+>/g, "") };
         if (replyMarkup) plainBody.reply_markup = replyMarkup;
@@ -234,6 +257,7 @@ window.applyTheme = function (t) {
     document.querySelectorAll(".theme-swatch").forEach(function (s) {
         s.classList.toggle("active", s.dataset.theme === t);
     });
+    window.syncTelegramAppearance?.();
 };
 // Сохраняет выбор пользователя (вызывается по клику на свотч).
 window.setTheme = function (t) {
@@ -284,6 +308,80 @@ function wishPricesGet() {
 function wishPricesSet(m) { localStorage.setItem("vapeWishPrices", JSON.stringify(m)); }
 
 // ── ИНИЦИАЛИЗАЦИЯ ──
+window.initAccessibleControls = function () {
+    const clickable = ".profile-card[onclick], .close-drawer-btn, .cart-bar, .product-card, .featured-card, .vpn-card, .theme-swatch, .cart-reminder-close, .cart-item-note-toggle";
+    function enhance() {
+        document.querySelectorAll(clickable).forEach(el => {
+            if (el.tagName !== "BUTTON") { el.setAttribute("role", "button"); el.tabIndex = 0; }
+            if (el.classList.contains("close-drawer-btn")) el.setAttribute("aria-label", "Закрыть окно");
+            if (el.classList.contains("theme-swatch")) {
+                const names = { green: "Зелёный", purple: "Фиолетовый", pink: "Розовый", blue: "Голубой", gold: "Золотой" };
+                el.setAttribute("aria-label", names[el.dataset.theme] + " акцент");
+            }
+        });
+        document.querySelectorAll(".wish-btn").forEach(el => el.setAttribute("aria-pressed", String(el.classList.contains("wished"))));
+        document.querySelectorAll(".add-btn, .fc-add").forEach(el => el.setAttribute("aria-label", el.textContent.trim() || "Посмотреть товар"));
+    }
+    enhance();
+    new MutationObserver(enhance).observe(document.body, { childList: true, subtree: true });
+    document.addEventListener("keydown", event => {
+        if ((event.key === "Enter" || event.key === " ") && event.target.matches(clickable) && event.target.tagName !== "BUTTON") {
+            event.preventDefault(); event.target.click();
+        }
+    });
+    const close = {
+        productPopup: () => window.closeVapePopup(), cartPopup: () => window.cartBack(),
+        referralPopup: () => window.closeReferral(), specialOrderPopup: () => window.closeSpecialOrder(),
+        vpnStorePopup: () => window.closeVpnStore(), onboardingOverlay: () => window.closeOnboarding(),
+        orderSuccessOverlay: () => window.closeOrderSuccess()
+    };
+    const layers = Array.from(document.querySelectorAll(".overlay, .onboarding-overlay, #orderSuccessOverlay"));
+    const stack = [];
+    function isOpen(el) { return el.id === "orderSuccessOverlay" ? el.style.display === "flex" : el.classList.contains("active") && el.style.display !== "none"; }
+    function syncLayers() {
+        let restoreFocus;
+        layers.forEach(el => {
+            const visible = isOpen(el);
+            el.setAttribute("role", "dialog");
+            el.setAttribute("aria-modal", "true");
+            el.setAttribute("aria-label", el.querySelector(".drawer-title, .ob-title, .oso-title")?.textContent || "Окно магазина");
+            const entry = stack.find(item => item.el === el);
+            if (visible && !entry) {
+                el.inert = false;
+                stack.push({ el, previous: document.activeElement });
+                const first = el.querySelector("button, input, [tabindex='0']");
+                if (first) first.focus({ preventScroll: true });
+            } else if (!visible && entry) {
+                stack.splice(stack.indexOf(entry), 1);
+                restoreFocus = entry.previous;
+            }
+        });
+        const top = stack.at(-1)?.el;
+        document.body.classList.toggle("has-open-dialog", !!top);
+        layers.forEach(el => { el.inert = el !== top; el.setAttribute("aria-hidden", String(el !== top)); });
+        document.querySelectorAll("#appHeader, .tab-section, .bottom-tabs, .cart-bar").forEach(el => { el.inert = !!top; });
+        if (top && !top.contains(document.activeElement)) {
+            top.querySelector("button, input, [tabindex='0']")?.focus({ preventScroll: true });
+        } else if (!top && restoreFocus?.isConnected) {
+            restoreFocus.focus({ preventScroll: true });
+        }
+    }
+    const observer = new MutationObserver(syncLayers);
+    layers.forEach(el => observer.observe(el, { attributes: true, attributeFilter: ["class", "style"] }));
+    syncLayers();
+    document.addEventListener("keydown", event => {
+        const top = stack.at(-1)?.el;
+        if (!top) return;
+        if (event.key === "Escape" && close[top.id]) { event.preventDefault(); close[top.id](); }
+        if (event.key !== "Tab") return;
+        const focusable = Array.from(top.querySelectorAll("button, input, select, textarea, a[href], [tabindex='0']")).filter(el => !el.disabled && el.getClientRects().length);
+        if (!focusable.length) { event.preventDefault(); return; }
+        const first = focusable[0], last = focusable.at(-1);
+        if (event.shiftKey && (document.activeElement === first || !top.contains(document.activeElement))) { event.preventDefault(); last.focus(); }
+        else if (!event.shiftKey && (document.activeElement === last || !top.contains(document.activeElement))) { event.preventDefault(); first.focus(); }
+    });
+};
+
 window.initVapeApp = function () {
     let raw = window.VAPE_PRODUCTS || window.products;
     if (typeof raw !== "undefined") {
@@ -295,7 +393,7 @@ window.initVapeApp = function () {
             window._renderBrandChips();
             window.renderFeatured();
             window.renderCombos();
-            requestAnimationFrame(() => window.renderProducts(window.products));
+            requestAnimationFrame(() => window.filterVapeProducts());
         }
     } else {
         window.showSkeletons(6);
@@ -306,20 +404,19 @@ window.initVapeApp = function () {
 document.addEventListener("DOMContentLoaded", () => {
     // #4: Splash screen — hide after 1200ms, remove after fade
     var splash = document.getElementById("splashScreen");
-    if (splash) setTimeout(function() { splash.classList.add("hidden"); setTimeout(function() { splash.remove(); }, 400); }, 1200);
+    if (splash) setTimeout(function() { splash.classList.add("hidden"); setTimeout(function() { splash.remove(); }, 400); }, 240);
 
     // Тему применяем первым делом — чтобы не мигало дефолтным цветом
     window.applyTheme(themeGet());
 
     // Загрузка сохранённых данных
-    try { const s = localStorage.getItem("vapeCart"); if (s) window.cart = JSON.parse(s); } catch(e) {}
-    try { window.wishlist = JSON.parse(localStorage.getItem("vapeWishlist") || "[]"); } catch(e) {}
+    window.cart = storedList("vapeCart").filter(i => i && typeof i.id === "string" && Number.isInteger(i.quantity) && i.quantity > 0 && Number.isFinite(i.price) && i.price >= 0);
+    window.wishlist = storedList("vapeWishlist").filter(id => typeof id === "string");
 
     window.initVapeApp();
     window.updateCartCounters();
     window.initReferralCode();
     window.checkIncomingReferral();
-    window.startHeroTimer();
     // сначала возрастной гейт, онбординг — только после подтверждения 18+
     if (window.ageVerified()) {
         window.checkOnboarding();
@@ -331,8 +428,6 @@ document.addEventListener("DOMContentLoaded", () => {
         window.tg.ready();
         window.tg.expand();
         try { window.tg.disableVerticalSwipes && window.tg.disableVerticalSwipes(); } catch (e) {}
-        try { window.tg.setHeaderColor && window.tg.setHeaderColor("#07080c"); } catch (e) {}
-        try { window.tg.setBackgroundColor && window.tg.setBackgroundColor("#07080c"); } catch (e) {}
         const u = window.tg.initDataUnsafe && window.tg.initDataUnsafe.user;
         if (u) {
             if (u.username) {
@@ -341,6 +436,7 @@ document.addEventListener("DOMContentLoaded", () => {
             }
         }
     }
+    window.initTelegramLayout();
     window.setupProfile();
     bonusSyncFromCloud(() => window.updateBonusUI());
     spentSyncFromCloud(() => window.updateLevelUI());
@@ -375,11 +471,55 @@ document.addEventListener("DOMContentLoaded", () => {
         btn.style.justifyContent = 'center';
     }, { passive: true });
     window.initSwipeToClose();
-    window.initCardTilt();
+    window.initAccessibleControls();
 });
+
+// Telegram's stable viewport and safe areas also change after orientation / theme changes.
+window.syncTelegramAppearance = function () {
+    document.body.dataset.appearance = window.tg?.colorScheme === "light" ? "light" : "dark";
+    const bg = getComputedStyle(document.body).getPropertyValue("--bg").trim();
+    const meta = document.querySelector('meta[name="theme-color"]');
+    if (meta) meta.content = bg;
+    for (const method of ["setHeaderColor", "setBackgroundColor", "setBottomBarColor"]) {
+        try { window.tg?.[method]?.(bg); } catch (_) { /* Older Telegram clients retain their default chrome. */ }
+    }
+};
+
+window.initTelegramLayout = function () {
+    window.syncTelegramAppearance();
+    let maxHeight = window.innerHeight;
+    const syncViewport = (event) => {
+        if (event?.isStateStable === false) return;
+        const tg = window.tg;
+        const root = document.documentElement;
+        for (const edge of ["top", "bottom", "left", "right"]) {
+            root.style.setProperty(`--tg-safe-${edge}`, `${Math.max(0, tg?.safeAreaInset?.[edge] || 0)}px`);
+            root.style.setProperty(`--tg-content-${edge}`, `${Math.max(0, tg?.contentSafeAreaInset?.[edge] || 0)}px`);
+        }
+        const visual = window.visualViewport;
+        // Pin the footer to the stable viewport; use visualViewport only while typing.
+        const editing = /^(INPUT|TEXTAREA|SELECT)$/.test(document.activeElement?.tagName || "");
+        const stable = tg?.viewportStableHeight || window.innerHeight;
+        const height = Math.min(stable, editing && visual ? visual.height : window.innerHeight);
+        maxHeight = Math.max(maxHeight, stable, window.innerHeight);
+        const keyboard = editing && maxHeight - height > 110;
+        document.body.classList.toggle("keyboard-open", keyboard);
+        root.style.setProperty("--app-height", `${Math.max(240, height)}px`);
+    };
+    syncViewport();
+    window.addEventListener("resize", syncViewport, { passive: true });
+    window.visualViewport?.addEventListener("resize", syncViewport, { passive: true });
+    document.addEventListener("focusin", syncViewport);
+    document.addEventListener("focusout", () => setTimeout(syncViewport, 120));
+    try {
+        window.tg?.onEvent?.("themeChanged", window.syncTelegramAppearance);
+        for (const event of ["viewportChanged", "safeAreaChanged", "contentSafeAreaChanged"]) window.tg?.onEvent?.(event, syncViewport);
+    } catch (_) {}
+};
 
 // ── 3D TILT НА КАРТОЧКАХ (оптимизирован: rAF + кеш rect) ──
 window.initCardTilt = function () {
+    if (window.matchMedia("(prefers-reduced-motion: reduce)").matches) return;
     const TILT_SELECTOR = ".product-card, .featured-card";
     let activeCard = null;
     let activeRect = null;
@@ -432,18 +572,24 @@ window.initCardTilt = function () {
 
 // ── ТАБЫ ──
 window.switchTab = function (target) {
+    window._tabScroll = window._tabScroll || {};
+    if (window._activeTab) window._tabScroll[window._activeTab] = window.scrollY;
+    window._activeTab = target;
     document.querySelectorAll(".tab-section").forEach(s => {
         s.classList.toggle("active", s.dataset.tab === target);
     });
     document.querySelectorAll(".tab-btn").forEach(b => {
         b.classList.toggle("active", b.dataset.target === target);
+        if (b.dataset.target === target) b.setAttribute("aria-current", "page");
+        else b.removeAttribute("aria-current");
     });
     document.body.classList.remove("tab-active-catalog","tab-active-wishlist","tab-active-history","tab-active-profile");
     document.body.classList.add("tab-active-" + target);
     if (target === "wishlist") window.renderWishlistPage();
     if (target === "history") window.renderHistoryPage();
     if (target === "profile") { window.updateBonusUI(); window.updateLevelUI(); }
-    window.scrollTo({ top: 0, behavior: "instant" });
+    window.scrollTo({ top: window._tabScroll[target] || 0, behavior: "instant" });
+    window.hideBackButton();
     if (window.tg && window.tg.HapticFeedback) {
         try { window.tg.HapticFeedback.selectionChanged(); } catch(e) {}
     }
@@ -793,7 +939,7 @@ window.buyVpn = function (tariffId) {
     window._vpnBuyInFlight = true;
     haptic("success");
 
-    const link = `https://t.me/${BOT_USERNAME}?start=vpn_${encodeURIComponent(t.id)}`;
+    const link = `https://t.me/${BOT_USERNAME}?start=vpn_${encodeURIComponent(t.id)}_${window._vpnDevices}`;
     const reset = () => { window._vpnBuyInFlight = false; };
 
     if (window.tg && window.tg.openTelegramLink) {
@@ -839,6 +985,27 @@ function _catIcon(cat) {
     return null;
 }
 
+// Сгенерированные обложки заполняют карточки, у которых пока нет реального фото.
+// Индивидуальная фотография из products.js всегда имеет приоритет.
+function _categoryArtwork(category) {
+    const theme = _catTheme(category);
+    const files = {
+        pod: "card-pod.webp",
+        liquid: "card-liquid.webp",
+        disposable: "card-disposable.webp",
+        consumable: "card-accessories.webp",
+        apple: "card-tech.webp",
+        samsung: "card-tech.webp",
+        gaming: "card-gaming.webp",
+        default: "card-accessories.webp",
+    };
+    return "img/" + (files[theme] || files.default);
+}
+
+function _productImage(product) {
+    return product && product.image ? "img/" + product.image : _categoryArtwork(product && product.category);
+}
+
 // ── КАТЕГОРИИ ──
 window.renderCategories = function () {
     const container = document.getElementById("categories");
@@ -847,16 +1014,19 @@ window.renderCategories = function () {
     window.products.forEach(p => { if (p.category && !cats.includes(p.category)) cats.push(p.category); });
     container.innerHTML = "";
     cats.forEach(cat => {
-        const btn = document.createElement("div");
+        const btn = document.createElement("button");
         btn.className = `cat-btn ${cat === window.currentCategory ? "active" : ""}`;
+        btn.type = "button";
+        btn.setAttribute("aria-pressed", String(cat === window.currentCategory));
         btn.innerText = cat;
         btn.onclick = () => {
             haptic("select");
             window.currentCategory = cat;
-            document.querySelectorAll(".cat-btn").forEach(b => b.classList.remove("active"));
+            document.querySelectorAll(".cat-btn").forEach(b => { b.classList.remove("active"); b.setAttribute("aria-pressed", "false"); });
             btn.classList.add("active");
+            btn.setAttribute("aria-pressed", "true");
             window.filterVapeProducts();
-            window.scrollTo({ top: 0, behavior: "smooth" });
+            btn.scrollIntoView({ behavior: "smooth", block: "nearest", inline: "center" });
         };
         container.appendChild(btn);
     });
@@ -875,10 +1045,11 @@ window.renderFeatured = function () {
         const card = document.createElement("div");
         card.className = "featured-card";
         card.dataset.catTheme = _catTheme(p.category);
-        const imgSrc = p.image ? `img/${p.image}` : "";
+        const imgSrc = _productImage(p);
+        const artClass = p.image ? "" : " category-art";
         const fcLetter = p.name ? p.name.charAt(0).toUpperCase() : "V";
         const fcImg = imgSrc
-            ? `<img src="${imgSrc}" alt="" style="width:100%;height:100%;object-fit:contain;padding:7px;" onerror="this.style.display='none';this.nextElementSibling.style.display='flex';">
+            ? `<img src="${imgSrc}" class="${artClass}" alt="${escHtml(p.name)}" style="width:100%;height:100%;object-fit:${p.image ? "contain" : "cover"};padding:${p.image ? "7px" : "0"};" loading="lazy" decoding="async" onerror="this.style.display='none';this.nextElementSibling.style.display='flex';">
                <div class="fc-placeholder" style="display:none;">${fcLetter}</div>`
             : `<div class="fc-placeholder">${fcLetter}</div>`;
         let badge = "";
@@ -956,7 +1127,7 @@ window.addCombo = function (comboId) {
 
 // ── СТАТУС МАГАЗИНА (открыто/закрыто по времени) ──
 window.getShopStatus = function () {
-    const h = new Date().getHours();
+    const h = Number(new Intl.DateTimeFormat("en-GB", { timeZone: "Asia/Magadan", hour: "2-digit", hourCycle: "h23" }).format(new Date()));
     const open = h >= SHOP_OPEN_HOUR && h < SHOP_CLOSE_HOUR;
     return {
         open,
@@ -969,7 +1140,8 @@ window.renderShopStatus = function () {
     if (!el) return;
     const s = window.getShopStatus();
     el.className = "shop-status " + (s.open ? "open" : "closed");
-    el.innerHTML = `<span class="ss-dot"></span><span class="ss-text">${s.text}</span><span class="ss-sub">${s.sub}</span>`;
+    el.innerHTML = `<span class="ss-dot" aria-hidden="true"></span><span class="ss-text">Магадан</span><span class="ss-sub">· ${s.open ? "до " + SHOP_CLOSE_HOUR + ":00" : "с " + SHOP_OPEN_HOUR + ":00"}</span>`;
+    el.setAttribute("aria-label", `Магадан. ${s.text} ${s.sub}`);
 };
 
 // ── ДОЖИМ БРОШЕННОЙ КОРЗИНЫ ──
@@ -1032,28 +1204,33 @@ function _buildProductCard(p, animIdx) {
     card.dataset.productId = p.id;
     card.dataset.catTheme = _catTheme(p.category);
     card.style.animationDelay = (animIdx >= 0 ? Math.min(animIdx * 30, 300) : 0) + "ms";
-    const imgSrc = p.image ? `img/${p.image}` : "";
-    const icon = _catIcon(p.category) || (p.name ? p.name.charAt(0).toUpperCase() : "V");
+    const imgSrc = _productImage(p);
+    const artClass = p.image ? "" : " category-art";
     const isWished = (window.wishlist || []).includes(p.id);
     const oldPriceHtml = p.oldPrice ? `<span class="product-old-price">${fmt(p.oldPrice)} ₽</span>` : "";
     let tags = "";
-    if (p.preOrder) tags += '<span class="tag tag-preorder">📦 Под заказ</span>';
-    if (p.isNew || (p.tags && p.tags.some(t => t.includes("NEW")))) tags += '<span class="tag tag-new">New</span>';
-    if (p.tags && p.tags.some(t => t.includes("ХИТ") || t.includes("HOT"))) tags += '<span class="tag tag-hot">Хит</span>';
-    if (p.oldPrice) tags += '<span class="tag tag-sale">Скидка</span>';
-    if (p.lowStock) tags += `<span class="tag tag-low">🔥 ${p.lowStock} шт.</span>`;
+    if (p.inStock === false) tags = '<span class="tag tag-unavailable">Нет в наличии</span>';
+    else if (p.preOrder) tags = '<span class="tag tag-preorder">Под заказ</span>';
+    else if (p.oldPrice > p.price) tags = `<span class="tag tag-sale">−${Math.round((1 - p.price / p.oldPrice) * 100)}%</span>`;
+    else if (p.isNew) tags = '<span class="tag tag-new">Новинка</span>';
+    else if (p.tags?.some(t => t.includes("ХИТ") || t.includes("HOT"))) tags = '<span class="tag tag-hot">Хит</span>';
+    const variants = p.flavors?.length || 0;
+    const optionText = variants ? `${variants} ${window.plural(variants, "вариант", "варианта", "вариантов")}` : (p.preOrder ? "Под заказ" : p.inStock === false ? "Ожидаем поступление" : "В наличии");
     card.innerHTML = `
         ${tags ? `<div class="product-tags">${tags}</div>` : ""}
-        <button class="wish-btn${isWished ? " wished" : ""}" onclick="event.stopPropagation();window.toggleWishlist('${p.id}')">♡</button>
+        <button class="wish-btn${isWished ? " wished" : ""}" aria-label="В избранное: ${escHtml(p.name)}" aria-pressed="${isWished}" onclick="event.stopPropagation();window.toggleWishlist('${p.id}')"><svg class="ui-icon" aria-hidden="true"><use href="#i-heart"/></svg></button>
         <div class="product-image-wrapper">
-            ${imgSrc ? `<img src="${imgSrc}" class="product-img" alt="" loading="lazy" onerror="this.style.display='none';this.nextElementSibling.style.display='flex';">` : ""}
-            <div class="product-img-placeholder" style="${imgSrc ? "display:none;" : "display:flex;"}">${icon}</div>
+            ${imgSrc ? `<img src="${imgSrc}" class="product-img${artClass}" alt="${escHtml(p.name)}" loading="lazy" decoding="async" onerror="this.style.display='none';this.nextElementSibling.style.display='flex';">` : ""}
+            <div class="product-photo-note" style="${imgSrc ? "display:none;" : "display:flex;"}"><strong>${escHtml(p.brand || "BAZAR")}</strong><span>Фото скоро</span></div>
         </div>
-        <div class="product-name">${p.name}</div>
-        <div class="product-brand">${p.brand || ""}</div>
-        <div class="product-footer">
-            <div class="product-price-wrap">${oldPriceHtml}<div class="product-price">${fmt(p.price)} ₽</div></div>
-            <div class="card-action" id="action-${p.id}"></div>
+        <div class="product-info">
+            <div class="product-brand">${escHtml(p.brand || p.category || "")}</div>
+            <div class="product-name">${escHtml(p.name)}</div>
+            <div class="product-options">${optionText}</div>
+            <div class="product-footer">
+                <div class="product-price-wrap">${oldPriceHtml}<div class="product-price">${fmt(p.price)} ₽</div></div>
+                <div class="card-action" id="action-${p.id}"></div>
+            </div>
         </div>`;
     card.onclick = () => { haptic("light"); window.handleCardClick(p.id); };
     return card;
@@ -1084,7 +1261,7 @@ function _renderNextPage(grid, animate) {
         // добавляем новый sentinel — когда появится в viewport, догрузим следующую страницу
         const next = document.createElement("div");
         next.className = "products-sentinel";
-        next.style.cssText = "grid-column:span 2;height:1px;pointer-events:none;";
+        next.style.cssText = "grid-column:1 / -1;height:1px;pointer-events:none;";
         grid.appendChild(next);
         _renderObserver = new IntersectionObserver(entries => {
             if (entries[0].isIntersecting) _renderNextPage(grid, false);
@@ -1118,16 +1295,8 @@ window.renderProducts = function (list) {
     _renderList = list || [];
     _renderOffset = 0;
     if (_renderList.length === 0) {
-        grid.innerHTML = `
-            <div style="grid-column:span 2;text-align:center;color:var(--text-secondary);margin:30px 0 10px;font-size:14px;font-weight:600;">😕 Ничего не найдено</div>
-            <div class="no-results-cta" onclick="window.openSpecialOrder()">
-                <div class="nrc-icon">📦</div>
-                <div class="nrc-text">
-                    <div class="nrc-title">Закажи под заказ</div>
-                    <div class="nrc-sub">Привезём из Москвы за 7–14 дней. Нужна предоплата.</div>
-                </div>
-                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="m9 18 6-6-6-6"/></svg>
-            </div>`;
+        grid.innerHTML = `<div class="catalog-empty"><h2>Пока ничего не нашли</h2><p>Попробуйте другой запрос или сбросьте фильтры.</p><button class="empty-reset" onclick="window.clearCatalogFilters()">Показать все товары</button></div>`;
+        _appendProductsCTA(grid);
         return;
     }
     _renderNextPage(grid, true);
@@ -1140,8 +1309,14 @@ window.renderCardAction = function (p) {
     const qty = window.getCartQty(p.id);
     const hasFlavors = p.flavors && p.flavors.length > 0;
 
+    if (p.inStock === false) {
+        wrap.innerHTML = '<button class="add-btn">О поступлении</button>';
+        wrap.querySelector("button").onclick = e => { e.stopPropagation(); window.handleCardClick(p.id); };
+        return;
+    }
+
     if (qty === 0) {
-        wrap.innerHTML = `<button class="add-btn" id="addbtn-${p.id}">+</button>`;
+        wrap.innerHTML = `<button class="add-btn" id="addbtn-${p.id}">${hasFlavors ? "Выбрать" : "В корзину"}</button>`;
         wrap.querySelector(".add-btn").onclick = (e) => {
             e.stopPropagation();
             haptic("light");
@@ -1152,14 +1327,14 @@ window.renderCardAction = function (p) {
     } else {
         // Степпер показываем только для товаров без вкусов (иначе непонятно какой вкас менять)
         if (hasFlavors) {
-            wrap.innerHTML = `<button class="add-btn has-items" style="background:var(--neon-green-soft);border-color:rgba(0,232,122,0.3);color:var(--neon-green);">+</button>`;
+            wrap.innerHTML = `<button class="add-btn has-items">В корзине · ${qty}</button>`;
             wrap.querySelector(".add-btn").onclick = (e) => { e.stopPropagation(); haptic("light"); window.handleCardClick(p.id); };
         } else {
             wrap.innerHTML = `
                 <div class="card-stepper">
-                    <button id="minus-${p.id}">−</button>
+                    <button id="minus-${p.id}" aria-label="Уменьшить количество">−</button>
                     <span>${qty}</span>
-                    <button id="plus-${p.id}">+</button>
+                    <button id="plus-${p.id}" aria-label="Увеличить количество">+</button>
                 </div>`;
             wrap.querySelector(`#minus-${p.id}`).onclick = (e) => { e.stopPropagation(); haptic("light"); window.quickChange(p.id, -1); };
             wrap.querySelector(`#plus-${p.id}`).onclick = (e) => { e.stopPropagation(); haptic("light"); window.quickChange(p.id, 1); };
@@ -1212,21 +1387,37 @@ window.handleCardClick = function (id) {
 window.openVapePopup = function (product) {
     window.currentPopupProduct = product;
     window.selectedFlavorInPopup = null;
+    const category = _catTheme(product.category);
+    const variantLabel = ["pod", "apple", "samsung", "gaming"].includes(category) ? "Выберите цвет / модель" : ["liquid", "disposable"].includes(category) ? "Выберите вкус" : "Выберите вариант";
+    const label = document.getElementById("popupVariantLabel");
+    if (label) label.textContent = variantLabel;
+    const selection = document.getElementById("popupSelection");
+    if (selection) selection.textContent = "Не выбран";
+    const artworkNote = document.getElementById("popupArtworkNote");
+    if (artworkNote) artworkNote.hidden = !!product.image;
+    const availability = document.getElementById("popupAvailability");
+    if (availability) {
+        availability.textContent = product.inStock === false ? "Нет в наличии" : product.preOrder ? "Под заказ" : "В наличии";
+        availability.classList.toggle("unavailable", product.inStock === false || !!product.preOrder);
+    }
+    const addButton = document.getElementById("popupAddButton");
+    if (addButton) addButton.textContent = product.flavors?.length ? "Выбрать вариант" : "В корзину";
     document.getElementById("popupName").innerText = product.name;
     document.getElementById("popupBrand").innerText = product.brand || "";
-    const imgSrc = product.image ? "img/" + product.image : "";
+    const imgSrc = _productImage(product);
     const letter = product.name ? product.name.charAt(0).toUpperCase() : "V";
     const img = document.getElementById("popupImg");
+    img.alt = product.name;
     const ph = document.getElementById("popupPlaceholder");
     if (imgSrc) {
-        img.src = imgSrc; img.style.display = "block"; ph.style.display = "none";
+        img.src = imgSrc; img.classList.toggle("category-art", !product.image); img.style.display = "block"; ph.style.display = "none";
         img.onerror = () => { img.style.display = "none"; ph.style.display = "flex"; };
     } else { img.style.display = "none"; ph.style.display = "flex"; }
     ph.innerText = letter;
     // цветовая тема плейсхолдера в попапе
     const popupImgWrap = document.getElementById("popupImgWrapper");
     if (popupImgWrap) popupImgWrap.dataset.catTheme = _catTheme(product.category);
-    document.getElementById("popupDesc").innerText = product.description || "Премиальное качество.";
+    document.getElementById("popupDesc").innerText = product.description || "Подробности уточнит менеджер.";
     document.getElementById("popupFooterPrice").innerText = `${fmt(product.price)} ₽`;
     const fc = document.getElementById("popupFlavors");
     const fb = document.getElementById("popupFlavorsBlock");
@@ -1234,8 +1425,10 @@ window.openVapePopup = function (product) {
     if (product.flavors && product.flavors.length > 0) {
         fb.style.display = "block";
         product.flavors.forEach(flavor => {
-            const btn = document.createElement("div");
+            const btn = document.createElement("button");
             btn.className = "flavor-badge";
+            btn.type = "button";
+            btn.setAttribute("aria-pressed", "false");
             const name = typeof flavor === "object" ? flavor.name : flavor;
             btn.innerText = name;
             btn.onclick = () => { haptic("select"); window.selectVapeFlavor(name, btn); };
@@ -1267,14 +1460,21 @@ window.openVapePopup = function (product) {
         scrollContent.appendChild(btn);
     })();
     window.updatePopupStockState(product);
+    const scroll = document.querySelector("#productPopup .popup-scroll-content");
+    if (scroll) scroll.scrollTop = 0;
     document.getElementById("productPopup").classList.add("active");
     window.setupBackButton(window.closeVapePopup);
 };
 
 window.selectVapeFlavor = function (name, el) {
     window.selectedFlavorInPopup = name;
-    document.querySelectorAll(".flavor-badge").forEach(b => b.classList.remove("active"));
+    document.querySelectorAll(".flavor-badge").forEach(b => { b.classList.remove("active"); b.setAttribute("aria-pressed", "false"); });
     el.classList.add("active");
+    el.setAttribute("aria-pressed", "true");
+    const selection = document.getElementById("popupSelection");
+    if (selection) selection.textContent = "Выбран";
+    const addButton = document.getElementById("popupAddButton");
+    if (addButton) addButton.textContent = "В корзину";
 };
 
 window.closeVapePopup = function () {
@@ -1288,9 +1488,12 @@ window.closeVapePopup = function () {
 window.addToCart = function () {
     if (!window.currentPopupProduct) return;
     const p = window.currentPopupProduct;
+    if (p.inStock === false) { window.showToast("Ожидаем поступление товара"); return; }
     if (p.flavors && p.flavors.length > 0 && !window.selectedFlavorInPopup) {
-        haptic("error");
-        window.showToast("Выберите вкус или цвет");
+        haptic("select");
+        document.getElementById("popupFlavorsBlock")?.scrollIntoView({ behavior: "smooth", block: "center" });
+        document.querySelector("#popupFlavors button")?.focus({ preventScroll: true });
+        window.showToast("Выберите подходящий вариант");
         return;
     }
     const flavor = window.selectedFlavorInPopup || "Стандарт";
@@ -1351,6 +1554,7 @@ window.updateCartCounters = function () {
     if (sub) sub.innerText = qty > 0 ? `${qty} ${window.plural(qty, "товар", "товара", "товаров")}` : "Пусто";
     const bar = document.getElementById("cartBar");
     if (bar) bar.classList.toggle("hidden", qty === 0);
+    document.body?.classList.toggle("has-cart", qty > 0);
     try { localStorage.setItem("vapeCart", JSON.stringify(window.cart)); } catch(e) {}
     // отметка времени для «дожима» брошенной корзины
     try {
@@ -1413,7 +1617,8 @@ window.refreshCartPrices = function () {
     return changed;
 };
 
-window.openVapeCart = function () {
+window.openVapeCart = function (preserveStep = false) {
+    const nextStep = preserveStep === true ? window._checkoutStep || "cart" : "cart";
     if (window._swipeCloseTimer) { clearTimeout(window._swipeCloseTimer); window._swipeCloseTimer = null; }
     if (window.refreshCartPrices()) {
         window.showToast("Цены на некоторые товары обновились");
@@ -1425,36 +1630,39 @@ window.openVapeCart = function () {
     const listEl = document.getElementById("cartItemsList");
     const form = document.getElementById("orderFormBlock");
     const btn = document.getElementById("checkoutBtn");
+    if (btn && !window._checkoutInFlight) { btn.disabled = false; btn.style.opacity = ""; btn.removeAttribute("aria-busy"); }
     const summary = document.getElementById("summaryBlock");
     if (listEl) {
         listEl.innerHTML = "";
         if (window.cart.length === 0) {
-            listEl.innerHTML = `<div class="cart-empty"><div class="cart-empty-icon">🛒</div><div class="cart-empty-text">Корзина пуста</div></div>`;
+            listEl.innerHTML = `<div class="cart-empty"><div class="cart-empty-icon"><svg class="ui-icon" aria-hidden="true"><use href="#i-bag"/></svg></div><div class="cart-empty-text">Здесь будет ваш заказ</div><p>Добавляйте понравившиеся товары из каталога.</p></div>`;
             if (form) form.style.display = "none";
             if (summary) summary.style.display = "none";
-            if (btn) { btn.innerText = "В КАТАЛОГ"; btn.onclick = window.closeVapeCart; }
+            if (btn) { btn.innerText = "Перейти в каталог"; btn.onclick = () => { window.closeVapeCart(); window.switchTab("catalog"); }; }
         } else {
-            if (form) form.style.display = "block";
+            if (form) form.style.display = "none";
             if (summary) summary.style.display = "block";
-            if (btn) { btn.innerText = "ОФОРМИТЬ ЗАКАЗ"; btn.onclick = window.checkoutVapeOrder; }
             setTimeout(window.prefillCheckoutForm, 50);
             window.cart.forEach((item, idx) => {
                 const row = document.createElement("div");
                 row.className = "cart-item";
+                const product = window.products.find(p => p.id === item.id);
+                const img = product ? _productImage(product) : "img/card-accessories.webp";
                 row.innerHTML = `
+                    <img class="cart-item-image ${product?.image ? "" : "category-art"}" src="${img}" alt="" loading="lazy">
                     <div class="cart-item-info">
-                        <div class="cart-item-name">${item.name}</div>
-                        <div class="cart-item-flavor">${item.flavor}</div>
+                        <div class="cart-item-name">${escHtml(item.name)}</div>
+                        <div class="cart-item-flavor">${escHtml(item.flavor)}</div>
                         <div class="cart-item-price">${fmt(item.price)} ₽</div>
                     </div>
                     <div class="cart-stepper">
-                        <button onclick="window.changeQty(${idx},-1)">−</button>
+                        <button aria-label="Уменьшить количество" onclick="window.changeQty(${idx},-1)">−</button>
                         <span>${item.quantity}</span>
-                        <button onclick="window.changeQty(${idx},1)">+</button>
+                        <button aria-label="Увеличить количество" onclick="window.changeQty(${idx},1)">+</button>
                     </div>
                     <div class="cart-item-note-row">
-                        <span class="cart-item-note-toggle" onclick="window._toggleCartNote(${idx})">💬 Пометка</span>
-                        <input type="text" id="cartNote_${idx}" class="cart-item-note-input" placeholder="без коробки, подарок…" value="${(item.note||'').replace(/"/g,'&quot;')}" oninput="window._setCartNote(${idx},this.value)" style="${item.note?'':'display:none'}">
+                        <span class="cart-item-note-toggle" onclick="window._toggleCartNote(${idx})">Комментарий к товару</span>
+                        <input type="text" id="cartNote_${idx}" class="cart-item-note-input" aria-label="Пометка к товару" maxlength="160" placeholder="без коробки, подарок…" value="${escHtml(item.note)}" oninput="window._setCartNote(${idx},this.value)" style="${item.note?'':'display:none'}">
                     </div>`;
                 listEl.appendChild(row);
             });
@@ -1469,8 +1677,53 @@ window.openVapeCart = function () {
 
     window.updateCartTotalDisplay();
     document.getElementById("cartPopup").classList.add("active");
-    window.updateNewsletterBanner();
-    window.setupBackButton(window.closeVapeCart);
+    window.setCheckoutStep(nextStep, false);
+};
+
+window.setCheckoutStep = function (step, focus = true) {
+    if (window._checkoutInFlight) return;
+    const empty = window.cart.length === 0;
+    const details = !empty && step === "details";
+    if (details && window.calcOrderTotals().subtotal < MIN_ORDER_AMOUNT) {
+        window.showToast(`Минимальная сумма товаров — ${fmt(MIN_ORDER_AMOUNT)} ₽`);
+        return;
+    }
+    window._checkoutStep = details ? "details" : "cart";
+    const form = document.getElementById("orderFormBlock");
+    if (form) form.style.display = details ? "block" : "none";
+    for (const [id, hide] of [["cartItemsList", details], ["cartBenefits", details || empty], ["checkoutBack", !details], ["checkoutSteps", empty]]) {
+        const el = document.getElementById(id); if (el) el.hidden = hide;
+    }
+    const title = document.getElementById("cartTitle");
+    if (title) title.textContent = details ? "Оформление заказа" : "Корзина";
+    const subtitle = document.getElementById("cartSubtitle");
+    const qty = window.cart.reduce((sum, item) => sum + item.quantity, 0);
+    if (subtitle) subtitle.textContent = empty ? "" : details ? "Проверьте данные перед отправкой" : `${qty} ${window.plural(qty, "товар", "товара", "товаров")}`;
+    document.querySelectorAll("#checkoutSteps [data-step]").forEach(el => {
+        if (el.dataset.step === window._checkoutStep) el.setAttribute("aria-current", "step");
+        else el.removeAttribute("aria-current");
+    });
+    const btn = document.getElementById("checkoutBtn");
+    if (btn && !empty) {
+        btn.textContent = details ? "Отправить заказ" : "Продолжить";
+        btn.onclick = details ? window.checkoutVapeOrder : () => window.setCheckoutStep("details");
+    }
+    const hint = document.getElementById("checkoutHint");
+    if (hint) {
+        hint.hidden = empty;
+        hint.textContent = details ? "Менеджер подтвердит наличие и время получения" : "Далее — получение и контактные данные";
+    }
+    if (details) window.prefillCheckoutForm();
+    const scroll = document.querySelector("#cartPopup .popup-scroll-content");
+    if (scroll) scroll.scrollTop = 0;
+    if (focus) document.getElementById(details ? "checkoutBack" : "checkoutBtn")?.focus({ preventScroll: true });
+    window.setupBackButton(window.cartBack);
+};
+
+window.cartBack = function () {
+    if (window._checkoutInFlight) return;
+    if (window._checkoutStep === "details") window.setCheckoutStep("cart");
+    else window.closeVapeCart();
 };
 
 window.updateCartTotalDisplay = function () {
@@ -1506,10 +1759,9 @@ window.updateCartTotalDisplay = function () {
 
     const minNote = document.getElementById("minOrderNote");
     if (minNote) {
-        const afterDiscount = subtotal - discount;
-        if (afterDiscount > 0 && afterDiscount < MIN_ORDER_AMOUNT) {
+        if (subtotal > 0 && subtotal < MIN_ORDER_AMOUNT) {
             minNote.style.display = "block";
-            minNote.innerText = `⚠️ Минимальная сумма заказа ${fmt(MIN_ORDER_AMOUNT)} ₽ — ещё ${fmt(MIN_ORDER_AMOUNT - afterDiscount)} ₽`;
+            minNote.innerText = `Минимальная сумма товаров ${fmt(MIN_ORDER_AMOUNT)} ₽ — ещё ${fmt(MIN_ORDER_AMOUNT - subtotal)} ₽`;
         } else {
             minNote.style.display = "none";
         }
@@ -1593,7 +1845,7 @@ window.changeQty = function (idx, delta) {
     if (window.cart[idx].quantity <= 0) window.cart.splice(idx, 1);
     const p = window.products.find(p => p.id === productId);
     if (p) { window.renderCardAction(p); window.markCardInCart(productId); }
-    window.openVapeCart();
+    window.openVapeCart(true);
 };
 
 window.closeVapeCart = function () {
@@ -1668,6 +1920,8 @@ window.selectPayTab = function(type) {
     window.currentPayMethod = type;
     document.getElementById("payTabCash").classList.toggle("active", type === "cash");
     document.getElementById("payTabTransfer").classList.toggle("active", type === "transfer");
+    document.getElementById("payTabCash").setAttribute("aria-pressed", String(type === "cash"));
+    document.getElementById("payTabTransfer").setAttribute("aria-pressed", String(type === "transfer"));
     document.getElementById("cashOptions").style.display = type === "cash" ? "" : "none";
     document.getElementById("transferInfo").style.display = type === "transfer" ? "" : "none";
     if (type === "transfer") { window._changeAmount = null; }
@@ -1698,6 +1952,8 @@ window.selectDeliveryTab = function (method) {
     window.currentDeliveryMethod = method;
     document.getElementById("tabPickup").classList.toggle("active", method === "pickup");
     document.getElementById("tabDelivery").classList.toggle("active", method === "delivery");
+    document.getElementById("tabPickup").setAttribute("aria-pressed", String(method === "pickup"));
+    document.getElementById("tabDelivery").setAttribute("aria-pressed", String(method === "delivery"));
     document.getElementById("pickupInfoCard").style.display = method === "pickup" ? "flex" : "none";
     document.getElementById("deliveryAddressWrapper").style.display = method === "delivery" ? "block" : "none";
     window.updateCartTotalDisplay();
@@ -1722,7 +1978,8 @@ window.filterVapeProducts = function () {
     if (clearBtn) clearBtn.style.display = q ? "block" : "none";
     let filtered = window.products.filter(p => {
         const matchCat = window.currentCategory === "Все" || p.category === window.currentCategory;
-        const matchQ = !q || (p.name && p.name.toLowerCase().includes(q)) || (p.brand && p.brand.toLowerCase().includes(q));
+        const searchable = [p.name, p.brand, ...(p.flavors || []).map(f => typeof f === "object" ? f.name : f)].filter(Boolean).join(" ").toLowerCase();
+        const matchQ = !q || q.split(/\s+/).every(term => searchable.includes(term));
         if (window._activeBrand && p.brand !== window._activeBrand) return false;
         return matchCat && matchQ;
     });
@@ -1733,12 +1990,43 @@ window.filterVapeProducts = function () {
     else if (window.currentSort === "price-desc") filtered = [...filtered].sort((a, b) => b.price - a.price);
     const noMods = window.currentSort === "default" && !window.currentFilter;
     const featured = document.getElementById("featuredSection");
-    if (featured) featured.style.display = (window.currentCategory === "Все" && !q && noMods) ? "block" : "none";
+    const showCollections = window.currentCategory === "Все" && !q && noMods && !window._activeBrand;
+    if (featured) featured.style.display = showCollections ? "block" : "none";
+    const combos = document.getElementById("combosSection");
+    if (combos) combos.style.display = showCollections && (window.VAPE_COMBOS || []).length ? "block" : "none";
     const label = document.getElementById("allProductsLabel");
     if (label) label.innerText = q ? "Результаты поиска" : (window.currentCategory === "Все" ? "Все товары" : window.currentCategory);
     const countEl = document.getElementById("resultsCount");
-    if (countEl) countEl.textContent = (q || window.currentCategory !== "Все" || window.currentFilter) ? filtered.length + " товар" + (filtered.length === 1 ? "" : filtered.length >= 2 && filtered.length <= 4 ? "а" : "ов") : "";
+    if (countEl) countEl.textContent = filtered.length + " " + window.plural(filtered.length, "товар", "товара", "товаров");
+    window.updateFilterBadge();
     window.renderProducts(filtered);
+};
+
+window.toggleFilters = function () {
+    const panel = document.getElementById("catalogFilters");
+    if (!panel) return;
+    panel.hidden = !panel.hidden;
+    document.getElementById("filterToggle")?.setAttribute("aria-expanded", String(!panel.hidden));
+    haptic("select");
+};
+
+window.updateFilterBadge = function () {
+    const count = Number(window.currentSort !== "default") + Number(!!window.currentFilter) + Number(!!window._activeBrand);
+    const badge = document.getElementById("filterCount");
+    if (badge) { badge.textContent = count; badge.hidden = count === 0; }
+};
+
+window.clearCatalogFilters = function () {
+    const search = document.getElementById("searchInput");
+    if (search) search.value = "";
+    window.currentCategory = "Все";
+    window._activeBrand = null;
+    window.currentSort = "default";
+    window.currentFilter = null;
+    window.renderCategories();
+    window._renderBrandChips();
+    window.updateFilterChips();
+    window.filterVapeProducts();
 };
 
 window.clearSearch = function () {
@@ -1760,6 +2048,11 @@ window.setupBackButton = function (callback) {
 
 window.hideBackButton = function () {
     if (!window.tg || !window.tg.BackButton) return;
+    // Closing one sheet restores navigation for the sheet or page underneath.
+    const active = Array.from(document.querySelectorAll(".overlay.active")).at(-1);
+    const handlers = { productPopup: window.closeVapePopup, cartPopup: window.cartBack, referralPopup: window.closeReferral, specialOrderPopup: window.closeSpecialOrder, vpnStorePopup: window.closeVpnStore };
+    if (active && handlers[active.id]) { window.setupBackButton(handlers[active.id]); return; }
+    if (window._activeTab && window._activeTab !== "catalog") { window.setupBackButton(() => window.switchTab("catalog")); return; }
     try {
         window.tg.BackButton.hide();
         if (window._backCallback) window.tg.BackButton.offClick(window._backCallback);
@@ -1768,6 +2061,7 @@ window.hideBackButton = function () {
 
 // ── КОНФЕТТИ ──
 window.showConfetti = function () {
+    if (window.matchMedia?.("(prefers-reduced-motion: reduce)").matches) return;
     const colors = ["#00f07c","#00c9ff","#ffab00","#ff2d55","#ffffff","#a78bfa"];
     const count = 90;
     const container = document.createElement("div");
@@ -1854,15 +2148,20 @@ window.prefillCheckoutForm = function() {
     }
     const tgEl = document.getElementById("customerTelegram");
     if (tgEl) {
-        // всегда подставляем из TG — username авторитетнее ручного ввода
-        if (user.username) tgEl.value = "@" + user.username;
-        else if (!tgEl.value && user.first_name) tgEl.value = user.first_name + (user.id ? " (id:" + user.id + ")" : "");
+        if (user.username && !tgEl.value) tgEl.value = "@" + user.username;
     }
 };
 
 // ── ОФОРМЛЕНИЕ ──
 window.checkoutVapeOrder = function () {
+    if (window._checkoutInFlight) return;
     if (!window.cart || window.cart.length === 0) { window.closeVapeCart(); return; }
+    if (window.refreshCartPrices()) { window.openVapeCart(); window.showToast("Цены обновились. Проверьте итог и оформите заказ ещё раз."); return; }
+    const unavailable = window.cart.find(item => {
+        const product = window.products.find(p => p.id === item.id) || (window.VAPE_COMBOS || []).find(p => p.id === item.id);
+        return !product || product.inStock === false;
+    });
+    if (unavailable) { window.showToast("Товар больше недоступен: " + unavailable.name + ". Удалите его из корзины.", 5000); return; }
     window.prefillCheckoutForm();
     const name    = (document.getElementById("customerName")?.value || "").trim();
     const username = (document.getElementById("customerTelegram")?.value || "").trim();
@@ -1880,8 +2179,8 @@ window.checkoutVapeOrder = function () {
         if (inp) setTimeout(() => inp.focus(), 300);
     }
     if (!name)     { haptic("error"); shakeField("customerName");     window.showToast("✍️ Введите ваше имя"); return; }
-    if (phone.length < 10) { haptic("error"); shakeField("customerPhone"); window.showToast("📞 Введите номер телефона"); return; }
-    if (!username) { haptic("error"); shakeField("customerTelegram"); window.showToast("✈️ Введите @username в Telegram"); return; }
+    if (phone.length < 10 || phone.length > 15) { haptic("error"); shakeField("customerPhone"); window.showToast("📞 Введите номер телефона"); return; }
+    if (!username && !tgCurrentUser()?.id) { haptic("error"); shakeField("customerTelegram"); window.showToast("Введите @username в Telegram"); return; }
     if (window.currentDeliveryMethod === "delivery" && !address) {
         haptic("error"); shakeField("deliveryAddress"); window.showToast("Укажите адрес доставки"); return;
     }
@@ -1890,7 +2189,7 @@ window.checkoutVapeOrder = function () {
     var addrElSave = document.getElementById("deliveryAddress");
     if (addrElSave && addrElSave.value.trim()) localStorage.setItem("vapeSavedAddr", addrElSave.value.trim());
     // #8: Сохраняем в список адресов (макс 4)
-    var addrs = JSON.parse(localStorage.getItem('vapeSavedAddrs') || '[]');
+    var addrs = storedList("vapeSavedAddrs").filter(a => typeof a === "string");
     var addrVal = addrElSave ? addrElSave.value.trim() : '';
     if (addrVal && !addrs.includes(addrVal)) {
         addrs.unshift(addrVal);
@@ -1907,12 +2206,12 @@ window.checkoutVapeOrder = function () {
     ).join("\n");
     // плоский текст для локальной истории заказов
     let itemsText = window.cart.map(i => `• ${i.name} [${i.flavor}]${i.note ? ' [' + i.note + ']' : ''} — ${i.quantity} шт. × ${i.price} ₽ = ${i.price * i.quantity} ₽`).join("\n");
-    if (discount > 0) itemsText += `\n🎁 Промокод (${window.appliedPromo.label}): −${discount} ₽`;
+    if (discount > 0) itemsText += `\n🎁 Скидка (${window.appliedPromo ? window.appliedPromo.label : "По приглашению друга"}): −${discount} ₽`;
     if (deliveryCost > 0) itemsText += `\n🚚 Доставка: ${deliveryCost} ₽`;
 
     const orderData = {
-        order_id: Date.now().toString().slice(-6),
-        date: new Date().toLocaleString("ru-RU"),
+        order_id: newOrderId(),
+        date: new Date().toLocaleString("ru-RU", { timeZone: "Asia/Magadan" }),
         name: name,
         phone: phoneFormatted,
         delivery: window.currentDeliveryMethod === "pickup" ? "Самовывоз" : "Доставка",
@@ -1924,6 +2223,7 @@ window.checkoutVapeOrder = function () {
             localStorage.getItem("vapeNewsletterSub") === "1" ? "Рассылка: да" : null,
         ].filter(Boolean).join(", ") || "Нет",
         total,
+        subtotal, discount, delivery_cost: deliveryCost,
         _status: "new"
     };
 
@@ -1934,12 +2234,15 @@ window.checkoutVapeOrder = function () {
     const isPickup = window.currentDeliveryMethod === "pickup";
     // #9: добавляем время доставки в комментарий
     if (!isPickup && selectedSlot) {
-        orderData.comment += (orderData.comment !== 'Нет' ? ', ' : '') + 'Время: ' + selectedSlot;
+        orderData.comment = (orderData.comment !== 'Нет' ? orderData.comment + ', ' : '') + 'Время: ' + selectedSlot;
     }
     // Оплата
     const isCash = window.currentPayMethod !== "transfer";
     const changeAmt = window._changeAmount || parseInt(document.getElementById("changeCustom")?.value || "0") || null;
     const needChange = document.getElementById("needChange")?.checked && changeAmt;
+    if (isCash && document.getElementById("needChange")?.checked && (!changeAmt || changeAmt < total)) {
+        window.showToast("Укажите сумму для сдачи не меньше суммы заказа"); return;
+    }
     const payLabel = isCash
         ? ("💵 Наличка" + (needChange ? ` (сдача с ${changeAmt.toLocaleString("ru-RU")} ₽)` : ""))
         : "💳 Перевод";
@@ -2012,7 +2315,12 @@ window.checkoutVapeOrder = function () {
 
     // Блокируем кнопку на время отправки — защита от двойного заказа при повторном тапе
     const checkoutBtnEl = document.getElementById("checkoutBtn");
-    if (checkoutBtnEl) { checkoutBtnEl.disabled = true; checkoutBtnEl.style.opacity = "0.6"; }
+    window._checkoutInFlight = true;
+    if (checkoutBtnEl) { checkoutBtnEl.disabled = true; checkoutBtnEl.style.opacity = "0.6"; checkoutBtnEl.setAttribute("aria-busy", "true"); checkoutBtnEl.textContent = "Отправляем…"; }
+    function _unlock() {
+        window._checkoutInFlight = false;
+        if (checkoutBtnEl) { checkoutBtnEl.disabled = false; checkoutBtnEl.style.opacity = ""; checkoutBtnEl.removeAttribute("aria-busy"); checkoutBtnEl.textContent = "Отправить заказ"; }
+    }
 
     // ── Отправка заказа ───────────────────────────────────────────────────
     // Раньше заказ уходил напрямую в Bot API с токеном, вписанным в этот файл.
@@ -2028,7 +2336,7 @@ window.checkoutVapeOrder = function () {
     // Подтверждение клиенту нужно только на пути через релей: при sendData
     // его отправляет сам бот, получив заказ.
     const clientText =
-        `✅ <b>Заказ #${orderData.order_id} принят!</b>\n` +
+        `✅ <b>Заказ #${orderData.order_id} отправлен!</b>\n` +
         `📅 ${orderData.date}\n\n` +
         `🛒 <b>Ваш заказ</b>\n` +
         `<blockquote>${escHtml(itemsList)}</blockquote>\n\n` +
@@ -2045,6 +2353,9 @@ window.checkoutVapeOrder = function () {
         return {
             cart: window.cart.slice(),
             bonus: bonusGet(),
+            spent: localStorage.getItem(SPENT_KEY),
+            history: localStorage.getItem("vapeOrders"),
+            bonusApplied: window.bonusApplied,
             promo: window.appliedPromo,
             refActive: window.referralDiscountActive,
             refUsed: localStorage.getItem("vapeRefUsed")
@@ -2055,10 +2366,18 @@ window.checkoutVapeOrder = function () {
         bonusSet(s.bonus);
         window.appliedPromo = s.promo;
         window.referralDiscountActive = s.refActive;
+        window.bonusApplied = s.bonusApplied;
+        for (const [key, value] of [[SPENT_KEY, s.spent], ["vapeOrders", s.history]]) {
+            if (value === null) localStorage.removeItem(key); else localStorage.setItem(key, value);
+        }
+        const overlay = document.getElementById("orderSuccessOverlay");
+        if (overlay) overlay.style.display = "none";
+        window._pendingOrderLog = null;
         if (s.refUsed === null) localStorage.removeItem("vapeRefUsed");
         else localStorage.setItem("vapeRefUsed", s.refUsed);
         window.updateCartCounters();
         window.updateBonusUI();
+        window.updateLevelUI();
     }
 
     function _applySuccess() {
@@ -2074,78 +2393,50 @@ window.checkoutVapeOrder = function () {
         window.updateCartCounters();
         window.updateBonusUI();
         window.showConfetti();
+        window.closeVapeCart();
         window.showOrderSuccess(orderData.order_id, bonusEarned);
-        // Тихое логирование при закрытии overlay — нужно на пути через релей,
-        // где бот сам заказа не видит. На пути sendData обнуляется ниже.
-        window._pendingOrderLog = {
-            type: "order_log",
-            order_id: orderData.order_id,
-            products: itemsText,
-            name: name,
-            phone: phone,
-            address: orderData.address,
-            total: total,
-            earn: bonusEarned
-        };
     }
 
     window.showToast("Отправляем заказ…");
 
-    if (RELAY_URL) {
+    const keyboardLaunch = new URLSearchParams(window.location.search).get("source") === "keyboard";
+    if (RELAY_URL && window.tg && window.tg.initData) {
         notifyAdmins(adminText, kb).then(() => {
             if (customerId) tgApiSend(customerId, clientText).catch(() => {});
             _applySuccess();
         }).catch((err) => {
-            if (checkoutBtnEl) { checkoutBtnEl.disabled = false; checkoutBtnEl.style.opacity = ""; }
             _showError(err);
-        });
+        }).finally(_unlock);
         return;
     }
 
-    if (!(window.tg && window.tg.sendData)) {
-        if (checkoutBtnEl) { checkoutBtnEl.disabled = false; checkoutBtnEl.style.opacity = ""; }
-        _showError(new Error("Магазин открыт вне Telegram"));
+    if (!(keyboardLaunch && window.tg && window.tg.sendData)) {
+        _unlock();
+        _showError(new Error("Откройте магазин кнопкой «🛍️ Открыть Магазин» в чате @" + BOT_USERNAME));
         return;
     }
 
+    const serializedOrder = JSON.stringify(orderPayload);
+    if (new TextEncoder().encode(serializedOrder).length > 4096) {
+        _unlock();
+        _showError(new Error("В заказе слишком много текста. Сократите пометки или разделите корзину на два заказа."));
+        return;
+    }
     const snap = _snapshot();
     _applySuccess();
     window._pendingOrderLog = null; // заказ уходит боту целиком, дублировать нечем
     try {
-        window.tg.sendData(JSON.stringify(orderPayload));
+        window.tg.sendData(serializedOrder);
     } catch (e) {
         _restore(snap);
-        if (checkoutBtnEl) { checkoutBtnEl.disabled = false; checkoutBtnEl.style.opacity = ""; }
+        _unlock();
         _showError(e);
         return;
     }
-    // sendData закрывает приложение. Если через 2.5 с мы всё ещё живы — данные
-    // не ушли: так бывает, когда магазин открыт не кнопкой клавиатуры бота.
-    setTimeout(() => {
-        _restore(snap);
-        if (checkoutBtnEl) { checkoutBtnEl.disabled = false; checkoutBtnEl.style.opacity = ""; }
-        const msg = "Заказ не ушёл — так бывает, если магазин открыт не из чата бота. " +
-                    "Корзина сохранена: перейди в бота, нажми «🛍️ Открыть Магазин» и оформи снова.";
-        const goToBot = () => {
-            const link = `https://t.me/${BOT_USERNAME}`;
-            if (window.tg && window.tg.openTelegramLink) {
-                try { window.tg.openTelegramLink(link); return; } catch (e) { /* ниже */ }
-            }
-            try { window.open(link, "_blank"); } catch (e) { /* некуда */ }
-        };
-        if (window.tg && window.tg.showPopup) {
-            window.tg.showPopup({
-                title: "Не отправлено",
-                message: msg,
-                buttons: [
-                    { id: "gobot", type: "default", text: "Перейти в бота" },
-                    { type: "cancel" }
-                ]
-            }, (btnId) => { if (btnId === "gobot") goToBot(); });
-        } else {
-            window.showToast("❌ " + msg, 6000);
-        }
-    }, 2500);
+    // sendData не возвращает квитанцию: время закрытия окна не доказывает сбой.
+    // Итоговое подтверждение приходит отдельным сообщением от бота.
+    window._pendingOrderLog = null;
+    _unlock();
 };
 
 // ==========================================================================
@@ -2165,9 +2456,9 @@ window.renderRelatedProducts = function (productId) {
         const card = document.createElement("div");
         card.className = "related-card";
         const letter = rp.name.charAt(0).toUpperCase();
-        const imgSrc = rp.image ? `img/${rp.image}` : "";
+        const imgSrc = _productImage(rp);
         card.innerHTML = `
-            <div class="rc-img">${imgSrc ? `<img src="${imgSrc}" alt="" onerror="this.parentElement.innerText='${letter}'">` : letter}</div>
+            <div class="rc-img">${imgSrc ? `<img src="${imgSrc}" class="${rp.image ? "" : "category-art"}" alt="${escHtml(rp.name)}" loading="lazy" decoding="async" onerror="this.parentElement.innerText='${letter}'">` : letter}</div>
             <div class="rc-name">${rp.name}</div>
             <div class="rc-price">${fmt(rp.price)} ₽</div>`;
         card.onclick = () => { haptic("light"); window.openVapePopup(rp); };
@@ -2185,7 +2476,7 @@ window.updatePopupStockState = function (product) {
     addRow.style.display = inStock ? "flex" : "none";
     notifyBtn.style.display = inStock ? "none" : "block";
     if (!inStock) {
-        const notifs = JSON.parse(localStorage.getItem("vapeNotifications") || "[]");
+        const notifs = storedList("vapeNotifications");
         if (notifs.includes(product.id)) {
             notifyBtn.innerHTML = "✓ Уведомим вас о наличии";
             notifyBtn.disabled = true;
@@ -2200,7 +2491,7 @@ window.notifyWhenAvailable = function () {
     const p = window.currentPopupProduct;
     if (!p) return;
     haptic("success");
-    const notifs = JSON.parse(localStorage.getItem("vapeNotifications") || "[]");
+    const notifs = storedList("vapeNotifications");
     if (!notifs.includes(p.id)) notifs.push(p.id);
     localStorage.setItem("vapeNotifications", JSON.stringify(notifs));
     const btn = document.getElementById("notifyBtn");
@@ -2268,7 +2559,7 @@ window.subscribeNewsletter = function () {
 // ── ИСТОРИЯ ЗАКАЗОВ ──
 window.saveOrderToHistory = function (orderData) {
     try {
-        const history = JSON.parse(localStorage.getItem("vapeOrders") || "[]");
+        const history = storedList("vapeOrders").filter(o => o && typeof o === "object" && Number.isFinite(o.total));
         history.unshift(Object.assign({}, orderData, { _savedAt: Date.now() }));
         if (history.length > 30) history.splice(30);
         localStorage.setItem("vapeOrders", JSON.stringify(history));
@@ -2278,7 +2569,7 @@ window.saveOrderToHistory = function (orderData) {
 window.renderHistoryPage = function () {
     const content = document.getElementById("historyContent");
     if (!content) return;
-    const history = JSON.parse(localStorage.getItem("vapeOrders") || "[]");
+    const history = storedList("vapeOrders").filter(o => o && typeof o === "object" && Number.isFinite(o.total));
     if (history.length === 0) {
         content.innerHTML = `<div class="order-history-empty"><div class="ohe-icon">🛍️</div><div class="ohe-text">Заказов пока нет</div></div>`;
         return;
@@ -2298,13 +2589,13 @@ window.renderHistoryPage = function () {
         item.className = "history-item" + (order._status === "done" ? " hi-done" : "") + (order._status === "cancel" ? " hi-cancelled" : "");
         item.innerHTML = `
             <div class="hi-header">
-                <span class="hi-order-id">Заказ #${order.order_id}</span>
-                <span class="hi-date">${order.date}</span>
+                <span class="hi-order-id">Заказ #${escHtml(order.order_id)}</span>
+                <span class="hi-date">${escHtml(order.date)}</span>
             </div>
             <span class="hi-status ${st.cls}">${st.label}</span>
             <div class="hi-total">${fmt(order.total)} ₽</div>
-            <div class="hi-items">${order.products}</div>
-            <div class="hi-delivery">${order.delivery} · ${order.address}</div>`;
+            <div class="hi-items">${escHtml(order.products)}</div>
+            <div class="hi-delivery">${escHtml(order.delivery)} · ${escHtml(order.address)}</div>`;
         content.appendChild(item);
     });
 };
@@ -2399,7 +2690,10 @@ window.toggleWishlist = function (productId) {
     localStorage.setItem("vapeWishlist", JSON.stringify(window.wishlist));
     document.querySelectorAll(`.wish-btn`).forEach(btn => {
         const onclick = btn.getAttribute("onclick") || "";
-        if (onclick.includes(`'${productId}'`)) btn.classList.toggle("wished", window.wishlist.includes(productId));
+        if (onclick.includes(`'${productId}'`)) {
+            btn.classList.toggle("wished", window.wishlist.includes(productId));
+            btn.setAttribute("aria-pressed", String(window.wishlist.includes(productId)));
+        }
     });
     const wishTab = document.querySelector('.tab-btn[data-target="wishlist"]');
     if (wishTab) wishTab.style.color = window.wishlist.length > 0 && !wishTab.classList.contains("active") ? "var(--neon-red)" : "";
@@ -2444,14 +2738,14 @@ window.renderWishlistPage = function () {
         if (!p) return;
         const row = document.createElement("div");
         row.className = "wishlist-item";
-        const imgSrc = p.image ? `img/${p.image}` : "";
+        const imgSrc = _productImage(p);
         const letter = p.name.charAt(0).toUpperCase();
         const dropped = (snaps[id] != null && p.price < snaps[id]);
         const priceHtml = dropped
             ? `<div class="wi-price"><span class="wi-old">${fmt(snaps[id])} ₽</span> <span class="wi-new">${fmt(p.price)} ₽</span> <span class="wi-drop">🔻 −${fmt(snaps[id] - p.price)}</span></div>`
             : `<div class="wi-price">${fmt(p.price)} ₽</div>`;
         row.innerHTML = `
-            <div class="wi-img">${imgSrc ? `<img src="${imgSrc}" alt="" loading="lazy" onerror="this.parentElement.innerText='${letter}'">` : letter}</div>
+            <div class="wi-img">${imgSrc ? `<img src="${imgSrc}" class="${p.image ? "" : "category-art"}" alt="${escHtml(p.name)}" loading="lazy" decoding="async" onerror="this.parentElement.innerText='${letter}'">` : letter}</div>
             <div class="wi-info">
                 <div class="wi-name">${p.name}</div>
                 <div class="wi-brand">${p.brand || ""}</div>
@@ -2490,6 +2784,8 @@ window.resetFilters = function () {
     haptic("select");
     window.currentSort = "default";
     window.currentFilter = null;
+    window._activeBrand = null;
+    window._renderBrandChips();
     window.updateFilterChips();
     window.filterVapeProducts();
     window.scrollTo({ top: 0, behavior: "smooth" });
@@ -2589,6 +2885,7 @@ window.initSwipeToClose = function () {
         if (!drawer) return;
         let startY = 0, lastY = 0, dragging = false;
         drawer.addEventListener("touchstart", e => {
+            if (!e.target.closest(".drawer-handle, .drawer-header")) return;
             startY = e.touches[0].clientY; lastY = startY; dragging = true;
             drawer.style.transition = "none";
         }, { passive: true });
@@ -2599,6 +2896,7 @@ window.initSwipeToClose = function () {
             drawer.style.transform = `translateY(${dy}px)`;
         }, { passive: true });
         drawer.addEventListener("touchend", () => {
+            if (!dragging) return;
             dragging = false;
             drawer.style.transition = "";
             if (lastY - startY > 100) {
@@ -2614,6 +2912,11 @@ window.initSwipeToClose = function () {
                 drawer.style.transform = "";
             }
         });
+        drawer.addEventListener("touchcancel", () => {
+            dragging = false;
+            drawer.style.transition = "";
+            drawer.style.transform = "";
+        }, { passive: true });
     });
 };
 
@@ -2634,7 +2937,7 @@ window.showOrderSuccess = function (orderNum, bonusEarned) {
     var numEl = document.getElementById("osoNum");
     var bonusEl = document.getElementById("osoBonus");
     if (numEl) numEl.innerText = "#" + orderNum;
-    if (bonusEl) bonusEl.innerText = bonusEarned ? "+" + bonusEarned + " бонусных баллов начислено" : "";
+    if (bonusEl) bonusEl.innerText = bonusEarned ? "Ожидается +" + bonusEarned + " баллов после подтверждения" : "";
     overlay.style.display = "flex";
     haptic("success");
 };
@@ -2642,12 +2945,8 @@ window.showOrderSuccess = function (orderNum, bonusEarned) {
 window.closeOrderSuccess = function () {
     var overlay = document.getElementById("orderSuccessOverlay");
     if (overlay) overlay.style.display = "none";
-    // Тихое логирование заказа в бот (для /orders и /top)
-    if (window.tg && window.tg.sendData && window._pendingOrderLog) {
-        try { window.tg.sendData(JSON.stringify(window._pendingOrderLog)); } catch(e) {}
-        window._pendingOrderLog = null;
-    }
-    window.cart = [];
+    // sendData вызывается только при оформлении из кнопки клавиатуры бота.
+    window._pendingOrderLog = null;
     window.updateCartCounters();
     window.closeVapeCart();
 };
@@ -2706,15 +3005,29 @@ window._renderSavedAddrs = function() {
     const row = document.getElementById('savedAddrsRow');
     const addrEl = document.getElementById('deliveryAddress');
     if (!row || !addrEl) return;
-    const addrs = JSON.parse(localStorage.getItem('vapeSavedAddrs') || '[]');
+    const addrs = storedList("vapeSavedAddrs").filter(a => typeof a === "string");
     if (addrs.length === 0) { row.style.display = 'none'; return; }
     row.style.display = 'flex';
-    row.innerHTML = addrs.map((a, i) =>
-        `<span class="saved-addr-chip" onclick="document.getElementById('deliveryAddress').value='${a.replace(/'/g,"\\'")}'">${a.length>18?a.slice(0,16)+'…':a} <span onclick="event.stopPropagation();window._deleteSavedAddr(${i})" style="opacity:0.5;margin-left:3px">×</span></span>`
-    ).join('');
+    row.replaceChildren();
+    addrs.forEach((address, index) => {
+        const chip = document.createElement("span");
+        chip.className = "saved-addr-chip";
+        const select = document.createElement("button");
+        select.type = "button";
+        select.textContent = address.length > 22 ? address.slice(0, 20) + "…" : address;
+        select.title = address;
+        select.onclick = () => { addrEl.value = address; };
+        const remove = document.createElement("button");
+        remove.type = "button";
+        remove.textContent = "×";
+        remove.setAttribute("aria-label", "Удалить адрес: " + address);
+        remove.onclick = () => window._deleteSavedAddr(index);
+        chip.append(select, remove);
+        row.appendChild(chip);
+    });
 };
 window._deleteSavedAddr = function(i) {
-    const addrs = JSON.parse(localStorage.getItem('vapeSavedAddrs') || '[]');
+    const addrs = storedList("vapeSavedAddrs").filter(a => typeof a === "string");
     addrs.splice(i, 1);
     localStorage.setItem('vapeSavedAddrs', JSON.stringify(addrs));
     window._renderSavedAddrs();
@@ -2729,7 +3042,10 @@ window._toggleCartNote = function(idx) {
     if (show) inp.focus();
 };
 window._setCartNote = function(idx, val) {
-    if (window.cart[idx]) window.cart[idx].note = val;
+    if (window.cart[idx]) {
+        window.cart[idx].note = val.slice(0, 160);
+        localStorage.setItem("vapeCart", JSON.stringify(window.cart));
+    }
 };
 
 // ── УВЕЛИЧЕНИЕ ИЗОБРАЖЕНИЙ (IMAGE ZOOM) ──
@@ -2806,6 +3122,7 @@ window.initTouchGestures = function() {
 
         carousel.addEventListener('touchstart', (e) => {
             startX = e.touches[0].clientX;
+            currentX = startX;
         }, { passive: true });
 
         carousel.addEventListener('touchmove', (e) => {
@@ -2933,7 +3250,7 @@ window._guideGo = function(step) {
 window.showTip = function(text, duration = 3000) {
     const tip = document.createElement('div');
     tip.className = 'floating-tip';
-    tip.innerHTML = `<div class="tip-icon">💡</div><div class="tip-text">${text}</div>`;
+    tip.innerHTML = `<div class="tip-icon">💡</div><div class="tip-text">${escHtml(text)}</div>`;
     document.body.appendChild(tip);
 
     requestAnimationFrame(() => tip.classList.add('show'));
@@ -2950,7 +3267,6 @@ document.addEventListener('DOMContentLoaded', () => {
     window.initTouchGestures();
     // Preload избранные товары
     const featured = window.products.filter(p => ["pod_aegis_hero_5", "pod_xros_5_mini", "dis_lost_mary_30000", "liq_anarhia_v2_brand"].includes(p.id));
-    window.preloadImages(featured.map(p => p.imageUrl));
-    // Показать гайд для новых пользователей
-    window.showOnboardingGuide();
+    window.preloadImages(featured.filter(p => p.image).map(p => "img/" + p.image));
+    // Возрастной экран и промокод уже показаны выше. Не перекрываем их вторым гайдом.
 });
