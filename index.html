@@ -2,24 +2,38 @@
 <html lang="ru">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover, interactive-widget=resizes-visual">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover, interactive-widget=resizes-visual">
+    <meta name="description" content="VAPEBAZAR — каталог в Магадане. Техника под заказ, VPN, самовывоз и доставка. Никотинсодержащая продукция — только для совершеннолетних.">
+    <meta name="theme-color" content="#101114">
     <meta name="format-detection" content="telephone=no">
     <meta name="apple-mobile-web-app-capable" content="yes">
     <meta name="mobile-web-app-capable" content="yes">
     <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
     <meta http-equiv="Pragma" content="no-cache">
     <meta http-equiv="Expires" content="0">
-    <title>VAPEBAZAR | PREMIUM SHOP</title>
+    <title>VAPEBAZAR · Каталог</title>
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap" rel="stylesheet">
-    <link rel="stylesheet" href="style.css?v=2026070611">
+    <link rel="stylesheet" href="style.css?v=202609071">
+    <link rel="stylesheet" href="storefront.css?v=202609082">
     <script src="https://telegram.org/js/telegram-web-app.js"></script>
 </head>
-<body class="has-wallpaper">
+<body>
+    <svg class="icon-library" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
+        <symbol id="i-bag" viewBox="0 0 24 24"><path d="M5 7h14l1 14H4L5 7Z"/><path d="M8 8V6a4 4 0 0 1 8 0v2"/></symbol>
+        <symbol id="i-heart" viewBox="0 0 24 24"><path d="M20.8 4.6a5.5 5.5 0 0 0-7.8 0L12 5.7l-1.1-1.1a5.5 5.5 0 0 0-7.8 7.8L12 21l8.8-8.6a5.5 5.5 0 0 0 0-7.8Z"/></symbol>
+        <symbol id="i-filter" viewBox="0 0 24 24"><path d="M4 7h9m4 0h3M4 17h3m4 0h9"/><circle cx="15" cy="7" r="2"/><circle cx="9" cy="17" r="2"/></symbol>
+        <symbol id="i-shield" viewBox="0 0 24 24"><path d="m12 3 8 3v6c0 5-8 9-8 9s-8-4-8-9V6l8-3Z"/><path d="m8 12 3 3 5-6"/></symbol>
+        <symbol id="i-box" viewBox="0 0 24 24"><path d="m12 3 9 5-9 5-9-5 9-5Zm-9 5v10l9 5 9-5V8M12 13v10M7.5 5.5l9 5"/></symbol>
+        <symbol id="i-chevron" viewBox="0 0 24 24"><path d="m9 5 7 7-7 7"/></symbol>
+        <symbol id="i-check" viewBox="0 0 24 24"><path d="m5 12 4 4L19 6"/></symbol>
+        <symbol id="i-gift" viewBox="0 0 24 24"><path d="M3 8h18v4H3zM5 12v9h14v-9M12 8v13"/><path d="M12 8H8a3 3 0 1 1 3-3l1 3Zm0 0h4a3 3 0 1 0-3-3l-1 3Z"/></symbol>
+        <symbol id="i-chat" viewBox="0 0 24 24"><path d="M21 11.5a8.5 8.5 0 0 1-8.5 8.5H3l2-5a8.5 8.5 0 1 1 16-3.5Z"/><path d="M8 10h8M8 14h5"/></symbol>
+    </svg>
 
     <div id="splashScreen" class="splash-screen">
-        <div class="splash-logo">💨</div>
+        <div class="splash-logo">VB.</div>
         <div class="splash-title">VAPEBAZAR</div>
         <div class="splash-sub">VAPE · TECH · VPN</div>
     </div>
@@ -27,22 +41,22 @@
     <!-- ШАПКА -->
     <header id="appHeader">
         <div class="header-left">
+            <span class="brand-mark" aria-hidden="true">VB.</span>
+            <div>
             <div class="brand-title">VAPEBAZAR</div>
-            <div class="brand-subtitle">Vape · Tech · VPN</div>
+            <div id="shopStatus" class="shop-status"></div>
+            </div>
         </div>
         <div class="header-actions">
-            <div class="header-cart" id="headerCart" onclick="window.openVapeCart()">
+            <button class="header-cart" id="headerCart" aria-label="Открыть корзину" onclick="window.openVapeCart()">
                 <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="9" cy="21" r="1"/><circle cx="20" cy="21" r="1"/><path d="M1 1h4l2.68 13.39a2 2 0 0 0 2 1.61h9.72a2 2 0 0 0 2-1.61L23 6H6"/></svg>
                 <div id="cartCount" class="cart-count">0</div>
-            </div>
+            </button>
         </div>
     </header>
 
     <!-- ТАБЫ: КАТАЛОГ -->
     <section class="tab-section" data-tab="catalog">
-
-        <!-- СТАТУС МАГАЗИНА -->
-        <div id="shopStatus" class="shop-status"></div>
 
         <!-- ДОЖИМ БРОШЕННОЙ КОРЗИНЫ -->
         <div id="cartReminder" class="cart-reminder" style="display:none;">
@@ -51,39 +65,34 @@
             <span class="cart-reminder-close" onclick="window.dismissCartReminder()">✕</span>
         </div>
 
-        <!-- HERO БАННЕР -->
-        <div class="hero-banner" onclick="window.showOnboardingPromo()">
-            <div class="hero-orb"></div>
-            <div class="hero-content">
-                <div class="hero-tag">🎁 Промокод для новичков</div>
-                <div class="hero-title">НОВИЧОК10</div>
-                <div class="hero-sub">Скидка 10% на первый заказ</div>
-                <div class="hero-timer">
-                    <span class="ht-label">⏳ До конца акции</span>
-                    <div class="ht-digits">
-                        <span class="ht-seg" id="htH">00</span>
-                        <span class="ht-colon">:</span>
-                        <span class="ht-seg" id="htM">00</span>
-                        <span class="ht-colon">:</span>
-                        <span class="ht-seg" id="htS">00</span>
-                    </div>
-                </div>
+        <div class="catalog-search-row">
+            <div class="search-wrapper">
+                <svg class="search-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><circle cx="10.5" cy="10.5" r="7.5"/><path d="m16 16 5 5"/></svg>
+                <input type="search" id="searchInput" class="search-input" aria-label="Поиск по каталогу" placeholder="Название, бренд или вкус" enterkeyhint="search" autocomplete="off" oninput="window._filterDebounced()">
+                <button class="search-clear" id="searchClear" aria-label="Очистить поиск" onclick="window.clearSearch()" style="display:none;">✕</button>
             </div>
+            <button class="filter-toggle" id="filterToggle" onclick="window.toggleFilters()" aria-label="Фильтры и сортировка" aria-expanded="false" aria-controls="catalogFilters">
+                <svg class="ui-icon"><use href="#i-filter"/></svg><span id="filterCount" class="filter-count" hidden>0</span>
+            </button>
         </div>
-
-        <!-- ПОИСК -->
-        <div class="search-wrapper">
-            <svg class="search-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35"/></svg>
-            <input type="text" id="searchInput" class="search-input" placeholder="Поиск товаров и брендов..." oninput="window._filterDebounced()">
-            <span class="search-clear" id="searchClear" onclick="window.clearSearch()" style="display:none;">✕</span>
+        <button class="welcome-banner" onclick="window.showOnboardingPromo()">
+            <span class="welcome-value">−10<span>%</span></span>
+            <span class="welcome-copy"><strong>Первый заказ — приятнее</strong><span>Промокод НОВИЧОК10</span></span>
+            <svg class="ui-icon"><use href="#i-chevron"/></svg>
+        </button>
+        <div class="service-shortcuts" aria-label="Разделы магазина">
+            <button onclick="window.openVpnStore()"><svg class="ui-icon"><use href="#i-shield"/></svg> VPN <small>от 50 ₽</small></button>
+            <button onclick="window.openSpecialOrder()"><svg class="ui-icon"><use href="#i-box"/></svg> Техника под заказ</button>
         </div>
 
         <!-- КАТЕГОРИИ -->
         <div id="categories" class="categories-container"></div>
 
+        <div id="catalogFilters" class="catalog-filters" hidden>
+            <div class="filter-panel-heading">Сортировка и фильтры</div>
         <!-- ФИЛЬТРЫ / СОРТИРОВКА -->
         <div id="filterBar" class="filter-bar">
-            <button class="filter-chip active" data-reset onclick="window.resetFilters()">Все</button>
+            <button class="filter-chip active" data-reset onclick="window.resetFilters()">Сбросить</button>
             <button class="filter-chip" data-value="price-asc" onclick="window.selectFilterChip(this,'sort','price-asc')">Цена ↑</button>
             <button class="filter-chip" data-value="price-desc" onclick="window.selectFilterChip(this,'sort','price-desc')">Цена ↓</button>
             <button class="filter-chip" data-value="sale" onclick="window.selectFilterChip(this,'filter','sale')">Скидки</button>
@@ -94,23 +103,26 @@
         <!-- ФИЛЬТР ПО БРЕНДУ -->
         <div id="brandFilterRow" class="brand-filter-row"></div>
 
+        </div>
+
+        <div class="catalog-heading-row">
+            <h1 class="section-heading" id="allProductsLabel">Все товары</h1>
+            <div class="results-count" id="resultsCount" role="status" aria-live="polite"></div>
+        </div>
+        <main id="products" class="products-grid" aria-label="Товары"></main>
         <!-- ХИТЫ ПРОДАЖ -->
         <div id="featuredSection" class="featured-section" style="display:none;">
-            <div class="section-heading">🔥 Хиты продаж</div>
+            <div class="section-heading">Можно присмотреться <span class="section-caption">Новинки и хиты</span></div>
             <div id="featuredList" class="featured-list"></div>
         </div>
 
         <!-- ВЫГОДНЫЕ НАБОРЫ -->
         <div id="combosSection" class="combos-section" style="display:none;">
-            <div class="section-heading">🎁 Выгодные наборы</div>
+            <div class="section-heading">Выгодные наборы</div>
             <div id="combosList" class="combos-list"></div>
         </div>
 
-        <div class="catalog-heading-row">
-            <div class="section-heading" id="allProductsLabel">Все товары</div>
-            <div class="results-count" id="resultsCount"></div>
-        </div>
-        <main id="products" class="products-grid"></main>
+
     </section>
 
     <!-- ТАБ: ИЗБРАННОЕ -->
@@ -130,7 +142,7 @@
         <div class="profile-hero">
             <div class="profile-avatar-wrap">
                 <div class="profile-avatar-ring"></div>
-                <div class="profile-avatar" id="profileAvatar" onclick="window.diagnoseAvatar()">
+                <div class="profile-avatar" id="profileAvatar">
                     <span id="profileAvatarFallback">V</span>
                     <img id="profileAvatarImg" style="display:none;" alt="">
                 </div>
@@ -152,22 +164,22 @@
             </div>
             <div class="profile-card customize-card">
                 <div class="customize-head">
-                    <div class="pc-icon" style="background:rgba(var(--accent-rgb),0.12);color:rgb(var(--accent-rgb));">🎨</div>
+                    <div class="pc-icon" style="background:rgba(var(--accent-rgb),0.12);color:rgb(var(--accent-rgb));"><svg class="ui-icon"><use href="#i-filter"/></svg></div>
                     <div class="pc-text">
                         <div class="pc-title">Цвет оформления</div>
                         <div class="pc-sub">Выберите акцент приложения</div>
                     </div>
                 </div>
                 <div class="theme-row" id="themeRow">
-                    <div class="theme-swatch" data-theme="green"  style="background:#00f07c;" onclick="window.setTheme('green')"></div>
-                    <div class="theme-swatch" data-theme="purple" style="background:#7b2eff;" onclick="window.setTheme('purple')"></div>
-                    <div class="theme-swatch" data-theme="pink"   style="background:#ff4d94;" onclick="window.setTheme('pink')"></div>
-                    <div class="theme-swatch" data-theme="blue"   style="background:#00aaff;" onclick="window.setTheme('blue')"></div>
-                    <div class="theme-swatch" data-theme="gold"   style="background:#ffb000;" onclick="window.setTheme('gold')"></div>
+                    <div class="theme-swatch" data-theme="green"  style="background:#7ddbb0;" onclick="window.setTheme('green')"></div>
+                    <div class="theme-swatch" data-theme="purple" style="background:#c3afff;" onclick="window.setTheme('purple')"></div>
+                    <div class="theme-swatch" data-theme="pink"   style="background:#ffa6c7;" onclick="window.setTheme('pink')"></div>
+                    <div class="theme-swatch" data-theme="blue"   style="background:#7cc5ff;" onclick="window.setTheme('blue')"></div>
+                    <div class="theme-swatch" data-theme="gold"   style="background:#f5cb74;" onclick="window.setTheme('gold')"></div>
                 </div>
             </div>
             <div class="profile-card bonus-profile-card" onclick="window.openBonusInfo()">
-                <div class="pc-icon" style="background:rgba(160,107,255,0.12);color:#a06bff;">💎</div>
+                <div class="pc-icon" style="background:rgba(160,107,255,0.12);color:#a06bff;"><svg class="ui-icon"><use href="#i-gift"/></svg></div>
                 <div class="pc-text">
                     <div class="pc-title">Бонусные баллы</div>
                     <div class="pc-sub"><b id="profileBonusBalance">0</b> баллов · 1 балл = 1 ₽</div>
@@ -175,15 +187,15 @@
                 <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="m9 18 6-6-6-6"/></svg>
             </div>
             <div class="profile-card" onclick="window.openSpecialOrder()">
-                <div class="pc-icon" style="background:rgba(255,45,85,0.10);color:#ff2d55;">📦</div>
+                <div class="pc-icon" style="background:rgba(255,45,85,0.10);color:#ff2d55;"><svg class="ui-icon"><use href="#i-box"/></svg></div>
                 <div class="pc-text">
-                    <div class="pc-title">Заказать под заказ</div>
+                    <div class="pc-title">Техника под заказ</div>
                     <div class="pc-sub">Не нашли товар? Привезём из Москвы</div>
                 </div>
                 <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="m9 18 6-6-6-6"/></svg>
             </div>
             <div class="profile-card" onclick="window.openVpnStore()">
-                <div class="pc-icon" style="background:rgba(0,240,124,0.10);color:#00f07c;">🛡️</div>
+                <div class="pc-icon" style="background:rgba(0,240,124,0.10);color:#00f07c;"><svg class="ui-icon"><use href="#i-shield"/></svg></div>
                 <div class="pc-text">
                     <div class="pc-title">VPN-подписка</div>
                     <div class="pc-sub">Быстрый VPN без блокировок · от 50 ₽</div>
@@ -191,7 +203,7 @@
                 <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="m9 18 6-6-6-6"/></svg>
             </div>
             <div class="profile-card" onclick="window.openReferral()">
-                <div class="pc-icon" style="background:rgba(255,171,0,0.10);color:#ffab00;">🎁</div>
+                <div class="pc-icon" style="background:rgba(255,171,0,0.10);color:#ffab00;"><svg class="ui-icon"><use href="#i-gift"/></svg></div>
                 <div class="pc-text">
                     <div class="pc-title">Реферальная программа</div>
                     <div class="pc-sub">Приглашай друзей — получай скидки</div>
@@ -199,7 +211,7 @@
                 <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="m9 18 6-6-6-6"/></svg>
             </div>
             <div class="profile-card" onclick="window.openSupport()">
-                <div class="pc-icon" style="background:rgba(var(--accent-rgb),0.08);color:rgb(var(--accent-rgb));">💬</div>
+                <div class="pc-icon" style="background:rgba(var(--accent-rgb),0.08);color:rgb(var(--accent-rgb));"><svg class="ui-icon"><use href="#i-chat"/></svg></div>
                 <div class="pc-text">
                     <div class="pc-title">Поддержка</div>
                     <div class="pc-sub">Ответим быстро в Telegram</div>
@@ -207,7 +219,7 @@
                 <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="m9 18 6-6-6-6"/></svg>
             </div>
             <div class="profile-card" onclick="window.subscribeNewsletter()" id="profileNewsletterCard">
-                <div class="pc-icon" style="background:rgba(0,201,255,0.10);color:#00c9ff;">📣</div>
+                <div class="pc-icon" style="background:rgba(0,201,255,0.10);color:#00c9ff;"><svg class="ui-icon"><use href="#i-chat"/></svg></div>
                 <div class="pc-text">
                     <div class="pc-title">Рассылка</div>
                     <div class="pc-sub" id="profileNewsletterSub">Узнавай об акциях первым</div>
@@ -218,7 +230,7 @@
     </section>
 
     <!-- BOTTOM TAB BAR -->
-    <nav class="bottom-tabs">
+    <nav class="bottom-tabs" aria-label="Главная навигация">
         <button class="tab-btn active" data-target="catalog" onclick="window.switchTab('catalog')">
             <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><polyline points="9 22 9 12 15 12 15 22"/></svg>
             <span>Каталог</span>
@@ -229,7 +241,7 @@
         </button>
         <button class="tab-btn" data-target="history" onclick="window.switchTab('history')">
             <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><path d="M12 6v6l4 2"/></svg>
-            <span>История</span>
+            <span>Заказы</span>
         </button>
         <button class="tab-btn" data-target="profile" onclick="window.switchTab('profile')">
             <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>
@@ -244,7 +256,7 @@
                 <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="9" cy="21" r="1"/><circle cx="20" cy="21" r="1"/><path d="M1 1h4l2.68 13.39a2 2 0 0 0 2 1.61h9.72a2 2 0 0 0 2-1.61L23 6H6"/></svg>
             </div>
             <div>
-                <div class="cart-bar-label">Корзина</div>
+                <div class="cart-bar-label">Открыть корзину</div>
                 <div class="cart-bar-sub" id="cartBarSub">Пусто</div>
             </div>
         </div>
@@ -256,18 +268,20 @@
         <div class="drawer">
             <div class="drawer-handle"></div>
             <div class="drawer-header">
-                <div id="popupName" class="drawer-title">Товар</div>
+                <div class="drawer-title">О товаре</div>
                 <div class="close-drawer-btn" onclick="window.closeVapePopup()">✕</div>
             </div>
             <div class="popup-scroll-content">
                 <div id="popupImgWrapper" class="popup-image-center">
-                    <img id="popupImg" class="product-img" src="" alt="" style="display:none;">
+                    <img id="popupImg" class="product-img" alt="" style="display:none;">
                     <div id="popupPlaceholder" class="product-img-placeholder" style="display:none;">V</div>
                 </div>
-                <div id="popupBrand" class="popup-brand"></div>
+                <div class="product-detail-meta"><div id="popupBrand" class="popup-brand"></div><span id="popupAvailability" class="product-availability"></span></div>
+                <h2 id="popupName" class="product-detail-title">Товар</h2>
+                <p id="popupArtworkNote" class="artwork-note" hidden>Иллюстрация категории. Фото конкретной модели уточните у менеджера.</p>
                 <p id="popupDesc" class="product-description-text"></p>
                 <div id="popupFlavorsBlock" class="flavors-section">
-                    <div class="section-label">Выберите вкус / цвет</div>
+                    <div class="variant-heading"><div class="section-label" id="popupVariantLabel">Выберите вариант</div><span id="popupSelection" class="variant-selection">Не выбран</span></div>
                     <div id="popupFlavors" class="flavors-grid"></div>
                 </div>
                 <div id="relatedSection" class="related-section" style="display:none;">
@@ -281,7 +295,7 @@
                         <div class="popup-price-label">Цена</div>
                         <div id="popupFooterPrice" class="footer-price-label">0 ₽</div>
                     </div>
-                    <button class="action-btn popup-add-btn" onclick="window.addToCart()">
+                    <button id="popupAddButton" class="action-btn popup-add-btn" onclick="window.addToCart()">
                         <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg>
                         В корзину
                     </button>
@@ -298,11 +312,11 @@
         <div class="drawer">
             <div class="drawer-handle"></div>
             <div class="drawer-header">
-                <div class="drawer-title">Корзина</div>
+                <div class="cart-heading"><button id="checkoutBack" class="checkout-back" aria-label="Вернуться к товарам" onclick="window.setCheckoutStep('cart')" hidden>←</button><div><div class="drawer-title" id="cartTitle">Корзина</div><div id="cartSubtitle" class="drawer-subtitle"></div></div></div>
                 <div class="close-drawer-btn" onclick="window.closeVapeCart()">✕</div>
             </div>
             <div class="popup-scroll-content">
-                <div id="newsletterBanner" class="newsletter-banner" style="display:none;">
+                <div id="newsletterBanner" class="newsletter-banner" hidden style="display:none;">
                     <div class="nl-icon">📣</div>
                     <div class="nl-text">
                         <div class="nl-title">Акции и новинки</div>
@@ -310,16 +324,16 @@
                     </div>
                     <button class="nl-btn" id="nlBtn" onclick="window.subscribeNewsletter()">Подписаться</button>
                 </div>
+                <div id="checkoutSteps" class="checkout-steps" aria-label="Этап оформления"><span data-step="cart" aria-current="step">1. Корзина</span><span data-step="details">2. Получение</span></div>
                 <div id="cartItemsList" class="cart-items-vertical-list"></div>
-                <div id="orderFormBlock" class="order-form-wrapper" style="display:none;">
-
+                <div id="cartBenefits" class="cart-benefits">
                     <div class="section-label">Промокод</div>
                     <div class="promo-row">
                         <div class="input-icon-group promo-input-group">
                             <span class="input-icon">🎟️</span>
-                            <input type="text" id="promoInput" class="form-input" placeholder="Введите промокод" style="text-transform:uppercase;">
+                            <input type="text" id="promoInput" aria-label="Промокод" autocomplete="off" class="form-input" placeholder="Введите промокод" style="text-transform:uppercase;">
                         </div>
-                        <button id="promoApplyBtn" class="promo-btn" onclick="window.applyPromoCode()">ОК</button>
+                        <button id="promoApplyBtn" class="promo-btn" onclick="window.applyPromoCode()">Применить</button>
                     </div>
                     <div id="promoMessage" class="promo-message"></div>
 
@@ -334,27 +348,33 @@
                         <div class="bonus-toggle" id="bonusToggle"><div class="bonus-toggle-knob"></div></div>
                     </div>
 
+                </div>
+                <div id="orderFormBlock" class="order-form-wrapper" style="display:none;">
+
                     <div class="contact-block">
-                        <div class="contact-block-title">👤 Контактные данные</div>
+                        <div class="contact-block-title">Контактные данные</div>
+                        <label class="field-label" for="customerName">Ваше имя</label>
                         <div class="input-icon-group">
                             <span class="input-icon">🙍</span>
-                            <input type="text" id="customerName" class="form-input" placeholder="Ваше имя *">
+                            <input type="text" id="customerName" aria-required="true" aria-label="Ваше имя" autocomplete="name" class="form-input" placeholder="Ваше имя *">
                         </div>
+                        <label class="field-label" for="customerPhone">Номер телефона</label>
                         <div class="input-icon-group">
                             <span class="input-icon">📞</span>
-                            <input type="tel" id="customerPhone" class="form-input" placeholder="+7 (9__) ___-__-__ *" oninput="window.fmtPhone(this)">
+                            <input type="tel" id="customerPhone" aria-required="true" inputmode="tel" aria-label="Номер телефона" autocomplete="tel" class="form-input" placeholder="+7 (9__) ___-__-__ *" oninput="window.fmtPhone(this)">
                         </div>
+                        <label class="field-label" for="customerTelegram">Telegram · если есть username</label>
                         <div class="input-icon-group" id="tgUsernameGroup">
                             <span class="input-icon">✈️</span>
-                            <input type="text" id="customerTelegram" class="form-input" placeholder="@username в Telegram *">
+                            <input type="text" id="customerTelegram" autocapitalize="none" spellcheck="false" aria-label="Telegram" autocomplete="off" class="form-input" placeholder="@username">
                         </div>
-                        <div class="contact-required-hint">* обязательные поля</div>
+                        <div class="contact-required-hint">Имя и телефон нужны для подтверждения заказа.</div>
                     </div>
 
                     <div class="section-label">Способ получения</div>
                     <div class="delivery-toggle-container">
-                        <button id="tabPickup" class="delivery-tab active" onclick="window.selectDeliveryTab('pickup')">Самовывоз</button>
-                        <button id="tabDelivery" class="delivery-tab" onclick="window.selectDeliveryTab('delivery')">Доставка</button>
+                        <button id="tabPickup" aria-pressed="true" class="delivery-tab active" onclick="window.selectDeliveryTab('pickup')">Самовывоз</button>
+                        <button id="tabDelivery" aria-pressed="false" class="delivery-tab" onclick="window.selectDeliveryTab('delivery')">Доставка</button>
                     </div>
                     <div id="pickupInfoCard" class="pickup-info-card">
                         <div class="pickup-icon">📍</div>
@@ -366,9 +386,10 @@
                     </div>
                     <div id="deliveryAddressWrapper" style="display:none;">
                         <div id="savedAddrsRow" class="saved-addrs-row" style="display:none"></div>
+                        <label class="field-label" for="deliveryAddress">Адрес доставки</label>
                         <div class="input-icon-group">
                             <span class="input-icon">🚗</span>
-                            <input type="text" id="deliveryAddress" class="form-input" placeholder="Улица, дом, квартира">
+                            <input type="text" id="deliveryAddress" aria-label="Адрес доставки" autocomplete="street-address" class="form-input" placeholder="Улица, дом, квартира">
                         </div>
                         <div class="time-slot-label">Время доставки</div>
                         <div id="timeSlotRow" class="time-slot-row">
@@ -380,13 +401,13 @@
                     <div id="deliveryNote" class="delivery-note" style="display:none;"></div>
 
                     <!-- Способ оплаты -->
-                    <div class="pay-section-label">💳 Способ оплаты</div>
+                    <div class="pay-section-label">Способ оплаты</div>
                     <div class="payment-tabs">
-                        <button id="payTabCash" class="pay-tab active" onclick="window.selectPayTab('cash')">
+                        <button id="payTabCash" aria-pressed="true" class="pay-tab active" onclick="window.selectPayTab('cash')">
                             <span class="pay-tab-icon">💵</span>
-                            <span class="pay-tab-label">Наличка</span>
+                            <span class="pay-tab-label">Наличные</span>
                         </button>
-                        <button id="payTabTransfer" class="pay-tab" onclick="window.selectPayTab('transfer')">
+                        <button id="payTabTransfer" aria-pressed="false" class="pay-tab" onclick="window.selectPayTab('transfer')">
                             <span class="pay-tab-icon">💳</span>
                             <span class="pay-tab-label">Перевод</span>
                         </button>
@@ -395,7 +416,7 @@
                         <div class="change-row">
                             <span class="change-label">Нужна сдача?</span>
                             <label class="toggle-switch">
-                                <input type="checkbox" id="needChange" onchange="window.toggleChange()">
+                                <input type="checkbox" id="needChange" aria-label="Нужна сдача" onchange="window.toggleChange()">
                                 <span class="toggle-slider"></span>
                             </label>
                         </div>
@@ -405,7 +426,7 @@
                                 <button class="change-chip" onclick="window.pickChange(1000,this)">1000</button>
                                 <button class="change-chip" onclick="window.pickChange(2000,this)">2000</button>
                                 <button class="change-chip" onclick="window.pickChange(5000,this)">5000</button>
-                                <input type="number" id="changeCustom" class="change-custom-inp" placeholder="Другая" oninput="window.onChangeCustom()">
+                                <input type="number" id="changeCustom" aria-label="С какой суммы нужна сдача" inputmode="numeric" class="change-custom-inp" placeholder="Другая" oninput="window.onChangeCustom()">
                             </div>
                         </div>
                     </div>
@@ -413,9 +434,6 @@
                         <div class="transfer-hint">💬 Реквизиты пришлёт менеджер после подтверждения.</div>
                     </div>
                 </div>
-            </div>
-
-            <div class="drawer-footer">
                 <div id="summaryBlock" class="summary-block" style="display:none;">
                     <div id="deliveryProgressWrap" class="dp-wrap">
                         <div class="dp-header">
@@ -429,12 +447,16 @@
                     <div class="summary-row" id="sumBonusRow" style="display:none;"><span style="color:#a06bff;">Баллы</span><span id="sumBonus" style="color:#a06bff;">0 ₽</span></div>
                     <div class="summary-row" id="sumDeliveryRow" style="display:none;"><span>Доставка</span><span id="sumDelivery">0 ₽</span></div>
                 </div>
+            </div>
+
+            <div class="drawer-footer">
                 <div id="minOrderNote" class="min-order-note" style="display:none;"></div>
                 <div class="total-price-block">
                     <span class="total-label">Итого</span>
                     <div id="cartTotalPrice" class="footer-price-label">0 ₽</div>
                 </div>
-                <button id="checkoutBtn" class="action-btn structural-success-btn" onclick="window.checkoutVapeOrder()">ОФОРМИТЬ ЗАКАЗ</button>
+                <button id="checkoutBtn" class="action-btn structural-success-btn" onclick="window.setCheckoutStep('details')">Продолжить</button>
+                <p id="checkoutHint" class="checkout-hint">Далее — получение и контактные данные</p>
             </div>
         </div>
     </div>
@@ -442,22 +464,22 @@
     <!-- ОНБОРДИНГ -->
     <div id="onboardingOverlay" class="onboarding-overlay">
         <div class="onboarding-box">
-            <div class="ob-emoji">🛍️</div>
+            <div class="onboarding-mark">VB.</div>
             <div class="ob-title">Добро пожаловать<br>в VAPEBAZAR!</div>
-            <div class="ob-sub">Лучший вейп-магазин в Telegram</div>
+            <div class="ob-sub">Магазин в Магадане. Самовывоз и доставка.</div>
             <div class="ob-promo">
-                <div class="obp-label">🎁 Подарок для новичка</div>
+                <div class="obp-label">На первый заказ</div>
                 <div class="obp-code">НОВИЧОК10</div>
                 <div class="obp-hint">Скидка 10% на первый заказ</div>
             </div>
-            <button class="action-btn structural-success-btn" onclick="window.closeOnboarding()">Начать покупки →</button>
+            <button class="action-btn structural-success-btn" onclick="window.closeOnboarding()">Перейти в каталог</button>
         </div>
     </div>
 
     <!-- ВОЗРАСТНОЙ ГЕЙТ 18+ -->
     <div id="ageGate" class="onboarding-overlay age-gate" style="display:none;">
         <div class="onboarding-box" id="ageGateBox">
-            <div class="ob-emoji">🔞</div>
+            <div class="age-mark">18+</div>
             <div class="ob-title">Вам есть 18 лет?</div>
             <div class="ob-sub">Товары на этом сайте содержат никотин и предназначены только для совершеннолетних. Продажа лицам младше 18 лет запрещена.</div>
             <button class="action-btn structural-success-btn" onclick="window.confirmAge()">Да, мне есть 18</button>
@@ -500,7 +522,7 @@
         <div class="drawer">
             <div class="drawer-handle"></div>
             <div class="drawer-header">
-                <div class="drawer-title">Заказать под заказ</div>
+                <div class="drawer-title">Техника под заказ</div>
                 <div class="close-drawer-btn" onclick="window.closeSpecialOrder()">✕</div>
             </div>
             <div class="popup-scroll-content">
@@ -628,22 +650,22 @@
         </div>
     </div>
 
-    <div id="toast" class="toast-notification">Добавлено в корзину</div>
+    <div id="toast" class="toast-notification" role="status" aria-live="polite">Добавлено в корзину</div>
     <div id="flyDot" class="fly-dot"></div>
 
     <div id="orderSuccessOverlay" class="order-success-overlay" style="display:none;">
         <div class="oso-content">
-            <div class="oso-icon">🎉</div>
-            <div class="oso-title">Заказ оформлен!</div>
+            <div class="oso-icon"><svg class="ui-icon" aria-hidden="true"><use href="#i-check"/></svg></div>
+            <div class="oso-title">Заказ отправлен</div>
             <div class="oso-num" id="osoNum">#0000</div>
-            <div class="oso-text">Бот пришлёт подтверждение в Telegram</div>
+            <div class="oso-text">Менеджер проверит наличие и свяжется с вами в Telegram.</div>
             <div class="oso-bonus" id="osoBonus"></div>
-            <button class="oso-btn" onclick="window.closeOrderSuccess()">Отлично!</button>
+            <button class="oso-btn" onclick="window.closeOrderSuccess()">Вернуться в магазин</button>
         </div>
     </div>
 
-    <button id="scrollTopBtn" class="scroll-top-btn" onclick="window.scrollTo({top:0,behavior:'smooth'})" style="display:none">↑</button>
-    <script src="products.js?v=2026070611"></script>
-    <script src="script.js?v=2026070611"></script>
+    <button id="scrollTopBtn" class="scroll-top-btn" aria-label="Вернуться наверх" onclick="window.scrollTo({top:0,behavior:'smooth'})" style="display:none">↑</button>
+    <script src="products.js?v=202609071"></script>
+    <script src="script.js?v=202609082"></script>
 </body>
 </html>

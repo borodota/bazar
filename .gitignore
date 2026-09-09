@@ -10,3 +10,8 @@ orders_log.json
 bonuses.json
 vpn_subs.json
 reviews.json
+notify_requests.json
+blocked_users.json
+*.json.tmp
+.venv/
+venv/

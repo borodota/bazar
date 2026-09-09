@@ -43,7 +43,7 @@
    Фиолетовая (purple) тема — фирменный цвет VAPEBAZAR, значение по умолчанию из :root.
    Зелёная (green) — прежний цвет, оставлен как опция для тех, кто его выбрал раньше.
    ══════════════════════════════════════════════════════════════════════════ */
-body[data-theme="green"]  { --accent-rgb: var(--accent-rgb);   --accent-2: #00c9ff;  --accent-2-rgb: 0,201,255; }
+body[data-theme="green"]  { --accent-rgb: 77,222,161; --accent-2: #8cf0c0; --accent-2-rgb: 140,240,192; }
 body[data-theme="purple"] { --accent-rgb: 123,46,255;  --accent-2: #ff2ec7;  --accent-2-rgb: 255,46,199; }
 body[data-theme="pink"]   { --accent-rgb: 255,77,148;  --accent-2: #ff8fc0; --accent-2-rgb: 255,143,192; }
 body[data-theme="blue"]   { --accent-rgb: 0,170,255;   --accent-2: #5ad1ff; --accent-2-rgb: 90,209,255; }
@@ -1158,10 +1158,10 @@ body {
 
 /* Cart bar выше табов */
 .cart-bar {
-    bottom: 78px !important;
+    bottom: 78px;
 }
 @supports (padding: env(safe-area-inset-bottom)) {
-    .cart-bar { bottom: calc(78px + env(safe-area-inset-bottom)) !important; }
+    .cart-bar { bottom: calc(78px + env(safe-area-inset-bottom)); }
 }
 .toast-notification { bottom: 160px; }
 @supports (padding: env(safe-area-inset-bottom)) {
