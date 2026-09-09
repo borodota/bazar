@@ -2,6 +2,12 @@ import csv
 import io
 import logging
 import re
+import secrets
+from html import escape, unescape
+from order_utils import (
+    order_total, vpn_selection, parse_vpn_start, can_change_status,
+    vpn_expiry_iso, was_vpn_order_processed,
+)
 from aiogram import Bot, Dispatcher, types, F
 from aiogram.client.default import DefaultBotProperties
 from aiogram.fsm.storage.memory import MemoryStorage
@@ -148,6 +154,7 @@ def _save_json(path, data):
         os.replace(tmp, path)
     except Exception as e:
         logger.error(f"Не удалось сохранить {path}: {e}")
+        raise  # Не подтверждаем запись заказа/баллов, если сохранение не удалось.
 
 def remember_user(user):
     """Запоминает любого, кто взаимодействовал с ботом, — это база для рассылки."""
@@ -188,6 +195,8 @@ def log_order(order_id, customer_id, total, action, status_label, items=None, na
     orders = _load_json(ORDERS_FILE, [])
     now = now_magadan().isoformat(timespec="seconds")
     rec = next((o for o in orders if str(o.get("order_id")) == str(order_id)), None)
+    if rec and customer_id and str(rec.get("customer_id")) not in ("", str(customer_id)):
+        raise ValueError("Номер заказа уже принадлежит другому клиенту")
     if rec is None:
         rec = {
             "order_id": str(order_id),
@@ -208,8 +217,10 @@ def log_order(order_id, customer_id, total, action, status_label, items=None, na
         rec["phone"] = str(phone)
     if address and not rec.get("address"):
         rec["address"] = str(address)
-    rec["status"] = action
-    rec["status_label"] = status_label
+    # Поздний order_log из Mini App дополняет детали, но не сбрасывает статус.
+    if action != "new" or rec.get("status", "new") == "new":
+        rec["status"] = action
+        rec["status_label"] = status_label
     rec["updated_at"] = now
     # держим журнал компактным
     if len(orders) > 500:
@@ -443,15 +454,16 @@ def activate_vip(uid, days=30):
     return new_expiry
 
 def get_main_keyboard():
-    web_app_url = "https://borodota.github.io/bazar/"
+    web_app_url = "https://borodota.github.io/bazar/?source=keyboard"
     return ReplyKeyboardMarkup(
         keyboard=[
             [KeyboardButton(text="🛍️ Открыть Магазин", web_app=types.WebAppInfo(url=web_app_url))],
-            [KeyboardButton(text="🛡️ VPN"), KeyboardButton(text="💎 Баллы"), KeyboardButton(text="👑 VIP")],
-            [KeyboardButton(text="🎁 Рефереллы"), KeyboardButton(text="💸 Партнерка"), KeyboardButton(text="❓ FAQ")],
-            [KeyboardButton(text="📞 Контакты")]
+            [KeyboardButton(text="📦 Заказы"), KeyboardButton(text="💎 Мои баллы")],
+            [KeyboardButton(text="🛡️ VPN"), KeyboardButton(text="🎁 Пригласить друга")],
+            [KeyboardButton(text="❓ FAQ"), KeyboardButton(text="📞 Контакты")]
         ],
-        resize_keyboard=True
+        resize_keyboard=True,
+        input_field_placeholder="Выберите раздел или задайте вопрос"
     )
 
 def get_features_menu():
@@ -461,35 +473,38 @@ def get_features_menu():
             InlineKeyboardButton(text="🛡️ Купить VPN", callback_data="cmd_vpn")
         ],
         [
-            InlineKeyboardButton(text="💎 Баллы (/bonus)", callback_data="cmd_bonus"),
-            InlineKeyboardButton(text="👑 VIP (/vip)", callback_data="cmd_vip")
+            InlineKeyboardButton(text="💎 Мои баллы", callback_data="cmd_bonus"),
+            InlineKeyboardButton(text="👑 VIP-статус", callback_data="cmd_vip")
         ],
         [
-            InlineKeyboardButton(text="🏆 Бейджи (/badges)", callback_data="cmd_badges"),
-            InlineKeyboardButton(text="🎯 Скидки (/discount)", callback_data="cmd_discount")
+            InlineKeyboardButton(text="🏆 Достижения", callback_data="cmd_badges"),
+            InlineKeyboardButton(text="🎯 Мои скидки", callback_data="cmd_discount")
         ],
         [
-            InlineKeyboardButton(text="🎁 Рефереллы (/ref)", callback_data="cmd_ref"),
-            InlineKeyboardButton(text="💸 Партнерка (/partner)", callback_data="cmd_partner")
+            InlineKeyboardButton(text="🎁 Пригласить друга", callback_data="cmd_ref"),
+            InlineKeyboardButton(text="💸 Партнёрская программа", callback_data="cmd_partner")
         ],
         [
-            InlineKeyboardButton(text="🎪 Вызовы (/challenges)", callback_data="cmd_challenges"),
-            InlineKeyboardButton(text="❓ FAQ (/faq)", callback_data="cmd_faq")
+            InlineKeyboardButton(text="🎪 Задания месяца", callback_data="cmd_challenges"),
+            InlineKeyboardButton(text="❓ Частые вопросы", callback_data="cmd_faq")
         ],
         [
-            InlineKeyboardButton(text="🎂 День рождения (/birthday)", callback_data="cmd_birthday")
+            InlineKeyboardButton(text="🎂 День рождения", callback_data="cmd_birthday")
         ]
     ])
 
 @dp.message(F.web_app_data)
 async def handle_web_app_order(message: types.Message):
-    logger.info(f"Получены данные из WebApp: {message.web_app_data.data}")
+    logger.info("Получены данные из WebApp от пользователя %s", message.from_user.id)
     remember_user(message.from_user)
     try:
         raw_string = message.web_app_data.data
         
         try:
             raw_data = json.loads(raw_string)
+            if not isinstance(raw_data, dict):
+                await message.answer("Не удалось прочитать заказ. Откройте магазин и попробуйте ещё раз.")
+                return
             is_json = True
         except json.JSONDecodeError:
             is_json = False
@@ -503,6 +518,9 @@ async def handle_web_app_order(message: types.Message):
             so_qty = raw_data.get("quantity", 1)
             so_tg = raw_data.get("telegram") or username_text
             so_phone = raw_data.get("phone") or "—"
+            so_name, so_link, so_details, so_tg, so_phone, so_qty = (
+                escape(str(v)) for v in (so_name, so_link, so_details, so_tg, so_phone, so_qty)
+            )
 
             await message.answer(
                 "✅ <b>Заявка на спецзаказ принята!</b>\n\n"
@@ -532,49 +550,20 @@ async def handle_web_app_order(message: types.Message):
             return
 
         if is_json and raw_data.get("type") == "vpn_order":
-            tariff_id = raw_data.get("tariff")
-            tariff = VPN_TARIFFS.get(tariff_id)
-            if not tariff:
-                await message.answer(
-                    f"⚠️ Тариф не распознан. Напишите менеджеру @{MANAGER_USERNAME}",
-                    reply_markup=get_main_keyboard()
-                )
-                return
-            username_text = f"@{message.from_user.username}" if message.from_user.username else "Скрыт"
-            subs = _load_json(VPN_SUBS_FILE, {})
-            is_renewal = str(message.from_user.id) in subs
-
-            await message.answer(
-                "🛡️ <b>Заявка на VPN принята!</b>\n\n"
-                f"Тариф: <b>{tariff['name']}</b> — {tariff['price']} ₽ ({tariff['days']} дн.)\n\n"
-                f"💳 Оплати директору @{MANAGER_USERNAME}. Как подтвердит оплату — "
-                "сразу пришлём сюда ссылку-подписку и инструкцию.",
-                reply_markup=get_main_keyboard()
+            refusal = await create_vpn_request(
+                message, message.from_user, raw_data.get("tariff"),
+                source="из магазина", devices=raw_data.get("devices", 1)
             )
-            admin_text = (
-                f"🛡️ <b>{'ПРОДЛЕНИЕ' if is_renewal else 'НОВЫЙ'} VPN-ЗАКАЗ</b>\n"
-                f"━━━━━━━━━━━━━━━━━━━━━━━━\n\n"
-                f"👤 <b>Клиент:</b> {username_text}\n"
-                f"🆔 <b>ID:</b> <code>{message.from_user.id}</code>\n\n"
-                f"📦 <b>Тариф:</b> {tariff['name']} ({tariff['days']} дн., {tariff['devices']} устр.)\n"
-                f"💰 <b>К оплате:</b> {tariff['price']} ₽\n\n"
-                f"👉 Клиент платит напрямую. После оплаты жми кнопку — выдам доступ."
-            )
-            kb_vpn = InlineKeyboardMarkup(inline_keyboard=[
-                [InlineKeyboardButton(text="✅ Оплачено — выдать", callback_data=f"vpn_give_{message.from_user.id}_{tariff_id}")],
-                [InlineKeyboardButton(text="📞 Связаться", url=f"tg://user?id={message.from_user.id}")],
-            ])
-            for chat_id in set([ADMIN_ID] + DEPUTY_ADMIN_IDS):
-                try: await bot.send_message(chat_id=chat_id, text=admin_text, reply_markup=kb_vpn)
-                except Exception as e: logger.error(f"vpn_order notify failed {chat_id}: {e}")
+            if refusal:
+                await message.answer(escape(refusal), reply_markup=get_main_keyboard())
             return
 
         if is_json and raw_data.get("type") == "notify_request":
             username_text = f"@{message.from_user.username}" if message.from_user.username else "Скрыт"
-            prod_name = raw_data.get("product_name", "—")
+            prod_name = escape(str(raw_data.get("product_name", "—")))
             # Сохраняем запрос — когда товар придёт, /restock оповестит всех
             notify_reqs = _load_json(NOTIFY_FILE, {})
-            prod_key = prod_name.lower().strip()
+            prod_key = unescape(prod_name).lower().strip()
             if prod_key not in notify_reqs:
                 notify_reqs[prod_key] = []
             uid_str = str(message.from_user.id)
@@ -610,7 +599,9 @@ async def handle_web_app_order(message: types.Message):
             return
 
         if is_json:
-            order_id = raw_data.get("order_id") or raw_data.get("Order ID") or raw_data.get("id") or now_magadan().strftime("%M%S")
+            order_id = str(raw_data.get("order_id") or raw_data.get("Order ID") or raw_data.get("id") or secrets.token_hex(5))
+            if not re.fullmatch(r"[A-Za-z0-9-]{1,16}", order_id):
+                raise ValueError("Некорректный номер заказа")
             date_str = raw_data.get("date") or raw_data.get("Date") or now_magadan().strftime("%d.%m.%Y %H:%M")
             name = raw_data.get("name") or raw_data.get("Name") or "Не указано"
             phone = raw_data.get("phone") or raw_data.get("Phone") or "Не указан"
@@ -619,20 +610,15 @@ async def handle_web_app_order(message: types.Message):
             items = raw_data.get("products") or raw_data.get("Items") or "Товары отсутствуют"
             comment = raw_data.get("comment") or raw_data.get("Comment") or "Нет"
             
-            total_items_cost = 0
-            for key in ["total", "Total summary", "price", "sum"]:
-                if key in raw_data:
-                    try:
-                        total_items_cost = int(raw_data[key])
-                        break
-                    except:
-                        continue
+            total_items_cost = order_total(raw_data)
             # Бонусные данные — передаются из браузера для кнопки «Принять»
             order_earn = _safe_int(raw_data.get("earn") or raw_data.get("bonusEarned"), 0)
             order_redeem = _safe_int(raw_data.get("redeem") or raw_data.get("bonusUsed"), 0)
             order_ref_id = str(raw_data.get("ref_id") or "0")
+            if not order_ref_id.isdigit() or len(order_ref_id) > 16:
+                order_ref_id = "0"
         else:
-            order_id = now_magadan().strftime("%M%S")
+            order_id = secrets.token_hex(5)
             date_str = now_magadan().strftime("%d.%m.%Y %H:%M")
             name = message.from_user.first_name if message.from_user.first_name else "Не указано"
             phone = "Указан внутри текста"
@@ -644,26 +630,24 @@ async def handle_web_app_order(message: types.Message):
             order_earn = order_redeem = 0
             order_ref_id = "0"
 
-        delivery_cost = 0
-        if "доставка" in str(delivery_type).strip().lower():
-            if total_items_cost < FREE_DELIVERY_THRESHOLD:
-                delivery_cost = DELIVERY_BASE_COST
-                
-        final_total = total_items_cost + delivery_cost
+        # total уже включает доставку, промокод и списанные баллы.
+        final_total = total_items_cost
+        date_str, name, phone, delivery_type, address, items, comment = (
+            escape(str(value)) for value in (date_str, name, phone, delivery_type, address, items, comment)
+        )
         username_text = f"@{message.from_user.username}" if message.from_user.username else "Скрыт"
 
         total_text = f"{final_total:,}".replace(",", " ") if final_total > 0 else "Посчитает директор"
 
         # 1. Текст покупателю в ЛС
         customer_text = (
-            f"✅ <b>Заказ #{order_id} принят!</b>\n"
+            f"✅ <b>Заказ #{order_id} получен!</b>\n"
             f"📅 {date_str}\n\n"
             f"🛒 <b>Ваш заказ</b>\n<blockquote>{items}</blockquote>\n\n"
             f"💰 <b>К оплате: {total_text} ₽</b>\n\n"
             f"🧑‍💻 Наш директор @{MANAGER_USERNAME} свяжется с вами для подтверждения.\n"
             f"🔔 Мы пришлём уведомление, когда статус заказа изменится!"
         )
-        await message.answer(customer_text, reply_markup=get_main_keyboard())
 
         # 2. Текст директору в админку
         admin_caption = (
@@ -707,14 +691,24 @@ async def handle_web_app_order(message: types.Message):
 
         # Заказ из sendData приходит с полными данными — сразу пишем его в журнал
         log_order(order_id, customer_id, final_total, "new", "🆕 Новый",
-                  items=items, name=name, phone=phone, address=address)
+                  items=unescape(items), name=unescape(name), phone=unescape(phone), address=unescape(address))
 
         all_chats = set([ADMIN_ID] + DEPUTY_ADMIN_IDS)
+        delivered = 0
         for chat_id in all_chats:
             try:
                 await bot.send_message(chat_id=chat_id, text=admin_caption, reply_markup=kb)
+                delivered += 1
             except Exception as e:
                 logger.error(f"Не удалось отправить уведомление на ID {chat_id}: {e}")
+        if delivered:
+            await message.answer(customer_text, reply_markup=get_main_keyboard())
+        else:
+            await message.answer(
+                f"Заказ #{order_id} сохранён, но уведомление менеджеру не доставлено. "
+                f"Напишите @{MANAGER_USERNAME} и укажите номер заказа.",
+                reply_markup=get_main_keyboard()
+            )
 
     except Exception as e:
         logger.error(f"Критическая ошибка хэндлера WebApp: {e}")
@@ -735,7 +729,13 @@ async def vpn_give_access(callback: types.CallbackQuery):
     if not customer_id or not tariff:
         await callback.answer("⚠️ Не разобрал заказ", show_alert=True)
         return
-    devices = int(parts[4]) if len(parts) > 4 and parts[4].isdigit() else tariff["devices"]
+    devices = parts[4] if len(parts) > 4 else tariff["devices"]
+    try:
+        tariff = vpn_selection(VPN_TARIFFS, tariff_id, devices)
+    except ValueError as exc:
+        await callback.answer(str(exc), show_alert=True)
+        return
+    devices = tariff["devices"]
     ref_id = parts[5] if len(parts) > 5 else "0"
     order_id = parts[6] if len(parts) > 6 else ""
 
@@ -746,7 +746,7 @@ async def vpn_give_access(callback: types.CallbackQuery):
     async with _vpn_lock:
         subs = _load_json(VPN_SUBS_FILE, {})
         rec = subs.get(str(customer_id))
-        if order_id and rec and rec.get("last_processed_order_id") == order_id:
+        if was_vpn_order_processed(rec, order_id):
             await callback.answer("⚠️ Этот заказ уже обработан", show_alert=True)
             try:
                 done_text = (callback.message.html_text or callback.message.text or "") + \
@@ -759,8 +759,9 @@ async def vpn_give_access(callback: types.CallbackQuery):
             return
 
         await callback.answer("Создаю доступ…")
-        client = XuiClient()  # все параметры из .env
+        client = None
         try:
+            client = XuiClient()  # Ошибки конфигурации тоже показываем администратору.
             await client.login()
             email = f"tg{customer_id}"
             is_first_vpn = rec is None
@@ -783,7 +784,7 @@ async def vpn_give_access(callback: types.CallbackQuery):
 
             sub_url = result["sub_url"]  # ссылка-подписка — стабильно открывается только в HAPP
             expiry_ms = result["expiry_ms"]
-            expiry_str = datetime.fromtimestamp(expiry_ms / 1000).strftime("%d.%m.%Y")
+            expiry_str = datetime.fromisoformat(vpn_expiry_iso(expiry_ms)).strftime("%d.%m.%Y")
 
             subs[str(customer_id)] = {
                 "tariff": tariff_id,
@@ -791,9 +792,14 @@ async def vpn_give_access(callback: types.CallbackQuery):
                 "sub_id": sub_id,
                 "uuid": uuid_val,
                 "email": email,
-                "expiry": datetime.fromtimestamp(expiry_ms / 1000).isoformat(timespec="seconds"),
+                "expiry": vpn_expiry_iso(expiry_ms),
                 "created": (rec.get("created") if rec else now_magadan().isoformat(timespec="seconds")),
                 "last_processed_order_id": order_id,
+                "processed_order_ids": list(dict.fromkeys([
+                    *((rec or {}).get("processed_order_ids", [])),
+                    *(([(rec or {}).get("last_processed_order_id")] if (rec or {}).get("last_processed_order_id") else [])),
+                    *([order_id] if order_id else [])
+                ])),
             }
             _save_json(VPN_SUBS_FILE, subs)
 
@@ -806,14 +812,10 @@ async def vpn_give_access(callback: types.CallbackQuery):
                             ref_rec["uuid"], ref_rec["email"], ref_rec["sub_id"],
                             VPN_REFERRAL_BONUS_DAYS, ref_rec.get("devices", 1)
                         )
-                        ref_rec["expiry"] = datetime.fromtimestamp(
-                            ref_result["expiry_ms"] / 1000
-                        ).isoformat(timespec="seconds")
+                        ref_rec["expiry"] = vpn_expiry_iso(ref_result["expiry_ms"])
                         subs[str(ref_id)] = ref_rec
                         _save_json(VPN_SUBS_FILE, subs)
-                        ref_expiry_str = datetime.fromtimestamp(
-                            ref_result["expiry_ms"] / 1000
-                        ).strftime("%d.%m.%Y")
+                        ref_expiry_str = datetime.fromisoformat(ref_rec["expiry"]).strftime("%d.%m.%Y")
                         await bot.send_message(
                             chat_id=int(ref_id),
                             text=(
@@ -882,13 +884,14 @@ async def vpn_give_access(callback: types.CallbackQuery):
             try:
                 await bot.send_message(
                     callback.from_user.id,
-                    f"⚠️ <b>Не удалось выдать VPN.</b>\nОшибка: <code>{e}</code>\n\n"
+                    f"⚠️ <b>Не удалось выдать VPN.</b>\nОшибка: <code>{escape(str(e))}</code>\n\n"
                     f"Проверь панель/доступ и попробуй ещё раз, либо выдай вручную."
                 )
             except Exception:
                 pass
         finally:
-            await client.close()
+            if client is not None:
+                await client.close()
 
 
 @dp.callback_query(F.data.startswith("st_"))
@@ -917,19 +920,32 @@ async def change_order_status(callback: types.CallbackQuery):
     }
     new_status = statuses.get(action, "Изменен")
 
+    if action not in statuses or not customer_id or not customer_id.isdigit():
+        await callback.answer("Некорректная кнопка заказа", show_alert=True)
+        return
+    existing = next((o for o in _load_json(ORDERS_FILE, []) if str(o.get("order_id")) == order_id), None)
+    current = existing.get("status", "new") if existing else "new"
+    if existing and str(existing.get("customer_id")) != customer_id:
+        await callback.answer("Данные клиента не совпадают с заказом", show_alert=True)
+        return
+    retry_settlement = action == "accept" and current == "accept" and not _load_bonuses()["settled"].get(order_id)
+    if not can_change_status(current, action) and not retry_settlement:
+        await callback.answer("Этот статус уже установлен или переход недоступен", show_alert=True)
+        return
+
     # Фиксируем заказ в журнале (для заказов из браузера это первый момент,
     # когда бот узнаёт о заказе — данные берём из текста сообщения).
     _msg_html = callback.message.html_text or callback.message.text or ""
     _bq = re.search(r'<blockquote>(.*?)</blockquote>', _msg_html, re.DOTALL)
-    _extracted_items = _bq.group(1).strip() if _bq else None
+    _extracted_items = unescape(_bq.group(1).strip()) if _bq else None
     _phone_m = re.search(r'Телефон: (?:<code>)?([^<\n]+?)(?:</code>)?$', _msg_html, re.MULTILINE)
-    _name_m = re.search(r'Указал в форме: ([^\n<]+)', _msg_html) or re.search(r'Telegram: ([^\n<]+)', _msg_html)
+    _name_m = re.search(r'Имя: ([^\n<]+)', _msg_html) or re.search(r'Указал в форме: ([^\n<]+)', _msg_html) or re.search(r'Telegram: ([^\n<]+)', _msg_html)
     _addr_m = re.search(r'Адрес: ([^\n<]+)', _msg_html)
     log_order(order_id, customer_id, total, action, new_status,
               items=_extracted_items,
-              name=_name_m.group(1).strip() if _name_m else None,
-              phone=_phone_m.group(1).strip() if _phone_m else None,
-              address=_addr_m.group(1).strip() if _addr_m else None)
+              name=unescape(_name_m.group(1).strip()) if _name_m else None,
+              phone=unescape(_phone_m.group(1).strip()) if _phone_m else None,
+              address=unescape(_addr_m.group(1).strip()) if _addr_m else None)
 
     # Добавляем клиента в базу подписчиков (чтобы попадал в рассылку)
     if customer_id:
@@ -988,7 +1004,7 @@ async def change_order_status(callback: types.CallbackQuery):
         orders = _load_json(ORDERS_FILE, [])
         rec = next((o for o in orders if str(o.get("order_id")) == str(order_id)), None)
         if rec:
-            receipt_items = rec.get("items") or "—"
+            receipt_items = escape(str(rec.get("items") or "—"))
             receipt_total = _fmt_money(rec.get("total") or total)
             receipt_date = rec.get("created_at", now_magadan().isoformat())[:10]
             receipt_text = (
@@ -1162,9 +1178,12 @@ async def cmd_start(message: types.Message):
     # Переход из Mini App «купить VPN»: /start vpn_<тариф>. Сама заявка
     # оформляется здесь, чтобы витрине не требовался токен бота.
     if payload.startswith("vpn_"):
-        tariff_id = payload[4:]
-        refusal = await create_vpn_request(message, message.from_user, tariff_id,
-                                           source="из магазина")
+        try:
+            tariff_id, devices = parse_vpn_start(payload)
+            refusal = await create_vpn_request(message, message.from_user, tariff_id,
+                                               source="из магазина", devices=devices)
+        except ValueError as exc:
+            refusal = str(exc)
         if refusal:
             # Тариф недоступен (например, пробный уже был) — не молчим,
             # объясняем и сразу показываем, что можно взять вместо него.
@@ -1173,14 +1192,14 @@ async def cmd_start(message: types.Message):
         return
 
     await message.answer(
-        f"Привет, {message.from_user.first_name}! 👋\n\n"
-        f"Добро пожаловать в <b>VAPEBAZAR PREMIUM</b> 💜\n\n"
-        f"Нажми кнопки ниже чтобы посмотреть статус и управлять скидками:",
-        reply_markup=get_features_menu()
-    )
-
-    await message.answer(
-        f"<b>Основное меню:</b>",
+        f"<b>VAPEBAZAR</b> · Магадан\n\n"
+        f"Привет, {escape(message.from_user.first_name or 'друг')}!\n"
+        f"Каталог, ваши заказы и VPN — всё здесь.\n\n"
+        f"🛍 <b>Магазин</b> — выбрать товары и оформить заказ\n"
+        f"🛡 <b>VPN</b> — подключить или продлить подписку\n"
+        f"📦 <b>Заказы</b> — проверить текущий статус\n\n"
+        f"Ежедневно 10:00–22:00 по Магадану.\n"
+        f"Поддержка: @{MANAGER_USERNAME} · Все разделы: /menu",
         reply_markup=get_main_keyboard()
     )
     if message.from_user.id in ADMINS:
@@ -1196,6 +1215,14 @@ async def cmd_start(message: types.Message):
             "├ /broadcast <i>текст</i> — рассылка всем подписчикам\n"
             "└ /broadcast_buyers <i>текст</i> — рассылка только покупателям"
         )
+
+
+@dp.message(Command("menu", "help"))
+async def cmd_menu(message: types.Message):
+    await message.answer(
+        "<b>Ваш VAPEBAZAR</b>\n\nБонусы, подписки и полезные ответы. Выберите раздел:",
+        reply_markup=get_features_menu()
+    )
 
 
 @dp.message(Command("broadcast"))
@@ -1674,16 +1701,17 @@ async def vpn_about(callback: types.CallbackQuery):
     await callback.answer()
 
 
-async def create_vpn_request(target: types.Message, user: types.User, tariff_id: str, source: str = "бот"):
+async def create_vpn_request(target: types.Message, user: types.User, tariff_id: str, source: str = "бот", devices=1):
     """Оформляет заявку на VPN: подтверждение клиенту + кнопка выдачи админам.
 
     Общая точка для кнопки в боте и для перехода из Mini App (/start vpn_<тариф>),
     чтобы витрине не нужен был токен бота для отправки заявки.
     Возвращает текст отказа или None, если заявка принята.
     """
-    tariff = VPN_TARIFFS.get(tariff_id)
-    if not tariff:
-        return "⚠️ Тариф не найден"
+    try:
+        tariff = vpn_selection(VPN_TARIFFS, tariff_id, devices)
+    except ValueError as exc:
+        return str(exc)
 
     remember_user(user)
     rec, days_left = _vpn_my_sub(user.id)
@@ -1693,29 +1721,30 @@ async def create_vpn_request(target: types.Message, user: types.User, tariff_id:
     if tariff_id == "trial" and is_renewal:
         return "Пробный тариф только для новых клиентов 🙂"
 
-    await target.answer(
+    confirmation_text = (
         f"🛡️ <b>Заявка на VPN принята!</b>\n"
         f"━━━━━━━━━━━━━━━━━━━━━━━━\n"
         f"├ Тариф: <b>{tariff['name']}</b>\n"
         f"├ Срок: <b>{tariff['days']} дн.</b>\n"
+        f"├ Устройств: <b>{tariff['devices']}</b>\n"
         f"└ К оплате: <b>{tariff['price']} ₽</b>\n\n"
         f"💳 Напиши директору @{MANAGER_USERNAME} и переведи оплату.\n"
-        f"Как подтвердит — доступ придёт сюда автоматически 🚀",
-        reply_markup=InlineKeyboardMarkup(inline_keyboard=[[
+        f"Как подтвердит — доступ придёт сюда автоматически 🚀"
+    )
+    confirmation_markup = InlineKeyboardMarkup(inline_keyboard=[[
             InlineKeyboardButton(text="💳 Оплатить — написать директору",
                                  url=f"https://t.me/{MANAGER_USERNAME}")
         ]])
-    )
 
     # Реферала берём из леджера — по нему начислится бонус обоим
     ref_id = str(_load_bonuses()["users"].get(str(user.id), {}).get("referred_by") or "0")
-    order_id = now_magadan().strftime("%m%d%H%M%S")
+    order_id = secrets.token_hex(5)
     uname = f"@{user.username}" if user.username else "скрыт"
 
     admin_text = (
         f"🛡️ <b>{'ПРОДЛЕНИЕ' if is_renewal else 'НОВЫЙ'} VPN-ЗАКАЗ</b> ({source})\n"
         f"━━━━━━━━━━━━━━━━━━━━━━━━\n\n"
-        f"👤 Клиент: {uname} · {user.first_name or ''}\n"
+        f"👤 Клиент: {uname} · {escape(user.first_name or '')}\n"
         f"🆔 ID: <code>{user.id}</code>\n\n"
         f"📦 Тариф: <b>{tariff['name']}</b> ({tariff['days']} дн., {tariff['devices']} устр.)\n"
         f"💰 К оплате: <b>{tariff['price']} ₽</b>\n"
@@ -1730,11 +1759,16 @@ async def create_vpn_request(target: types.Message, user: types.User, tariff_id:
             callback_data=f"vpn_give_{user.id}_{tariff_id}_{tariff['devices']}_{ref_id}_{order_id}")],
         [InlineKeyboardButton(text="📞 Связаться", url=f"tg://user?id={user.id}")],
     ])
+    delivered = 0
     for chat_id in ADMINS:
         try:
             await bot.send_message(chat_id=chat_id, text=admin_text, reply_markup=kb)
+            delivered += 1
         except Exception as e:
             logger.error(f"vpn request notify failed {chat_id}: {e}")
+    if not delivered:
+        return f"Не удалось передать заявку. Попробуйте позже или напишите @{MANAGER_USERNAME}."
+    await target.answer(confirmation_text, reply_markup=confirmation_markup)
     return None
 
 
@@ -1876,7 +1910,7 @@ FAQ_DATA = {
         "answer": (
             "Напиши /ref — получи реферальную ссылку.\n\n"
             "Твой друг по ней зарегистрируется → оба получите:\n"
-            "├ -50₽ на первый заказ друга\n"
+            "├ Скидка 5% на первый заказ друга\n"
             "├ Ты получишь +200 баллов\n"
             "└ Друг получит +50 баллов\n\n"
             "Без ограничений — зовите сколько хотите!"
@@ -2039,7 +2073,7 @@ async def cmd_discount(message: types.Message):
 async def cmd_ref(message: types.Message):
     """Получить реферальную ссылку и статистику приглашённых"""
     uid = str(message.from_user.id)
-    bonuses = _load_json(BONUSES_FILE, {})
+    bonuses = _load_bonuses()["users"]
     my_data = bonuses.get(uid, {})
 
     # Кодируем ID для ссылки (base36 или hex для удобства)
@@ -2054,7 +2088,7 @@ async def cmd_ref(message: types.Message):
     active_referred = 0
     for ref_id in referred:
         ref_data = bonuses.get(str(ref_id), {})
-        if ref_data.get("first_order_completed"):
+        if ref_data.get("orders", 0) > 0:
             active_referred += 1
 
     text = (
@@ -2064,7 +2098,7 @@ async def cmd_ref(message: types.Message):
         f"├ Всего приглашено: <b>{referred_count}</b>\n"
         f"├ Активных (сделали заказ): <b>{active_referred}</b>\n"
         f"└ Твоя награда за активных: <b>+{active_referred * REFERRAL_REWARD} баллов</b>\n\n"
-        f"<i>Приведи друга по ссылке — получите оба скидку 50₽ на первый заказ!</i>"
+        f"<i>Другу — скидка 5% на первый заказ, вам — {REFERRAL_REWARD} баллов после его подтверждения.</i>"
     )
 
     await message.answer(
@@ -2082,16 +2116,15 @@ async def copy_ref_link(callback: types.CallbackQuery):
     uid = str(callback.from_user.id)
     ref_url = f"https://t.me/{BOT_USERNAME}?start=ref_{callback.from_user.id}"
 
-    await callback.answer("✅ Ссылка скопирована в буфер обмена!", show_alert=False)
-    # Telegram WebApp может скопировать в буфер обмена
-    # Здесь мы просто показываем уведомление
+    await callback.message.answer(f"Ваша ссылка — нажмите, чтобы скопировать:\n<code>{ref_url}</code>")
+    await callback.answer()
 
 
 @dp.message(Command("partner"))
 async def cmd_partner(message: types.Message):
     """Партнерская программа — заработок на рефералах"""
     uid = str(message.from_user.id)
-    bonuses = _load_json(BONUSES_FILE, {})
+    bonuses = _load_bonuses()["users"]
     my_data = bonuses.get(uid, {})
 
     ref_url = f"https://t.me/{BOT_USERNAME}?start=ref_{message.from_user.id}"
@@ -2118,7 +2151,7 @@ async def cmd_partner(message: types.Message):
         f"├ Ты получаешь личную реферальную ссылку\n"
         f"├ Делишься ей в сторис, чатах, постах\n"
         f"├ За каждого вступившего: <b>+200 баллов</b> (первая покупка)\n"
-        f"└ Плюс <b>5% от суммы первого заказа</b> приглашённого\n\n"
+        f"└ Друг получает <b>скидку 5%</b> на первый заказ\n\n"
         f"📊 <b>Твоя статистика:</b>\n"
         f"├ Уникальных переходов: <b>{referred_count}</b>\n"
         f"├ Активных клиентов: <b>{active_referred}</b>\n"
@@ -2154,9 +2187,10 @@ async def copy_partner_link(callback: types.CallbackQuery):
 
 @dp.message(Command("bonus"))
 async def cmd_bonus(message: types.Message):
-    if message.from_user.id not in ADMINS:
-        return
     args = (message.text or "").split()
+    if message.from_user.id not in ADMINS or len(args) == 1:
+        await show_my_bonuses(message)
+        return
     if len(args) < 2:
         await message.answer(
             "💎 <b>Баллы клиента</b>\n\n"
@@ -2369,7 +2403,7 @@ async def show_my_bonuses(message: types.Message):
 @dp.message(F.text == "🎁 Пригласить друга")
 async def show_referral_panel(message: types.Message):
     uid = message.from_user.id
-    link = f"https://t.me/{BOT_USERNAME}?startapp=ref_{uid}"
+    link = f"https://t.me/{BOT_USERNAME}?start=ref_{uid}"
     st = referral_stats(uid)
     share_kb = InlineKeyboardMarkup(inline_keyboard=[[
         InlineKeyboardButton(
@@ -2863,13 +2897,13 @@ async def handle_menu_buttons(callback: types.CallbackQuery):
             await show_vpn_offer(callback.message, callback.from_user)
 
         elif cmd_name == "cmd_bonus":
-            bonuses = _load_json(BONUSES_FILE, {})
-            user = bonuses.get(uid, {})
+            bonuses = _load_bonuses()
+            user = bonuses["users"].get(uid, {})
             balance = user.get("balance", 0)
             await callback.message.answer(
                 f"💎 <b>Твой баланс: {balance} баллов</b>\n\n"
                 f"1 балл = 1₽ скидка при заказе\n"
-                f"Минимум для использования: 100 баллов",
+                f"Баллами можно оплатить до 20% стоимости товаров",
                 reply_markup=get_main_keyboard()
             )
 
@@ -2953,14 +2987,14 @@ async def handle_menu_buttons(callback: types.CallbackQuery):
                 f"🎁 <b>Твоя реферальная ссылка</b>\n\n"
                 f"<code>{ref_url}</code>\n\n"
                 f"Друг по ссылке:\n"
-                f"├ Получит -50₽ на первый заказ\n"
+                f"├ Получит скидку 5% на первый заказ\n"
                 f"└ Ты получишь +200 баллов"
             )
             await callback.message.answer(text, reply_markup=get_main_keyboard())
 
         elif cmd_name == "cmd_partner":
             uid = str(callback.from_user.id)
-            bonuses = _load_json(BONUSES_FILE, {})
+            bonuses = _load_bonuses()["users"]
             my_data = bonuses.get(uid, {})
             ref_url = f"https://t.me/{BOT_USERNAME}?start=ref_{callback.from_user.id}"
 
@@ -3048,6 +3082,7 @@ async def handle_text_buttons(message: types.Message):
         "💎 Баллы": "bonus",
         "👑 VIP": "vip",
         "🎁 Рефереллы": "ref",
+        "🎁 Рефералы": "ref",
         "📦 Заказы": "orders",
         "❓ FAQ": "faq",
         "📞 Контакты": "contacts",
@@ -3062,13 +3097,13 @@ async def handle_text_buttons(message: types.Message):
                 await show_vpn_offer(message)
 
             elif handler == "bonus":
-                bonuses = _load_json(BONUSES_FILE, {})
-                user = bonuses.get(uid, {})
+                bonuses = _load_bonuses()
+                user = bonuses["users"].get(uid, {})
                 balance = user.get("balance", 0)
                 await message.answer(
                     f"💎 <b>Твой баланс: {balance} баллов</b>\n\n"
                     f"1 балл = 1₽ скидка при заказе\n"
-                    f"Минимум для использования: 100 баллов",
+                    f"Баллами можно оплатить до 20% стоимости товаров",
                     reply_markup=get_main_keyboard()
                 )
 
@@ -3102,7 +3137,7 @@ async def handle_text_buttons(message: types.Message):
                     f"🎁 <b>Твоя реферальная ссылка</b>\n\n"
                     f"<code>{ref_url}</code>\n\n"
                     f"Друг по ссылке:\n"
-                    f"├ Получит -50₽ на первый заказ\n"
+                    f"├ Получит скидку 5% на первый заказ\n"
                     f"└ Ты получишь +200 баллов",
                     reply_markup=get_main_keyboard()
                 )
