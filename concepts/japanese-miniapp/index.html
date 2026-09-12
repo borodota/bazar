@@ -1,1 +1,32 @@
-<!doctype html><html lang="ru"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover"><meta name="color-scheme" content="dark light"><meta name="description" content="Самостоятельный концепт интерфейса VapeBazar"><title>VapeBazar — японский концепт</title><link rel="stylesheet" href="style.css"></head><body><div class="app"><header><a href="#home" class="brand"><i>VB</i><span>VAPEBAZAR<small>Японская коллекция · концепт</small></span></a><a class="avatar" href="#profile" aria-label="Профиль">◉</a></header><main id="screen" tabindex="-1"></main><nav aria-label="Главная навигация"><a href="#home" data-tab="home"><span>⌂</span>Главная</a><a href="#catalog" data-tab="catalog"><span>▦</span>Каталог</a><a href="#vpn" data-tab="vpn"><span>◇</span>VPN</a><a href="#profile" data-tab="profile"><span>◉</span>Профиль</a></nav><p class="demo">Демонстрационный макет · без реальных заказов</p></div><dialog id="detail"><button class="close" aria-label="Закрыть">×</button><div id="detail-body"></div></dialog><script src="app.js"></script></body></html>
+<!doctype html>
+<html lang="ru">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, interactive-widget=resizes-visual">
+  <meta name="color-scheme" content="dark light">
+  <meta name="theme-color" content="#090a10">
+  <meta name="description" content="VapeBazar — самостоятельный интерактивный концепт техники и VPN.">
+  <title>VapeBazar · Японская ночь</title>
+  <link rel="preload" as="image" href="assets/japan.webp">
+  <link rel="stylesheet" href="style.css">
+  <script src="app.js" defer></script>
+</head>
+<body>
+  <a class="skip-link" href="#screen">К содержимому</a>
+  <div class="app">
+    <header class="app-header">
+      <a class="brand" href="#home" aria-label="VapeBazar — главная"><span class="brand-mark" aria-hidden="true">VB</span><span>VAPEBAZAR<small>Техника и сервисы</small></span></a>
+      <a class="icon-button" href="#settings" aria-label="Настройки"><svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"><circle cx="5" cy="12" r="1"/><circle cx="12" cy="12" r="1"/><circle cx="19" cy="12" r="1"/></svg></a>
+    </header>
+    <main id="screen" tabindex="-1"></main>
+    <footer class="demo-footer">Концепт · без оплаты и реальных заказов</footer>
+    <nav id="navigation" aria-label="Основная навигация"></nav>
+  </div>
+  <dialog id="detail" aria-labelledby="dialog-title">
+    <div class="dialog-top"><span class="eyebrow">VAPEBAZAR</span><button class="icon-button" data-action="close-dialog" aria-label="Закрыть окно">×</button></div>
+    <div id="detail-body"></div>
+  </dialog>
+  <div id="toast" class="toast" role="status" aria-live="polite"></div>
+  <noscript><p class="panel">Для интерактивного макета включите JavaScript в браузере.</p></noscript>
+</body>
+</html>
