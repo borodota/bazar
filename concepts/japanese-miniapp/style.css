@@ -143,4 +143,31 @@ body.keyboard-open nav{display:none}
 body.keyboard-open .product-actions{position:static}
 @media(min-width:760px){body{background:linear-gradient(#090711a8,#090711ef),url("assets/japan.webp") center/cover fixed}.app{border-inline:1px solid #554064;box-shadow:0 0 100px #0008}.app-header{padding-top:22px}}
 @media(max-width:359px){:root{--gutter:12px}.hero{padding:18px;min-height:300px}.hero h1{font-size:2.4rem}.card-body{padding:10px}.shortcuts{grid-template-columns:1fr}.brand{letter-spacing:1px}.segments button{padding:10px 8px}.vpn-card{gap:10px}.vpn-card .shield{width:38px}}
-@media(prefers-reduced-motion:no-preference){body:not(.reduce-motion) button,body:not(.reduce-motion) a{transition:background .18s,border-color .18s,transform .18s}body:not(.reduce-motion) .primary:active{transform:scale(.98)}body:not(.reduce-motion) .skeleton{animation:shimmer 1.6s ease-in-out infinite}@keyframes shimmer{50%{opacity:.5}}body:not(.reduce-motion) main{animation:appear .22s ease}@keyframes appear{from{opacity:.6}to{opacity:1}}}
+@media(prefers-reduced-motion:no-preference){body:not(.reduce-motion) button,body:not(.reduce-motion) a{transition:background .18s,border-color .18s,transform .18s}body:not(.reduce-motion) .primary:active{transform:scale(.98)}body:not(.reduce-motion) .skeleton{animation:shimmer 1.6s ease-in-out infinite}@keyframes shimmer{50%{opacity:.5}}@keyframes appear{from{opacity:.6}to{opacity:1}}}
+
+/* FAQ and support: native controls; short, interruptible motion. */
+.faq h2{margin-bottom:8px}
+.faq summary{display:flex;align-items:center;justify-content:space-between;gap:14px;list-style:none;padding:18px 0;font-weight:600}
+.faq summary::-webkit-details-marker{display:none}
+.faq-chevron{width:18px;height:18px;color:var(--accent)}
+.faq details[open] .faq-chevron{transform:rotate(90deg)}
+.faq-answer p{padding:0 0 18px;margin:0;line-height:1.65}
+.support-topics .row{text-align:left;justify-content:flex-start}
+.field-label{display:block;margin:16px 0 8px;font-weight:600;font-size:.95rem}
+.support-input{display:block;width:100%;min-height:48px;border:1px solid var(--line);border-radius:12px;padding:12px;background:var(--bg);color:var(--text);font:inherit}
+textarea.support-input{resize:vertical;min-height:140px;max-height:40dvh}
+.support-input:focus{border-color:var(--accent)}
+#support-status{margin-bottom:0}
+@media(prefers-reduced-motion:no-preference){
+ body:not(.reduce-motion) .faq-chevron{transition:transform .22s ease}
+ body:not(.reduce-motion) .switch::before{transition:left .2s ease}
+ body:not(.reduce-motion) .switch{transition:background-color .2s ease}
+ body:not(.reduce-motion) .card,body:not(.reduce-motion) .shortcut{transition:transform .2s ease,border-color .2s ease}
+ body:not(.reduce-motion) .outline:active,body:not(.reduce-motion) .shortcut:active,body:not(.reduce-motion) .heart:active{transform:scale(.97)}
+ body:not(.reduce-motion) dialog[open]::backdrop{animation:backdrop-in .2s ease}
+ @keyframes backdrop-in{from{background:#03030900}to{background:#030309c9}}
+}
+@media(hover:hover) and (prefers-reduced-motion:no-preference){
+ body:not(.reduce-motion) .card:hover{transform:translateY(-2px);border-color:var(--accent)}
+ body:not(.reduce-motion) .primary:hover{filter:brightness(1.08)}
+}

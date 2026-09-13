@@ -108,9 +108,98 @@ function settingsPage(){
 function guidePage(){
   return back('myvpn','Мой VPN')+hero('Как подключиться','Выберите устройство')+'<div class="segments" aria-label="Устройство">'+['iOS','Android','Компьютер'].map(p=>'<button data-platform="'+p+'" aria-pressed="'+(platform===p)+'">'+p+'</button>').join('')+'</div><section class="panel"><h2 id="platform-title">Инструкция · '+platform+'</h2><ol class="steps"><li><div><h3>Приложение</h3><p>Название клиента пока не задано.</p></div></li><li><div><h3>Настройки подключения</h3><p>Данные появятся после подключения сервиса.</p></div></li><li><div><h3>Проверка соединения</h3><p>Порядок проверки будет добавлен.</p></div></li></ol><p class="notice">Это макет инструкции, не готовое руководство.</p></section><div class="stack">'+linkButton('Помощь с настройкой','support')+linkButton('Вернуться в Мой VPN','myvpn',true)+'</div>';
 }
+const supportTopics = {
+  'Вопрос о технике': 'Укажите модель устройства, нужный вариант и что хотите уточнить: совместимость, комплектацию или характеристики.',
+  'Мой заказ': 'Если вопрос о реальном заказе, подготовьте его номер. Заказы действующего магазина в этом макете не отображаются.',
+  'Настройка VPN': 'Укажите устройство, операционную систему и на каком шаге возник вопрос. Пароли и ключи доступа присылать не нужно.',
+  'Другой вопрос': 'Опишите, что вы хотели сделать и что получилось. Если появилась ошибка, добавьте её текст.',
+  'Общий вопрос': 'Опишите ваш вопрос — можно уточнить тему в поле ниже.'
+};
+const supportDrafts = new Map();
+let supportTopic = 'Общий вопрос';
+const faqItems = [
+  ['Как выбрать технику?', 'Откройте каталог, выберите категорию и нажмите «Подробнее». На странице товара можно переключить демонстрационные варианты. Для уточнения модели и совместимости выберите тему «Вопрос о технике».'],
+  ['Как найти и сохранить товар?', 'Введите название в поиске или выберите категорию. Сердце на карточке добавляет товар в избранное. Сохранённые товары доступны через профиль в этом браузере.'],
+  ['Почему нет цены и наличия?', 'Это отдельный концепт. Цены, наличие и характеристики конкретных моделей здесь не подключены. Мы не показываем демонстрационные значения как действующие условия.'],
+  ['Где мой заказ?', 'Раздел «Мои заказы» находится в профиле. Макет не подключён к заказам основного магазина, поэтому реальные покупки здесь не отображаются.'],
+  ['Как выбрать VPN?', 'В разделе VPN выберите количество устройств и срок, затем нажмите «Посмотреть выбор». Откроется сводка. В макете это не оформляет подписку и не списывает деньги.'],
+  ['Где инструкция подключения VPN?', 'Откройте «Мой VPN» → «Как подключиться» и выберите устройство. Пока сервис не подключён, инструкция содержит пояснения о недостающих настройках, а не рабочие ключи доступа.'],
+  ['Как отключить анимацию?', 'В профиле откройте «Настройки» и включите «Уменьшить анимацию». Приложение также учитывает системную настройку уменьшения движения.'],
+  ['Что происходит с моим вопросом?', 'В макете можно подготовить и скопировать черновик вопроса. Он никому не отправляется. Текст сохраняется только в памяти открытой страницы и исчезает после её перезагрузки.']
+];
 function supportPage(){
-  return back()+hero('Поможем<br>разобраться','Выберите тему обращения','vpn-hero')+'<section class="panel rows">'+[['Вопрос о технике','laptop'],['Мой заказ','box'],['Настройка VPN','shield'],['Другой вопрос','chat']].map(([title,name])=>'<button class="row wide text-button" data-support="'+title+'">'+icon(name)+'<span class="row-text">'+title+'</span>'+icon('chevron','chevron')+'</button>').join('')+'</section><button class="primary wide" data-support="Общий вопрос">'+icon('chat')+'Написать в поддержку</button><p class="small">Чат в концепте не подключён. Сообщения не отправляются.</p><section class="panel"><h2>Частые вопросы</h2><details><summary>Можно оформить заказ?</summary><p>Это самостоятельный макет. Здесь можно изучить интерфейс, но оформление и оплата не подключены.</p></details><details><summary>Откуда изображения товаров?</summary><p>Используются иллюстрации категорий из проекта. Они не гарантируют внешний вид или комплектацию конкретной модели.</p></details><details><summary>Где настройки VPN?</summary><p>Инструкция и данные подключения появятся после настройки сервиса.</p></details></section>';
+  return back()+hero('Поможем<br>разобраться','Ответы и помощь в одном месте','vpn-hero')+
+    '<div class="section-heading"><h2>Выберите тему</h2></div><section class="panel rows support-topics">'+
+    Object.entries(supportTopics).filter(([title])=>title!=='Общий вопрос').map(([title,hint],i)=>
+      '<button class="row wide text-button" data-support="'+safe(title)+'">'+icon(['laptop','box','shield','chat'][i])+'<span class="row-text">'+safe(title)+'</span>'+icon('chevron','chevron')+'</button>').join('')+
+    '</section><button class="primary wide" data-support="Общий вопрос">'+icon('chat')+'Подготовить вопрос</button><p class="small">Черновик можно скопировать. Чат в макете не подключён.</p>'+
+    '<section class="panel faq"><h2>Частые вопросы</h2><p class="small">Нажмите на вопрос, чтобы прочитать ответ.</p>'+
+    faqItems.map(([q,a])=>'<details><summary>'+safe(q)+icon('chevron','faq-chevron')+'</summary><div class="faq-answer"><p>'+safe(a)+'</p></div></details>').join('')+'</section>';
 }
+function supportComposer(topic){
+  supportTopic=Object.hasOwn(supportTopics,topic)?topic:'Общий вопрос';
+  modal('Ваш вопрос','<form id="support-form"><label class="field-label" for="support-topic">Тема обращения</label><select id="support-topic" class="support-input">'+
+    Object.keys(supportTopics).map(t=>'<option '+(t===supportTopic?'selected':'')+'>'+safe(t)+'</option>').join('')+
+    '</select><p id="support-hint" class="small">'+safe(supportTopics[supportTopic])+'</p><label class="field-label" for="support-message">Что хотите уточнить?</label><textarea id="support-message" class="support-input" rows="5" maxlength="1500" required aria-describedby="support-hint support-count" placeholder="Опишите вопрос своими словами…">'+safe(supportDrafts.get(supportTopic)||'')+'</textarea><p id="support-count" class="small">'+(supportDrafts.get(supportTopic)||'').length+' / 1500</p><button class="primary wide" type="submit">Скопировать вопрос'+icon('arrow')+'</button><p id="support-status" class="notice" role="status">Это черновик. Сообщение не отправляется.</p></form>');
+}
+async function copySupportDraft(){
+  const input=$('#support-message'),status=$('#support-status');
+  const message=input.value.trim();
+  if(!message){input.setCustomValidity('Напишите вопрос перед копированием.');input.reportValidity();return;}
+  input.setCustomValidity('');
+  supportDrafts.set(supportTopic,input.value);
+  const text='Тема: '+supportTopic+'\n\n'+message;
+  try{
+    if(!window.navigator?.clipboard?.writeText)throw new Error('Clipboard unavailable');
+    await window.navigator.clipboard.writeText(text);
+    status.textContent='Вопрос скопирован. Вставьте его в нужный чат. Ничего не отправлено.';
+  }catch(_){
+    input.focus();input.select();
+    status.textContent='Автокопирование недоступно. Текст выделен — скопируйте его вручную. Ничего не отправлено.';
+  }
+}
+const motionPreference=window.matchMedia('(prefers-reduced-motion: reduce)');
+const activeMotions=new Set();
+const disclosureMotions=new WeakMap();
+function motionAllowed(){return !reduceMotion&&!motionPreference.matches;}
+function enterMotion(node){
+  if(!node)return;
+  node.getAnimations?.().forEach(a=>a.cancel());
+  if(!motionAllowed()||typeof node.animate!=='function')return;
+  const a=node.animate([{opacity:.25,transform:'translateY(8px)'},{opacity:1,transform:'translateY(0)'}],{duration:220,easing:'cubic-bezier(.2,.7,.2,1)'});
+  activeMotions.add(a);
+  const done=()=>activeMotions.delete(a);
+  a.onfinish=done;a.oncancel=done;
+}
+function finishMotions(){
+  if(!motionAllowed())[...activeMotions].forEach(a=>{try{a.finish();}catch(_){a.cancel();}});
+}
+function toggleDisclosure(details,summary){
+  const existing=disclosureMotions.get(details);
+  const opening=existing?!existing.opening:!details.open;
+  const start=details.getBoundingClientRect().height;
+  if(existing){existing.animation.onfinish=null;existing.animation.oncancel=null;existing.animation.cancel();activeMotions.delete(existing.animation);}
+  details.style.height='';details.style.overflow='';
+  if(!motionAllowed()||typeof details.animate!=='function'){details.open=opening;disclosureMotions.delete(details);return;}
+  // Measure natural closed/open sizes; native details remains keyboard accessible.
+  details.open=false;
+  const collapsed=details.getBoundingClientRect().height;
+  details.open=true;
+  const expanded=details.getBoundingClientRect().height;
+  details.style.overflow='hidden';
+  const animation=details.animate([{height:start+'px'},{height:(opening?expanded:collapsed)+'px'}],{duration:220,easing:'cubic-bezier(.2,.7,.2,1)'});
+  disclosureMotions.set(details,{animation,opening});
+  activeMotions.add(animation);
+  const finish=()=>{if(disclosureMotions.get(details)?.animation!==animation)return;details.open=opening;details.style.height='';details.style.overflow='';disclosureMotions.delete(details);activeMotions.delete(animation);};
+  animation.onfinish=finish;animation.oncancel=finish;
+}
+document.addEventListener('click',e=>{
+  const summary=e.target.closest('summary');
+  if(!summary||!summary.parentElement.matches('details'))return;
+  e.preventDefault();
+  toggleDisclosure(summary.parentElement,summary);
+});
+motionPreference.addEventListener('change',finishMotions);
 function view(page,id){
   switch(page){
     case 'home':return '<section class="hero"><span class="brand-mark large" aria-hidden="true">VB</span><h1>Твой Bazar</h1><p>Техника, сервисы<br>и поддержка</p>'+linkButton('Открыть каталог','catalog')+'</section>'+searchForm(true)+'<div class="chips">'+[['Смартфоны','phone'],['Техника','laptop'],['Аксессуары','headphones']].map(([label,name])=>'<button data-category="'+label+'">'+icon(name)+' '+label+'</button>').join('')+'</div><section class="panel vpn-card">'+icon('shield','shield')+'<div><h2>VapeBazar VPN</h2><p class="muted">Подключение для твоих устройств</p>'+linkButton('Посмотреть тарифы','vpn')+'</div></section><div class="section-heading"><h2>Техника и устройства</h2><a href="#catalog">Все'+icon('chevron')+'</a></div>'+grid([products[0],products[2]])+supportBlock();
@@ -137,23 +226,27 @@ function render(focus=false){
   $('#navigation').innerHTML=navItems.map(([key,label,name])=>'<a href="#'+key+'" '+(tab===key?'aria-current="page"':'')+'>'+icon(name)+'<span>'+label+'</span></a>').join('');
   document.title=(titles[page]||'Страница')+' · VapeBazar';
   if(page==='catalog')results();
-  if(focus)$('#screen').focus({preventScroll:true});
+  if(focus){$('#screen').focus({preventScroll:true});enterMotion($('#screen'));}
 }
 function modal(title,body){
   $('#detail-body').innerHTML='<h2 id="dialog-title">'+safe(title)+'</h2>'+body;
   if(!$('#detail').open)$('#detail').showModal();
+  enterMotion($('#detail-body'));
 }
 function setPressed(button,selector){button.parentElement.querySelectorAll(selector).forEach(b=>b.setAttribute('aria-pressed',String(b===button)));}
 function resetFilters(){category='Все';filterSaved=false;filterSort='default';}
 document.addEventListener('submit',e=>{
+  if(e.target.id==='support-form'){e.preventDefault();void copySupportDraft();return;}
   if(e.target.matches('[data-search-form]')){e.preventDefault();query=$('#search').value;location.hash='catalog';if(currentPage==='catalog')results();}
 });
 document.addEventListener('input',e=>{
+  if(e.target.id==='support-message'){e.target.setCustomValidity('');supportDrafts.set(supportTopic,e.target.value);$('#support-count').textContent=e.target.value.length+' / 1500';$('#support-status').textContent='Это черновик. Сообщение не отправляется.';}
   if(e.target.id==='search'){query=e.target.value;if(currentPage==='catalog')results();}
 });
 document.addEventListener('change',e=>{
+  if(e.target.id==='support-topic'){supportDrafts.set(supportTopic,$('#support-message').value);supportTopic=e.target.value;$('#support-hint').textContent=supportTopics[supportTopic];$('#support-message').value=supportDrafts.get(supportTopic)||'';$('#support-message').setCustomValidity('');$('#support-count').textContent=$('#support-message').value.length+' / 1500';$('#support-status').textContent='Это черновик. Сообщение не отправляется.';}
   if(e.target.id==='theme'){theme=e.target.value;applyPreferences();savePreferences();}
-  if(e.target.id==='motion'){reduceMotion=e.target.checked;applyPreferences();savePreferences();}
+  if(e.target.id==='motion'){reduceMotion=e.target.checked;applyPreferences();savePreferences();finishMotions();}
 });
 document.addEventListener('click',e=>{
   const anchor=e.target.closest('[data-product]');
@@ -184,7 +277,7 @@ document.addEventListener('click',e=>{
   if(b.dataset.photo!==undefined){
     const p=products.find(p=>p.id===route().id);if(p){productImage=Number(b.dataset.photo);$('#product-image').src=productImage?p.alternate:p.image;setPressed(b,'[data-photo]');}
   }
-  if(b.dataset.support)modal(b.dataset.support,'<p>Тема обращения: '+safe(b.dataset.support)+'.</p><p class="notice">Чат в макете не подключён. Сообщения никуда не отправляются.</p>');
+  if(b.dataset.support)supportComposer(b.dataset.support);
   switch(b.dataset.action){
     case 'close-dialog':$('#detail').close();break;
     case 'clear-search':query='';if($('#search')){$('#search').value='';$('#search').focus();}if(currentPage==='empty')location.hash='catalog';else results();break;
