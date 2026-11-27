@@ -274,3 +274,7 @@ body.storefront[data-appearance="light"][data-theme] { --accent-rgb:255,180,58; 
 .storefront .profile-avatar img { border-radius:inherit; }
 .storefront .product-detail-title { font-family:'Geologica',sans-serif; font-size:24px; }
 @media(min-width:1024px) { .storefront .cart-bar { bottom:20px !important; } .storefront .drawer { max-height:calc(100% - 48px); } }
+
+@supports (overflow-x: clip) {
+    body.storefront { overflow-x: clip; }
+}

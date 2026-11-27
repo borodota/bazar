@@ -60,7 +60,7 @@ window.VAPE_PRODUCTS = [
     },
     {
         id: "pod_knight_aio",
-        image: "catalog-art/pod.webp",
+        image: "product-shot/pod.svg",
         illustration: true,
         name: "KNIGHT AIO 90W",
         brand: "Rincoe",
@@ -91,7 +91,7 @@ window.VAPE_PRODUCTS = [
     // ================= ЖИДКОСТИ =================
     {
         id: "liq_anarhia_v2_brand",
-        image: "catalog-art/bottle.webp",
+        image: "product-shot/liquid.svg",
         illustration: true,
         name: "Жидкость Анархия v2",
         brand: "АНАРХИЯ",
@@ -114,7 +114,7 @@ window.VAPE_PRODUCTS = [
     },
     {
         id: "liq_podonki",
-        image: "catalog-art/bottle.webp",
+        image: "product-shot/liquid.svg",
         illustration: true,
         name: "Жидкость Podonki Critical",
         brand: "Podonki",
@@ -133,7 +133,7 @@ window.VAPE_PRODUCTS = [
     },
     {
         id: "liq_narcoz",
-        image: "catalog-art/bottle.webp",
+        image: "product-shot/liquid.svg",
         illustration: true,
         name: "Жидкость Narcos 5%",
         brand: "NARCOZ",
@@ -150,7 +150,7 @@ window.VAPE_PRODUCTS = [
     },
     {
         id: "liq_inflave",
-        image: "catalog-art/bottle.webp",
+        image: "product-shot/liquid.svg",
         illustration: true,
         name: "Жидкость INFLAVE & BUBBLE",
         brand: "INFLAVE",
@@ -169,7 +169,7 @@ window.VAPE_PRODUCTS = [
     },
     {
         id: "liq_annima_love",
-        image: "catalog-art/bottle.webp",
+        image: "product-shot/liquid.svg",
         illustration: true,
         name: "Жидкость Annima love (Sour/Sweet/2%)",
         brand: "Annima",
@@ -187,7 +187,7 @@ window.VAPE_PRODUCTS = [
     },
     {
         id: "liq_oggo_premium",
-        image: "catalog-art/bottle.webp",
+        image: "product-shot/liquid.svg",
         illustration: true,
         name: "Жидкость OGGO premium",
         brand: "OGGO",
@@ -203,7 +203,7 @@ window.VAPE_PRODUCTS = [
     // ================= ОДНОРАЗКИ =================
     {
         id: "dis_pafos_20000",
-        image: "catalog-art/disposable.webp",
+        image: "product-shot/bar.svg",
         illustration: true,
         name: "PAFOS 20000",
         brand: "PAFOS",
@@ -219,7 +219,7 @@ window.VAPE_PRODUCTS = [
     },
     {
         id: "dis_lost_mary_30000",
-        image: "catalog-art/disposable.webp",
+        image: "product-shot/bar.svg",
         illustration: true,
         name: "LOST MARY MO 30000",
         brand: "LOST MARY",
@@ -234,7 +234,7 @@ window.VAPE_PRODUCTS = [
     },
     {
         id: "dis_mfu_40000",
-        image: "catalog-art/disposable.webp",
+        image: "product-shot/bar.svg",
         illustration: true,
         name: "MFU 40000 (Max Puffs)",
         brand: "MFU",
@@ -248,7 +248,7 @@ window.VAPE_PRODUCTS = [
     },
     {
         id: "dis_rick_morty_25000",
-        image: "catalog-art/disposable.webp",
+        image: "product-shot/bar.svg",
         illustration: true,
         name: "RICK AND MORTY 25000",
         brand: "RICK AND MORTY",
@@ -264,7 +264,7 @@ window.VAPE_PRODUCTS = [
     // ================= РАСХОДНИКИ =================
     {
         id: "isp_geekvape_b",
-        image: "catalog-art/coil.webp",
+        image: "product-shot/coil.svg",
         illustration: true,
         name: "Испаритель GEEK VAPE B-series",
         brand: "GeekVape",
@@ -278,7 +278,7 @@ window.VAPE_PRODUCTS = [
     },
     {
         id: "isp_manto_015",
-        image: "catalog-art/coil.webp",
+        image: "product-shot/coil.svg",
         illustration: true,
         name: "Испаритель MANTO AIO (0.15Ω)",
         brand: "Rincoe",
@@ -292,7 +292,7 @@ window.VAPE_PRODUCTS = [
     },
     {
         id: "isp_smoant_k",
-        image: "catalog-art/coil.webp",
+        image: "product-shot/coil.svg",
         illustration: true,
         name: "Испарители Smoant K1 / K5",
         brand: "Smoant",
@@ -390,7 +390,7 @@ window.VAPE_PRODUCTS = [
     },
     {
         id: "rba_base",
-        image: "catalog-art/deck.webp",
+        image: "product-shot/rba.svg",
         illustration: true,
         name: "Обслуживаемая RBA база",
         brand: "Универсал",
@@ -404,7 +404,7 @@ window.VAPE_PRODUCTS = [
     },
     {
         id: "battery_18650",
-        image: "catalog-art/cell.webp",
+        image: "product-shot/battery.svg",
         illustration: true,
         name: "Аккумулятор АКБ 18650",
         brand: "🔋 БАТАРЕИ",
@@ -420,7 +420,7 @@ window.VAPE_PRODUCTS = [
     // ================= ТАБАК / СНЮС =================
     {
         id: "snus_cataclysm",
-        image: "catalog-art/tin.webp",
+        image: "product-shot/snus.svg",
         illustration: true,
         name: "Снюс Cataclysm",
         brand: "Cataclysm",
@@ -490,7 +490,7 @@ window.VAPE_PRODUCTS = [
     // ----- MacBook -----
     {
         id: "mac_air13_m3_256",
-        image: "catalog-art/laptop.webp",
+        image: "product-shot/laptop.svg",
         illustration: true,
         name: "MacBook Air 13″ M3 256 ГБ",
         brand: "Apple",
@@ -504,7 +504,7 @@ window.VAPE_PRODUCTS = [
     },
     {
         id: "mac_air15_m3_256",
-        image: "catalog-art/laptop.webp",
+        image: "product-shot/laptop.svg",
         illustration: true,
         name: "MacBook Air 15″ M3 256 ГБ",
         brand: "Apple",
@@ -518,7 +518,7 @@ window.VAPE_PRODUCTS = [
     },
     {
         id: "mac_air13_m5_1tb",
-        image: "catalog-art/laptop.webp",
+        image: "product-shot/laptop.svg",
         illustration: true,
         name: "MacBook Air 13″ M5 24/1 ТБ",
         brand: "Apple",
@@ -532,7 +532,7 @@ window.VAPE_PRODUCTS = [
     },
     {
         id: "mac_13_8_512",
-        image: "catalog-art/laptop.webp",
+        image: "product-shot/laptop.svg",
         illustration: true,
         name: "MacBook neo 13″ 8/512 ГБ (англ.)",
         brand: "Apple",
@@ -548,7 +548,7 @@ window.VAPE_PRODUCTS = [
     // ----- AirPods -----
     {
         id: "airpods_pro3",
-        image: "catalog-art/earbuds.webp",
+        image: "product-shot/buds.svg",
         illustration: true,
         name: "AirPods Pro 3",
         brand: "Apple",
@@ -562,7 +562,7 @@ window.VAPE_PRODUCTS = [
     },
     {
         id: "airpods_4",
-        image: "catalog-art/earbuds.webp",
+        image: "product-shot/buds.svg",
         illustration: true,
         name: "AirPods 4",
         brand: "Apple",
@@ -578,7 +578,7 @@ window.VAPE_PRODUCTS = [
     // ----- Apple Watch -----
     {
         id: "watch_se3_40",
-        image: "catalog-art/watch.webp",
+        image: "product-shot/watch.svg",
         illustration: true,
         name: "Apple Watch SE 3 40 мм",
         brand: "Apple",
@@ -592,7 +592,7 @@ window.VAPE_PRODUCTS = [
     },
     {
         id: "watch_se3_43",
-        image: "catalog-art/watch.webp",
+        image: "product-shot/watch.svg",
         illustration: true,
         name: "Apple Watch SE 3 43 мм",
         brand: "Apple",
@@ -606,7 +606,7 @@ window.VAPE_PRODUCTS = [
     },
     {
         id: "watch_s11_42",
-        image: "catalog-art/watch.webp",
+        image: "product-shot/watch.svg",
         illustration: true,
         name: "Apple Watch Series 11 42 мм",
         brand: "Apple",
@@ -620,7 +620,7 @@ window.VAPE_PRODUCTS = [
     },
     {
         id: "watch_ultra2",
-        image: "catalog-art/watch-ultra.webp",
+        image: "product-shot/watch.svg",
         illustration: true,
         name: "Apple Watch Ultra 2",
         brand: "Apple",
@@ -636,7 +636,7 @@ window.VAPE_PRODUCTS = [
     // ----- Аксессуары Apple -----
     {
         id: "acc_charger_20w",
-        image: "catalog-art/charger.webp",
+        image: "product-shot/charger.svg",
         illustration: true,
         name: "Зарядка Apple 20W USB-C",
         brand: "Apple",
@@ -650,7 +650,7 @@ window.VAPE_PRODUCTS = [
     },
     {
         id: "acc_case_iphone",
-        image: "catalog-art/case.webp",
+        image: "product-shot/case.svg",
         illustration: true,
         name: "Чехол для iPhone 15/16/17",
         brand: "Apple",
@@ -666,7 +666,7 @@ window.VAPE_PRODUCTS = [
     // ----- Samsung -----
     {
         id: "samsung_s25_256",
-        image: "catalog-art/phone.webp",
+        image: "product-shot/phone.svg",
         illustration: true,
         name: "Samsung Galaxy S25 12/256 ГБ",
         brand: "Samsung",
@@ -680,7 +680,7 @@ window.VAPE_PRODUCTS = [
     },
     {
         id: "samsung_s25_ultra_256",
-        image: "catalog-art/phone.webp",
+        image: "product-shot/phone.svg",
         illustration: true,
         name: "Samsung Galaxy S25 Ultra 12/256 ГБ",
         brand: "Samsung",
@@ -694,7 +694,7 @@ window.VAPE_PRODUCTS = [
     },
     {
         id: "samsung_s25_ultra_512",
-        image: "catalog-art/phone.webp",
+        image: "product-shot/phone.svg",
         illustration: true,
         name: "Samsung Galaxy S25 Ultra 12/512 ГБ",
         brand: "Samsung",
@@ -708,7 +708,7 @@ window.VAPE_PRODUCTS = [
     },
     {
         id: "samsung_watch_ultra",
-        image: "catalog-art/round-watch.webp",
+        image: "product-shot/watch.svg",
         illustration: true,
         name: "Galaxy Watch Ultra 2025 eSIM 47 мм",
         brand: "Samsung",
@@ -724,7 +724,7 @@ window.VAPE_PRODUCTS = [
     // ----- Игровые консоли -----
     {
         id: "console_switch2",
-        image: "catalog-art/handheld.webp",
+        image: "product-shot/console.svg",
         illustration: true,
         name: "Nintendo Switch 2 (глобальная)",
         brand: "Nintendo",
