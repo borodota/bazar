@@ -1200,38 +1200,38 @@ let _renderObserver = null;
 
 function _buildProductCard(p, animIdx) {
     const card = document.createElement("div");
-    card.className = "product-card";
+    const out = p.inStock === false;
+    card.className = "product-card" + (out ? " out-of-stock" : "");
     card.dataset.productId = p.id;
     card.dataset.catTheme = _catTheme(p.category);
-    card.style.animationDelay = (animIdx >= 0 ? Math.min(animIdx * 30, 300) : 0) + "ms";
-    const imgSrc = _productImage(p);
-    const artClass = p.image ? "" : " category-art";
+    const imgSrc = p.image ? `img/${p.image}` : "";
+    const art = window.storeProductArt(p.category);
     const isWished = (window.wishlist || []).includes(p.id);
-    const oldPriceHtml = p.oldPrice ? `<span class="product-old-price">${fmt(p.oldPrice)} ₽</span>` : "";
+    const oldPriceHtml = p.oldPrice > p.price ? `<span class="product-old-price">${fmt(p.oldPrice)} ₽</span>` : "";
     let tags = "";
-    if (p.inStock === false) tags = '<span class="tag tag-unavailable">Нет в наличии</span>';
-    else if (p.preOrder) tags = '<span class="tag tag-preorder">Под заказ</span>';
-    else if (p.oldPrice > p.price) tags = `<span class="tag tag-sale">−${Math.round((1 - p.price / p.oldPrice) * 100)}%</span>`;
-    else if (p.isNew) tags = '<span class="tag tag-new">Новинка</span>';
-    else if (p.tags?.some(t => t.includes("ХИТ") || t.includes("HOT"))) tags = '<span class="tag tag-hot">Хит</span>';
-    const variants = p.flavors?.length || 0;
-    const optionText = variants ? `${variants} ${window.plural(variants, "вариант", "варианта", "вариантов")}` : (p.preOrder ? "Под заказ" : p.inStock === false ? "Ожидаем поступление" : "В наличии");
+    if (out) tags += '<span class="tag tag-out">Нет в наличии</span>';
+    if (p.preOrder) tags += '<span class="tag tag-preorder">Под заказ</span>';
+    if (!out && (p.isNew || (p.tags && p.tags.some(t => t.includes("NEW"))))) tags += '<span class="tag tag-new">Новинка</span>';
+    if (p.oldPrice > p.price) tags += '<span class="tag tag-sale">Скидка</span>';
+    if (!out && p.lowStock) tags += `<span class="tag tag-low">Осталось ${p.lowStock} шт.</span>`;
     card.innerHTML = `
-        ${tags ? `<div class="product-tags">${tags}</div>` : ""}
-        <button class="wish-btn${isWished ? " wished" : ""}" aria-label="В избранное: ${escHtml(p.name)}" aria-pressed="${isWished}" onclick="event.stopPropagation();window.toggleWishlist('${p.id}')"><svg class="ui-icon" aria-hidden="true"><use href="#i-heart"/></svg></button>
         <div class="product-image-wrapper">
-            ${imgSrc ? `<img src="${imgSrc}" class="product-img${artClass}" alt="${escHtml(p.name)}" loading="lazy" decoding="async" onerror="this.style.display='none';this.nextElementSibling.style.display='flex';">` : ""}
-            <div class="product-photo-note" style="${imgSrc ? "display:none;" : "display:flex;"}"><strong>${escHtml(p.brand || "BAZAR")}</strong><span>Фото скоро</span></div>
+            <span class="card-category">${escHtml(p.category || "Каталог")}</span>
+            <button class="wish-btn${isWished ? " wished" : ""}" aria-label="В избранное" aria-pressed="${isWished}" onclick="event.stopPropagation();window.toggleWishlist('${p.id}')">♡</button>
+            ${imgSrc ? `<img src="${escHtml(imgSrc).replace(/"/g, "&quot;")}" class="product-img" alt="${escHtml(p.name).replace(/"/g, "&quot;")}" loading="lazy" decoding="async" onerror="this.style.display='none';this.nextElementSibling.style.display='flex';">` : ""}
+            <div class="product-img-placeholder" style="${imgSrc ? "display:none;" : "display:flex;"}">${art}</div>
         </div>
-        <div class="product-info">
-            <div class="product-brand">${escHtml(p.brand || p.category || "")}</div>
+        <div class="card-body">
             <div class="product-name">${escHtml(p.name)}</div>
-            <div class="product-options">${optionText}</div>
+            <div class="product-brand">${escHtml(p.brand || "")}</div>
+            ${tags ? `<div class="product-tags">${tags}</div>` : ""}
             <div class="product-footer">
                 <div class="product-price-wrap">${oldPriceHtml}<div class="product-price">${fmt(p.price)} ₽</div></div>
                 <div class="card-action" id="action-${p.id}"></div>
             </div>
         </div>`;
+    card.tabIndex = 0;
+    card.setAttribute("aria-label", p.name);
     card.onclick = () => { haptic("light"); window.handleCardClick(p.id); };
     return card;
 }
@@ -1310,13 +1310,13 @@ window.renderCardAction = function (p) {
     const hasFlavors = p.flavors && p.flavors.length > 0;
 
     if (p.inStock === false) {
-        wrap.innerHTML = '<button class="add-btn">О поступлении</button>';
+        wrap.innerHTML = '<button class="card-notify">Уведомить</button>';
         wrap.querySelector("button").onclick = e => { e.stopPropagation(); window.handleCardClick(p.id); };
         return;
     }
 
     if (qty === 0) {
-        wrap.innerHTML = `<button class="add-btn" id="addbtn-${p.id}">${hasFlavors ? "Выбрать" : "В корзину"}</button>`;
+        wrap.innerHTML = `<button class="add-btn" id="addbtn-${p.id}">+</button>`;
         wrap.querySelector(".add-btn").onclick = (e) => {
             e.stopPropagation();
             haptic("light");
@@ -1327,7 +1327,7 @@ window.renderCardAction = function (p) {
     } else {
         // Степпер показываем только для товаров без вкусов (иначе непонятно какой вкас менять)
         if (hasFlavors) {
-            wrap.innerHTML = `<button class="add-btn has-items">В корзине · ${qty}</button>`;
+            wrap.innerHTML = `<button class="add-btn has-items" aria-label="В корзине: ${qty}. Выбрать вариант">+</button>`;
             wrap.querySelector(".add-btn").onclick = (e) => { e.stopPropagation(); haptic("light"); window.handleCardClick(p.id); };
         } else {
             wrap.innerHTML = `
@@ -1404,7 +1404,7 @@ window.openVapePopup = function (product) {
     if (addButton) addButton.textContent = product.flavors?.length ? "Выбрать вариант" : "В корзину";
     document.getElementById("popupName").innerText = product.name;
     document.getElementById("popupBrand").innerText = product.brand || "";
-    const imgSrc = _productImage(product);
+    const imgSrc = product.image ? "img/" + product.image : "";
     const letter = product.name ? product.name.charAt(0).toUpperCase() : "V";
     const img = document.getElementById("popupImg");
     img.alt = product.name;
@@ -1413,7 +1413,7 @@ window.openVapePopup = function (product) {
         img.src = imgSrc; img.classList.toggle("category-art", !product.image); img.style.display = "block"; ph.style.display = "none";
         img.onerror = () => { img.style.display = "none"; ph.style.display = "flex"; };
     } else { img.style.display = "none"; ph.style.display = "flex"; }
-    ph.innerText = letter;
+    ph.innerHTML = window.storeProductArt(product.category);
     // цветовая тема плейсхолдера в попапе
     const popupImgWrap = document.getElementById("popupImgWrapper");
     if (popupImgWrap) popupImgWrap.dataset.catTheme = _catTheme(product.category);
