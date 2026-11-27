@@ -413,6 +413,7 @@ window.VAPE_PRODUCTS = [
     // ================= APPLE / ТЕХНИКА (под заказ из Дубая) =================
     {
         id: "iphone_15_128",
+        image: "products/iphone-15.png",
         name: "iPhone 15 128 ГБ",
         brand: "Apple",
         category: "🍏 Apple",
@@ -425,6 +426,7 @@ window.VAPE_PRODUCTS = [
     },
     {
         id: "iphone_16_128",
+        image: "products/iphone-16.png",
         name: "iPhone 16 128 ГБ",
         brand: "Apple",
         category: "🍏 Apple",
@@ -437,6 +439,7 @@ window.VAPE_PRODUCTS = [
     },
     {
         id: "iphone_17_256",
+        image: "products/iphone-17.png",
         name: "iPhone 17 256 ГБ",
         brand: "Apple",
         category: "🍏 Apple",
@@ -449,6 +452,7 @@ window.VAPE_PRODUCTS = [
     },
     {
         id: "iphone_17_pro_256",
+        image: "products/iphone-17-pro.png",
         name: "iPhone 17 Pro 256 ГБ",
         brand: "Apple",
         category: "🍏 Apple",
