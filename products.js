@@ -60,11 +60,12 @@ window.VAPE_PRODUCTS = [
     },
     {
         id: "pod_knight_aio",
+        image: "catalog-art/pod.webp",
+        illustration: true,
         name: "KNIGHT AIO 90W",
         brand: "Rincoe",
         category: "Под-системы",
         price: 4000,
-        image: null,
         description: "🏪 МОЩНЫЙ КИТ! Серьезный девайс на 90W для ценителей плотного пара и полной кастомизации.",
         flavors: ["Stealth Black", "Cyber Punk", "Gunmetal"],
         tags: ["⚔️ PREMIUM"],
@@ -90,11 +91,12 @@ window.VAPE_PRODUCTS = [
     // ================= ЖИДКОСТИ =================
     {
         id: "liq_anarhia_v2_brand",
+        image: "catalog-art/bottle.webp",
+        illustration: true,
         name: "Жидкость Анархия v2",
         brand: "АНАРХИЯ",
         category: "Жидкости",
         price: 500,
-        image: null,
         description: "Легендарная ультра-крепкая жидкость с леденящими и максимально насыщенными фруктово-ягодными миксами. Лютый вкус!",
         flavors: [
             "Кола сода айс (3 шт)", "Арбузно-клубничный коктейль (3 шт)", "Энергетик с лесными ягодами (3 шт)",
@@ -112,11 +114,12 @@ window.VAPE_PRODUCTS = [
     },
     {
         id: "liq_podonki",
+        image: "catalog-art/bottle.webp",
+        illustration: true,
         name: "Жидкость Podonki Critical",
         brand: "Podonki",
         category: "Жидкости",
         price: 500,
-        image: null,
         description: "Дерзкая линейка жидкостей с яркими кислыми оттенками, сочными сочетаниями и приятным холодком.",
         flavors: [
             "Кислые лесные ягоды (3 шт)", "Кислая смородина черника (3 шт)", "Манго апельсин (3 шт)",
@@ -130,11 +133,12 @@ window.VAPE_PRODUCTS = [
     },
     {
         id: "liq_narcoz",
+        image: "catalog-art/bottle.webp",
+        illustration: true,
         name: "Жидкость Narcos 5%",
         brand: "NARCOZ",
         category: "Жидкости",
         price: 550,
-        image: null,
         description: "Плотные, затягивающие вкусы с отличным ТХ и долгим послевкусием. Настоящий топ для повседневного парения.",
         flavors: [
             "Скитлс (кислый) (2 шт)", "Love is (2 шт)", "Энергетик (2 шт)",
@@ -146,11 +150,12 @@ window.VAPE_PRODUCTS = [
     },
     {
         id: "liq_inflave",
+        image: "catalog-art/bottle.webp",
+        illustration: true,
         name: "Жидкость INFLAVE & BUBBLE",
         brand: "INFLAVE",
         category: "Жидкости",
         price: 725,
-        image: null,
         description: "Премиальная жидкость с мягким солевым никотином, глубокой насыщенностью и долгим сохранением вкуса.",
         flavors: [
             "ЗЕЛЕНЫЙ ЯБЛОК", "ЧЕРНАЯ МЯТА", "АРБУЗНАЯ ЖВАЧКА", "ВИШНЕВАЯ ГАЗИРОВКА",
@@ -164,11 +169,12 @@ window.VAPE_PRODUCTS = [
     },
     {
         id: "liq_annima_love",
+        image: "catalog-art/bottle.webp",
+        illustration: true,
         name: "Жидкость Annima love (Sour/Sweet/2%)",
         brand: "Annima",
         category: "Жидкости",
         price: 460,
-        image: null,
         description: "Сбалансированная и яркая линейка. Вкусы с потрясающей кислинкой и сладостью.",
         flavors: [
             "Annima Love 2% (Оригинал)", "Annima Love Sour (Кислый Тропик)", 
@@ -181,11 +187,12 @@ window.VAPE_PRODUCTS = [
     },
     {
         id: "liq_oggo_premium",
+        image: "catalog-art/bottle.webp",
+        illustration: true,
         name: "Жидкость OGGO premium",
         brand: "OGGO",
         category: "Жидкости",
         price: 700,
-        image: null,
         description: "Качественные компоненты, мягкий ТХ и чистая вкусопередача на любых испарителях. Солевой никотин 40 мг.",
         flavors: ["Клубника Банан [3 шт]", "Лайм Яблоко", "Лесной Морс"],
         tags: ["ВЫБОР КЛИЕНТОВ"],
@@ -196,12 +203,13 @@ window.VAPE_PRODUCTS = [
     // ================= ОДНОРАЗКИ =================
     {
         id: "dis_pafos_20000",
+        image: "catalog-art/disposable.webp",
+        illustration: true,
         name: "PAFOS 20000",
         brand: "PAFOS",
         category: "Одноразки",
         price: 2500,
         oldPrice: 2700,
-        image: null,
         description: "🔒 ЭКСКЛЮЗИВ — только у нас в Магадане! 20000 затяжек, крепкая соль 80 мг (8%). Плотный навал, стойкий вкус и долгая автономность. В офиц. вейп-шопах продавались по 2700 ₽ и уже сняты с продажи — успей забрать.",
         flavors: ["Кактус Лимон [4 шт]", "Двойное Яблоко [4 шт]"],
         tags: ["🔒 ЭКСКЛЮЗИВ", "🔥 8 шт.", "💥 80MG"],
@@ -211,11 +219,12 @@ window.VAPE_PRODUCTS = [
     },
     {
         id: "dis_lost_mary_30000",
+        image: "catalog-art/disposable.webp",
+        illustration: true,
         name: "LOST MARY MO 30000",
         brand: "LOST MARY",
         category: "Одноразки",
         price: 1600,
-        image: null,
         description: "🚀 ХИТ ЗАВОЗА! Целых 30000 затяжек, огромный смарт-экран, регулировка мощности и невероятная стойкость вкуса. 50 мг соль.",
         flavors: ["Вишня [2 шт]", "Вишня Лайм [2 шт]", "Гранатовый Всплеск [2 шт]", "Грушевый Лимонад [2 шт]", "Киви Маракуйя Гуава [2 шт]", "Кислая Клубника Питайя [2 шт]", "Манго Ягоды [2 шт]", "Яблоко Гуава [2 шт]"],
         tags: ["🚀 ХИТ", "🆕 30k Puffs", "🔥 16 шт."],
@@ -225,11 +234,12 @@ window.VAPE_PRODUCTS = [
     },
     {
         id: "dis_mfu_40000",
+        image: "catalog-art/disposable.webp",
+        illustration: true,
         name: "MFU 40000 (Max Puffs)",
         brand: "MFU",
         category: "Одноразки",
         price: 1900,
-        image: null,
         description: "📦 РЕКОРДСМЕН АВТОНОМНОСТИ! Мощный девайс на 40000 затяжек. Забудь о покупке новых одноразок на месяц.",
         flavors: ["Виноградный Айс", "Кислые Яблоки", "Малина-Лимонад", "Ананасовый Драйв"],
         tags: ["👑 MAX PUFFS", "🔥 КРУТОЕ"],
@@ -238,11 +248,12 @@ window.VAPE_PRODUCTS = [
     },
     {
         id: "dis_rick_morty_25000",
+        image: "catalog-art/disposable.webp",
+        illustration: true,
         name: "RICK AND MORTY 25000",
         brand: "RICK AND MORTY",
         category: "Одноразки",
         price: 1500,
-        image: null,
         description: "💨 Стильный интерактивный дизайн с любимыми героями и сочным баком на 25000 тяг. Отличный навал пара.",
         flavors: ["Ягодный Взрыв", "Мятный Скитлс", "Банан-Клубника", "Манго-Маракуйя"],
         tags: ["🛸 ДИЗАЙН"],
@@ -253,11 +264,12 @@ window.VAPE_PRODUCTS = [
     // ================= РАСХОДНИКИ =================
     {
         id: "isp_geekvape_b",
+        image: "catalog-art/coil.webp",
+        illustration: true,
         name: "Испаритель GEEK VAPE B-series",
         brand: "GeekVape",
         category: "Расходники",
         price: 350,
-        image: null,
         description: "Оригинальные испарители B-series (0.2Ω / 0.4Ω / 0.6Ω) для линеек Aegis Hero и Manto.",
         flavors: ["GEEK VAPE B 0.2 Ohm", "GEEK VAPE B 0.4 Ohm", "GEEK VAPE B 0.6 Ohm"],
         tags: ["⚙️ ИСПЫ"],
@@ -266,11 +278,12 @@ window.VAPE_PRODUCTS = [
     },
     {
         id: "isp_manto_015",
+        image: "catalog-art/coil.webp",
+        illustration: true,
         name: "Испаритель MANTO AIO (0.15Ω)",
         brand: "Rincoe",
         category: "Расходники",
         price: 350,
-        image: null,
         description: "Сменный сеточный испаритель для устройств линейки Manto AIO на 0.15 Ом. Максимум навала.",
         flavors: ["1 шт"],
         tags: [],
@@ -279,11 +292,12 @@ window.VAPE_PRODUCTS = [
     },
     {
         id: "isp_smoant_k",
+        image: "catalog-art/coil.webp",
+        illustration: true,
         name: "Испарители Smoant K1 / K5",
         brand: "Smoant",
         category: "Расходники",
         price: 350,
-        image: null,
         description: "Фирменные сменные испарители для девайсов Smoant. Выбери нужную модель.",
         flavors: ["Smoant K1 (350₽)", "Smoant K5 (450₽)"],
         tags: [],
@@ -292,11 +306,12 @@ window.VAPE_PRODUCTS = [
     },
     {
         id: "cart_knight_80_kit",
+        image: "catalog-art/cartridge.webp",
+        illustration: true,
         name: "Картридж Knight 80 + 2 испарителя",
         brand: "Rincoe",
         category: "Расходники",
         price: 1300,
-        image: null,
         description: "Выгодный полный комплект: сменный пустой картридж для Knight 80 и 2 оригинальных испарителя в коробке.",
         flavors: ["1 комплект"],
         tags: ["🔥 ВЫГОДНО"],
@@ -305,11 +320,12 @@ window.VAPE_PRODUCTS = [
     },
     {
         id: "cart_pasito2",
+        image: "catalog-art/cartridge.webp",
+        illustration: true,
         name: "Картридж Smoant Pasito 2 / Knight 80",
         brand: "Smoant",
         category: "Расходники",
         price: 550,
-        image: null,
         description: "Оригинальный пустой картридж для Pasito 2 на 6 мл под сменные испарители.",
         flavors: ["1 шт"],
         tags: [],
@@ -318,11 +334,12 @@ window.VAPE_PRODUCTS = [
     },
     {
         id: "cart_xros_all",
+        image: "catalog-art/cartridge.webp",
+        illustration: true,
         name: "Картриджи XROS Series / COREX 3.0",
         brand: "Vaporesso",
         category: "Расходники",
         price: 350,
-        image: null,
         description: "Сменные картриджи для всей серии XROS (0.4Ω / 0.6Ω / 0.8Ω) с обновленной технологией вкуса COREX 3.0.",
         flavors: ["XROS Series 0.4 Ohm", "XROS Series 0.6 Ohm", "XROS Series 0.8 Ohm", "XROS COREX 3.0"],
         tags: ["🔥 ТОП СБОРКА"],
@@ -331,11 +348,12 @@ window.VAPE_PRODUCTS = [
     },
     {
         id: "cart_luxe_x",
+        image: "catalog-art/cartridge.webp",
+        illustration: true,
         name: "Картридж Vaporesso Luxe X (0.8Ω)",
         brand: "Vaporesso",
         category: "Расходники",
         price: 275,
-        image: null,
         description: "Оригинальный картридж для под-систем линейки Luxe X. Объем 5мл, сопротивление 0.8 Ом.",
         flavors: ["1 шт"],
         tags: [],
@@ -344,11 +362,12 @@ window.VAPE_PRODUCTS = [
     },
     {
         id: "cart_ursa_nano",
+        image: "catalog-art/cartridge.webp",
+        illustration: true,
         name: "Картридж Lost Vape Ursa Nano (0.8Ω)",
         brand: "Lost Vape",
         category: "Расходники",
         price: 350,
-        image: null,
         description: "Сменный картридж для под-систем серии Ursa (Nano, Baby, Pro). Мягкая затяжка.",
         flavors: ["1 шт"],
         tags: [],
@@ -357,11 +376,12 @@ window.VAPE_PRODUCTS = [
     },
     {
         id: "cart_manto_ultra_empty",
+        image: "catalog-art/cartridge.webp",
+        illustration: true,
         name: "Картридж Rincoe Manto Ultra Empty",
         brand: "Rincoe",
         category: "Расходники",
         price: 550,
-        image: null,
         description: "Сменный пустой картридж для Manto Ultra. Прочный пластик, защита от протечек.",
         flavors: ["1 шт"],
         tags: [],
@@ -370,11 +390,12 @@ window.VAPE_PRODUCTS = [
     },
     {
         id: "rba_base",
+        image: "catalog-art/deck.webp",
+        illustration: true,
         name: "Обслуживаемая RBA база",
         brand: "Универсал",
         category: "Расходники",
         price: 750,
-        image: null,
         description: "⚙️ Для мастеров! База для самостоятельной намотки койлов и укладки ваты.",
         flavors: ["1 шт"],
         tags: [],
@@ -383,11 +404,12 @@ window.VAPE_PRODUCTS = [
     },
     {
         id: "battery_18650",
+        image: "catalog-art/cell.webp",
+        illustration: true,
         name: "Аккумулятор АКБ 18650",
         brand: "🔋 БАТАРЕИ",
         category: "Расходники",
         price: 550,
-        image: null,
         description: "Качественные высокотоковые аккумуляторы формата 18650 для твоих вейп-модов.",
         flavors: ["Обычный 18650 (550₽)", "Ограниченная серия 18650 L/E (750₽)"],
         tags: ["🔋 АКБ"],
@@ -398,11 +420,12 @@ window.VAPE_PRODUCTS = [
     // ================= ТАБАК / СНЮС =================
     {
         id: "snus_cataclysm",
+        image: "catalog-art/tin.webp",
+        illustration: true,
         name: "Снюс Cataclysm",
         brand: "Cataclysm",
         category: "Другое",
         price: 500,
-        image: null,
         description: "🧪 Крепкий качественный снюс со стойким бодрящим эффектом.",
         flavors: ["Цитрус микс", "Колддрай", "Брауни", "Корица"],
         tags: ["🔥 СНЮС"],
@@ -467,6 +490,8 @@ window.VAPE_PRODUCTS = [
     // ----- MacBook -----
     {
         id: "mac_air13_m3_256",
+        image: "catalog-art/laptop.webp",
+        illustration: true,
         name: "MacBook Air 13″ M3 256 ГБ",
         brand: "Apple",
         category: "🍏 Apple",
@@ -479,6 +504,8 @@ window.VAPE_PRODUCTS = [
     },
     {
         id: "mac_air15_m3_256",
+        image: "catalog-art/laptop.webp",
+        illustration: true,
         name: "MacBook Air 15″ M3 256 ГБ",
         brand: "Apple",
         category: "🍏 Apple",
@@ -491,6 +518,8 @@ window.VAPE_PRODUCTS = [
     },
     {
         id: "mac_air13_m5_1tb",
+        image: "catalog-art/laptop.webp",
+        illustration: true,
         name: "MacBook Air 13″ M5 24/1 ТБ",
         brand: "Apple",
         category: "🍏 Apple",
@@ -503,6 +532,8 @@ window.VAPE_PRODUCTS = [
     },
     {
         id: "mac_13_8_512",
+        image: "catalog-art/laptop.webp",
+        illustration: true,
         name: "MacBook neo 13″ 8/512 ГБ (англ.)",
         brand: "Apple",
         category: "🍏 Apple",
@@ -517,6 +548,8 @@ window.VAPE_PRODUCTS = [
     // ----- AirPods -----
     {
         id: "airpods_pro3",
+        image: "catalog-art/earbuds.webp",
+        illustration: true,
         name: "AirPods Pro 3",
         brand: "Apple",
         category: "🍏 Apple",
@@ -529,6 +562,8 @@ window.VAPE_PRODUCTS = [
     },
     {
         id: "airpods_4",
+        image: "catalog-art/earbuds.webp",
+        illustration: true,
         name: "AirPods 4",
         brand: "Apple",
         category: "🍏 Apple",
@@ -543,6 +578,8 @@ window.VAPE_PRODUCTS = [
     // ----- Apple Watch -----
     {
         id: "watch_se3_40",
+        image: "catalog-art/watch.webp",
+        illustration: true,
         name: "Apple Watch SE 3 40 мм",
         brand: "Apple",
         category: "🍏 Apple",
@@ -555,6 +592,8 @@ window.VAPE_PRODUCTS = [
     },
     {
         id: "watch_se3_43",
+        image: "catalog-art/watch.webp",
+        illustration: true,
         name: "Apple Watch SE 3 43 мм",
         brand: "Apple",
         category: "🍏 Apple",
@@ -567,6 +606,8 @@ window.VAPE_PRODUCTS = [
     },
     {
         id: "watch_s11_42",
+        image: "catalog-art/watch.webp",
+        illustration: true,
         name: "Apple Watch Series 11 42 мм",
         brand: "Apple",
         category: "🍏 Apple",
@@ -579,6 +620,8 @@ window.VAPE_PRODUCTS = [
     },
     {
         id: "watch_ultra2",
+        image: "catalog-art/watch-ultra.webp",
+        illustration: true,
         name: "Apple Watch Ultra 2",
         brand: "Apple",
         category: "🍏 Apple",
@@ -593,6 +636,8 @@ window.VAPE_PRODUCTS = [
     // ----- Аксессуары Apple -----
     {
         id: "acc_charger_20w",
+        image: "catalog-art/charger.webp",
+        illustration: true,
         name: "Зарядка Apple 20W USB-C",
         brand: "Apple",
         category: "🍏 Apple",
@@ -605,6 +650,8 @@ window.VAPE_PRODUCTS = [
     },
     {
         id: "acc_case_iphone",
+        image: "catalog-art/case.webp",
+        illustration: true,
         name: "Чехол для iPhone 15/16/17",
         brand: "Apple",
         category: "🍏 Apple",
@@ -619,6 +666,8 @@ window.VAPE_PRODUCTS = [
     // ----- Samsung -----
     {
         id: "samsung_s25_256",
+        image: "catalog-art/phone.webp",
+        illustration: true,
         name: "Samsung Galaxy S25 12/256 ГБ",
         brand: "Samsung",
         category: "📱 Samsung",
@@ -631,6 +680,8 @@ window.VAPE_PRODUCTS = [
     },
     {
         id: "samsung_s25_ultra_256",
+        image: "catalog-art/phone.webp",
+        illustration: true,
         name: "Samsung Galaxy S25 Ultra 12/256 ГБ",
         brand: "Samsung",
         category: "📱 Samsung",
@@ -643,6 +694,8 @@ window.VAPE_PRODUCTS = [
     },
     {
         id: "samsung_s25_ultra_512",
+        image: "catalog-art/phone.webp",
+        illustration: true,
         name: "Samsung Galaxy S25 Ultra 12/512 ГБ",
         brand: "Samsung",
         category: "📱 Samsung",
@@ -655,6 +708,8 @@ window.VAPE_PRODUCTS = [
     },
     {
         id: "samsung_watch_ultra",
+        image: "catalog-art/round-watch.webp",
+        illustration: true,
         name: "Galaxy Watch Ultra 2025 eSIM 47 мм",
         brand: "Samsung",
         category: "📱 Samsung",
@@ -669,6 +724,8 @@ window.VAPE_PRODUCTS = [
     // ----- Игровые консоли -----
     {
         id: "console_switch2",
+        image: "catalog-art/handheld.webp",
+        illustration: true,
         name: "Nintendo Switch 2 (глобальная)",
         brand: "Nintendo",
         category: "🎮 Консоли",
@@ -681,6 +738,8 @@ window.VAPE_PRODUCTS = [
     },
     {
         id: "console_ps5_slim_digital",
+        image: "catalog-art/slim-digital.webp",
+        illustration: true,
         name: "PlayStation 5 Slim Digital 825 ГБ",
         brand: "Sony",
         category: "🎮 Консоли",
@@ -693,6 +752,8 @@ window.VAPE_PRODUCTS = [
     },
     {
         id: "console_ps5_slim_disc",
+        image: "catalog-art/slim-disc.webp",
+        illustration: true,
         name: "PlayStation 5 Slim Blu-ray 1 ТБ",
         brand: "Sony",
         category: "🎮 Консоли",
@@ -705,6 +766,8 @@ window.VAPE_PRODUCTS = [
     },
     {
         id: "console_ps5_pro",
+        image: "catalog-art/pro-console.webp",
+        illustration: true,
         name: "PlayStation 5 Pro 2 ТБ",
         brand: "Sony",
         category: "🎮 Консоли",

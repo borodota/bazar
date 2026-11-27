@@ -1216,7 +1216,7 @@ function _buildProductCard(p, animIdx) {
     if (!out && p.lowStock) tags += `<span class="tag tag-low">Осталось ${p.lowStock} шт.</span>`;
     card.innerHTML = `
         <div class="product-image-wrapper">
-            <span class="card-category">${escHtml(p.category || "Каталог")}</span>
+            <span class="card-category">${p.illustration ? "Иллюстрация" : escHtml(p.category || "Каталог")}</span>
             <button class="wish-btn${isWished ? " wished" : ""}" aria-label="В избранное" aria-pressed="${isWished}" onclick="event.stopPropagation();window.toggleWishlist('${p.id}')">♡</button>
             ${imgSrc ? `<img src="${escHtml(imgSrc).replace(/"/g, "&quot;")}" class="product-img" alt="${escHtml(p.name).replace(/"/g, "&quot;")}" loading="lazy" decoding="async" onerror="this.style.display='none';this.nextElementSibling.style.display='flex';">` : ""}
             <div class="product-img-placeholder" style="${imgSrc ? "display:none;" : "display:flex;"}">${art}</div>
@@ -1394,7 +1394,7 @@ window.openVapePopup = function (product) {
     const selection = document.getElementById("popupSelection");
     if (selection) selection.textContent = "Не выбран";
     const artworkNote = document.getElementById("popupArtworkNote");
-    if (artworkNote) artworkNote.hidden = !!product.image;
+    if (artworkNote) artworkNote.hidden = !!product.image && !product.illustration;
     const availability = document.getElementById("popupAvailability");
     if (availability) {
         availability.textContent = product.inStock === false ? "Нет в наличии" : product.preOrder ? "Под заказ" : "В наличии";
